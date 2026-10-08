@@ -10,6 +10,25 @@ import kotlinx.serialization.json.intOrNull
 
 enum class ChatItemKind { USER, ASSISTANT, REASONING, CONTEXT, TOOL }
 
+/**
+ * 会话历史里的一个图片附件。
+ *
+ * 注意这里**只有引用没有字节**：消息发送时图片是 base64 内联的，但存进历史后就变成
+ * `{type:'image', attachment:{attachmentId:'sha256:…', …}}` —— 字节在服务端的附件存储里。
+ * 所以显示一张历史图片需要第二步：拿 [attachmentId] 去 `/api/v1/attachments/:id` 取字节。
+ *
+ * 所有字段都有默认值：这是从服务端事件里解出来的结构，缺字段比多字段常见得多
+ * （本项目已经因为严格解码踩过三次坑）。
+ */
+data class ChatAttachment(
+    val attachmentId: String = "",
+    val mediaType: String = "",
+    val width: Int = 0,
+    val height: Int = 0,
+    val bytes: Int = 0,
+    val name: String? = null,
+)
+
 data class ChatDisplayItem(
     val id: String,
     val seq: Int,
@@ -17,6 +36,8 @@ data class ChatDisplayItem(
     val title: String? = null,
     val body: String = "",
     val streaming: Boolean = false,
+    /** 这条消息附带的图片；只发图不发字的消息正是靠它才不会被丢掉。 */
+    val attachments: List<ChatAttachment> = emptyList(),
 )
 
 data class ChatDelta(
@@ -123,10 +144,18 @@ private fun userItems(event: SessionEvent): List<ChatDisplayItem> {
     val source = data.objectValue("source")
     val kind = source?.stringValue("kind")
     val body = contentText(data["content"])
+    val attachments = contentAttachments(data["content"])
     if (kind == "user") {
-        return body.takeIf(String::isNotBlank)?.let {
-            listOf(ChatDisplayItem("${event.seq}-user", event.seq, ChatItemKind.USER, body = it))
-        }.orEmpty()
+        // 判据是「有文字**或**有附件」。旧代码只判文字，于是「只发一张图、不打字」
+        // 的消息会整条消失 —— 用户看到的正是"App 里看不见图片"。
+        if (body.isBlank() && attachments.isEmpty()) return emptyList()
+        return listOf(ChatDisplayItem(
+            id = "${event.seq}-user",
+            seq = event.seq,
+            kind = ChatItemKind.USER,
+            body = body,
+            attachments = attachments,
+        ))
     }
     return listOf(ChatDisplayItem(
         id = "${event.seq}-context",
@@ -134,7 +163,33 @@ private fun userItems(event: SessionEvent): List<ChatDisplayItem> {
         kind = ChatItemKind.CONTEXT,
         title = contextLabel(source),
         body = body,
+        attachments = attachments,
     ))
+}
+
+/**
+ * 从 content 数组里取出图片附件引用。
+ *
+ * 只认 `type == "image"`；`type == "file"` 的凭证（receiptId）指向的是一次上传的暂存区，
+ * 与服务端持久化的附件存储不是同一套东西，硬接只会拿到 404。
+ */
+private fun contentAttachments(content: JsonElement?): List<ChatAttachment> {
+    val parts = content as? JsonArray ?: return emptyList()
+    return parts.mapNotNull { part ->
+        val value = part as? JsonObject ?: return@mapNotNull null
+        if (value.stringValue("type") != "image") return@mapNotNull null
+        val attachment = value.objectValue("attachment") ?: return@mapNotNull null
+        val attachmentId = attachment.stringValue("attachmentId")?.takeIf(String::isNotBlank)
+            ?: return@mapNotNull null
+        ChatAttachment(
+            attachmentId = attachmentId,
+            mediaType = attachment.stringValue("mediaType").orEmpty(),
+            width = attachment.intValue("width") ?: 0,
+            height = attachment.intValue("height") ?: 0,
+            bytes = attachment.intValue("bytes") ?: 0,
+            name = attachment.stringValue("name"),
+        )
+    }
 }
 
 private fun assistantItems(event: SessionEvent): List<ChatDisplayItem> {

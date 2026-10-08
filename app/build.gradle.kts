@@ -24,10 +24,10 @@ android {
         targetSdk = 36
         // 版本号必须高于上游（1.0.0 / 10000），否则无法覆盖安装，用户在手机上也无法区分装的是哪个。
         // 1.1.0 = 多地址连接层 + 配置导入；1.2.0 = 插件清单页；
-        // 1.3.0 = 会话文件可打开 + 运行时发送行为可配置（两者同一版，因为 1.3.0 未单独发布过）。
+        // 1.4.0 = 会话文件 + 发送行为可配置 + 发图片/文件 + 消息可复制 + 链接可点 + 会话图片可见。
         // 本仓库相对上游的功能变更见 docs/project/CHANGELOG-DEV.md。
-        versionCode = 10003
-        versionName = "1.3.0"
+        versionCode = 10004
+        versionName = "1.4.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }

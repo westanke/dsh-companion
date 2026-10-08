@@ -11,7 +11,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -275,16 +274,61 @@ class DshClient(
         CommandExecutionEnvelope.serializer(),
     ).execution
 
-    fun sendMessage(sessionId: String, text: String, steer: Boolean) {
-        postJsonElement(
-            pathUrl("chat", "sessions", sessionId, "messages"),
-            SendMessageRequest(text, if (steer) "steer" else "queue", TimeZone.getDefault().id, UUID.randomUUID().toString()),
-            SendMessageRequest.serializer(),
+    /**
+     * 发一条消息，内容是一个 part 列表（文本 / 内联图片 / 上传后的文件）。
+     *
+     * 请求体两种形状由 [ChatContentParts.messageBody] 决定：**纯文本走旧的 `{"text":...}`**，
+     * 带附件才用 `{"content":[...]}`。服务端两种都吃，保持旧形状是为了不强迫老插件升级。
+     */
+    fun sendMessage(sessionId: String, parts: List<PromptPart>, steer: Boolean) {
+        val body = ChatContentParts.messageBody(
+            parts = parts,
+            mode = if (steer) "steer" else "queue",
+            clientTimeZone = TimeZone.getDefault().id,
+            clientRequestId = UUID.randomUUID().toString(),
+        )
+        val url = pathUrl("chat", "sessions", sessionId, "messages")
+        execute(Request.Builder().url(url).post(body.toString().toRequestBody(JSON_MEDIA))).use(::ensureSuccess)
+    }
+
+    /** 纯文本重载：内部转成单个 text part，其余行为与线上格式都不变。 */
+    fun sendMessage(sessionId: String, text: String, steer: Boolean) =
+        sendMessage(sessionId, listOf(PromptPart.TextPart(text)), steer)
+
+    /**
+     * 上传一个文件附件，换回消息里引用的 `receiptId`。
+     *
+     * 与「文件」页的 `writeFile` 是两套东西：那个是往工作区写文件，这个是给**这一条消息**
+     * 换一张临时凭证，文件本身不进工作区。图片不需要走这里 —— 直接内联在消息里。
+     */
+    fun uploadAttachment(sessionId: String, bytes: ByteArray, name: String): UploadedAttachment {
+        val payload = ChatContentParts.uploadPayload(bytes, name)
+        val url = pathUrl("chat", "sessions", sessionId, "attachments")
+        return executeJson(
+            Request.Builder().url(url).post(payload.toString().toRequestBody(JSON_MEDIA)),
+            UploadedAttachment.serializer(),
         )
     }
 
     fun cancel(sessionId: String) {
         execute(Request.Builder().url(pathUrl("chat", "runs", sessionId, "cancel")).post(EMPTY_BODY)).use(::ensureSuccess)
+    }
+
+    /**
+     * 取回会话历史里某个图片附件的字节。
+     *
+     * 为什么历史图片需要这一步：发送时图片是 **base64 内联**在消息里的，但存进历史后被
+     * 归一化成 `{type:'image', attachment:{attachmentId:'sha256:…'}}` —— 字节搬去了
+     * 服务端的附件存储。所以「显示一张历史图片」永远是两步：先读事件拿 id，再来这里取字节。
+     *
+     * `attachmentId` 形如 `sha256:<hex>`，**含冒号**；`addPathSegment` 会把它编码成
+     * `sha256%3A…`，这正是服务端 `decodeURIComponent` 期待的形式。
+     */
+    fun readAttachment(attachmentId: String): ByteArray {
+        execute(Request.Builder().url(pathUrl("attachments", attachmentId)).get()).use { response ->
+            ensureSuccess(response)
+            return response.body?.bytes() ?: ByteArray(0)
+        }
     }
 
     fun events(listener: (WorkspaceEvent) -> Unit, connection: (Boolean) -> Unit): Closeable {
@@ -339,11 +383,6 @@ class DshClient(
     ): T {
         val requestBody = json.encodeToString(bodySerializer, body).toRequestBody(JSON_MEDIA)
         return executeJson(Request.Builder().url(url).patch(requestBody), responseSerializer)
-    }
-
-    private fun <B> postJsonElement(url: HttpUrl, body: B, serializer: KSerializer<B>): JsonElement {
-        val requestBody = json.encodeToString(serializer, body).toRequestBody(JSON_MEDIA)
-        return executeJson(Request.Builder().url(url).post(requestBody), JsonElement.serializer())
     }
 
     private fun <B> postUnit(url: HttpUrl, body: B, serializer: KSerializer<B>) {
@@ -508,11 +547,5 @@ private class ReconnectingEvents(
     val clientRequestId: String,
 )
 @Serializable private data class CreatedSessionEnvelope(val session: CreatedSession)
-@Serializable private data class SendMessageRequest(
-    val text: String,
-    val mode: String,
-    val clientTimeZone: String,
-    val clientRequestId: String,
-)
 @Serializable private data class ErrorEnvelope(val error: ApiErrorBody)
 @Serializable private data class ApiErrorBody(val code: String, val message: String, val requestId: String? = null)

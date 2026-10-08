@@ -26,6 +26,17 @@
     <string name="tool_call">Tool call</string>
     <string name="send">Send</string>
     <string name="steer">Steer</string>
+    <!-- Links inside messages -->
+    <string name="link_open_failed">No app can open this link</string>
+    <string name="link_relative_path">This is a relative path, so the file cannot be located. Open it from the session files list instead</string>
+    <string name="link_anchor_unsupported">In-page anchors are not supported yet</string>
+    <string name="link_scheme_unsupported">This kind of link cannot be opened yet</string>
+    <!-- Long-press a message -->
+    <string name="copy_message">Copy text</string>
+    <string name="copied">Copied</string>
+    <!-- Image attachments in a session -->
+    <string name="attachment_unavailable">Image unavailable (it may have been cleaned up)</string>
+    <string name="attachment_undecodable">This image cannot be displayed</string>
     <!-- Shown next to the send key while the agent is running -->
     <string name="send_mode_queue">Enter=queue</string>
     <string name="send_mode_steer">Enter=steer</string>
@@ -268,4 +279,15 @@
     <string name="session_file_empty">This file is empty.</string>
     <string name="session_file_truncated">Only the beginning is previewed here; the full content is in the Files tab.</string>
     <string name="session_file_files_hint">Full content and editing are in the Files tab.</string>
+
+    <!-- Sending images / files -->
+    <string name="attach_image">Send image</string>
+    <string name="attach_file">Send file</string>
+    <string name="attachment_uploading">Uploading…</string>
+    <string name="attachment_remove">Remove this attachment</string>
+    <string name="attachment_image_too_large">The image is larger than %1$s and cannot be inlined. Compress or crop it first, or send it with “Send file”.</string>
+    <string name="attachment_file_too_large">The file is larger than %1$s and cannot be uploaded as a message attachment.</string>
+    <string name="attachment_file_rejected">The server rejected the file: it exceeds the server’s attachment size limit. Try a smaller file.</string>
+    <string name="attachment_upload_unsupported">The dsh-workspace plugin on the server is too old and does not provide the message-attachment upload endpoint yet. Upgrade it to a build that supports chat/sessions/:id/attachments and restart DSH.</string>
+    <string name="attachment_read_failed">Could not read the selected file. Try another one.</string>
 </resources>

@@ -26,6 +26,17 @@
     <string name="tool_call">工具调用</string>
     <string name="send">发送</string>
     <string name="steer">追加引导</string>
+    <!-- 消息里的链接点了之后 -->
+    <string name="link_open_failed">没有能打开这个链接的应用</string>
+    <string name="link_relative_path">这是相对路径，无法定位文件。可以到「本会话的文件」列表里打开</string>
+    <string name="link_anchor_unsupported">页内跳转暂不支持</string>
+    <string name="link_scheme_unsupported">这类链接暂不支持打开</string>
+    <!-- 长按消息 -->
+    <string name="copy_message">复制全文</string>
+    <string name="copied">已复制</string>
+    <!-- 会话里的图片附件 -->
+    <string name="attachment_unavailable">图片已不可用（可能已被清理）</string>
+    <string name="attachment_undecodable">这张图片无法显示</string>
     <!-- 智能体运行时，发送键旁标出「回车会做什么」 -->
     <string name="send_mode_queue">回车=排队</string>
     <string name="send_mode_steer">回车=插话</string>
@@ -268,4 +279,15 @@
     <string name="session_file_empty">这是一个空文件。</string>
     <string name="session_file_truncated">这里只预览了开头部分，完整内容在「文件」页。</string>
     <string name="session_file_files_hint">完整内容与编辑在「文件」页。</string>
+
+    <!-- 发送图片 / 文件 -->
+    <string name="attach_image">发送图片</string>
+    <string name="attach_file">发送文件</string>
+    <string name="attachment_uploading">正在上传…</string>
+    <string name="attachment_remove">移除这个附件</string>
+    <string name="attachment_image_too_large">图片超过 %1$s，没法内联发送。请先压缩或裁剪，或改用「发送文件」。</string>
+    <string name="attachment_file_too_large">文件超过 %1$s，没法作为消息附件上传。</string>
+    <string name="attachment_file_rejected">服务端拒绝了该文件：超过了服务器允许的附件大小。请换一个更小的文件。</string>
+    <string name="attachment_upload_unsupported">服务端的 dsh-workspace 插件版本过旧，还没有提供消息附件上传接口。请在电脑上把插件升级到支持 chat/sessions/:id/attachments 的版本并重启 DSH。</string>
+    <string name="attachment_read_failed">读取所选文件失败，请换一个再试。</string>
 </resources>

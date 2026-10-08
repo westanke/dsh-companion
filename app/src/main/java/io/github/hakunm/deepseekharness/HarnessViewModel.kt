@@ -3,6 +3,7 @@ package io.github.hakunm.deepseekharness
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.hakunm.deepseekharness.data.ChatContentParts
 import io.github.hakunm.deepseekharness.data.ChatHistory
 import io.github.hakunm.deepseekharness.data.ChatSession
 import io.github.hakunm.deepseekharness.data.ChatWorkspace
@@ -23,6 +24,7 @@ import io.github.hakunm.deepseekharness.data.PluginInventory
 import io.github.hakunm.deepseekharness.data.ProviderModel
 import io.github.hakunm.deepseekharness.data.ProviderPatch
 import io.github.hakunm.deepseekharness.data.ProviderSettings
+import io.github.hakunm.deepseekharness.data.PromptPart
 import io.github.hakunm.deepseekharness.data.ResolvedPath
 import io.github.hakunm.deepseekharness.data.SessionModels
 import io.github.hakunm.deepseekharness.data.ActiveConnection
@@ -49,6 +51,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -94,6 +97,24 @@ data class SessionFileOpen(
     val outsideRoots: Boolean = false,
     /** 其他失败原因，已是可直接展示的文本。 */
     val failure: String? = null,
+)
+
+/**
+ * 一条已经准备好、等着随消息一起发出去的附件。
+ *
+ * 图片在 [part] 里已经内联好了 base64（[imageBytes] 只是留一份原图给界面画缩略图，
+ * 不会重复编码）；文件在 [part] 里是上传换来的 `receiptId`。
+ *
+ * [id] 与 [part] 分开：同一个文件可以被选两次，而去重、删除都必须按「这一条」来认，
+ * 不能按内容认。
+ */
+data class PendingAttachment(
+    val id: String,
+    val part: PromptPart,
+    val name: String,
+    val sizeBytes: Long = 0,
+    /** 仅图片：原图字节，供缩略图使用。 */
+    val imageBytes: ByteArray? = null,
 )
 
 sealed interface ApprovalUiState {
@@ -157,6 +178,28 @@ data class HarnessState(
      * 早期实现用 [busy] 去禁用发送按钮，结果是任何一次后台刷新都会让用户发不出消息。
      */
     val busySendMode: BusySendMode = BusySendMode.QUEUE,
+    /**
+     * 已取回的会话图片附件字节，键是 `attachmentId`。
+     *
+     * 为什么要缓存：会话历史会随每次刷新重建，而图片字节要另发一次请求才拿得到。
+     * 不缓存的话，每刷新一次就把所有历史图片重新下载一遍。
+     */
+    val attachmentImages: Map<String, ByteArray> = emptyMap(),
+    /**
+     * 取图失败的 id。刻意记住失败而不是反复重试：附件有生命周期（可能已过期或被清理），
+     * 每次重组都重试只会持续打服务端，而界面上的结果不会变好。
+     */
+    val attachmentFailures: Set<String> = emptySet(),
+    /**
+     * 待发附件条。发送时与文本一起组装成 content 数组，发送成功（或用户在输入区点删除）
+     * 之后才消失。
+     *
+     * 刻意**不**参与「发送键是否可用」之外的任何禁用判断，更不跟 [busy] 挂钩：
+     * 上一轮的缺陷正是用 [busy] 禁用发送键，导致智能体运行期间根本发不出消息。
+     */
+    val pendingAttachments: List<PendingAttachment> = emptyList(),
+    /** 有文件正在上传换 `receiptId`。只用来显示进度，不用来禁用发送键。 */
+    val attachmentUploading: Boolean = false,
     val error: String? = null,
 )
 
@@ -167,6 +210,8 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
     /** 旧版令牌用的是另一个 Keystore 别名，迁移时必须用它解密。 */
     private val legacySecretBox = KeystoreSecretBox(KeystoreSecretBox.LEGACY_DEVICE_TOKEN_ALIAS)
     private val preferences = AppPreferences(application)
+    /** 正在下载中的附件 id。界面每次组合都会调 loadAttachmentImage，靠它去重。 */
+    private val pendingAttachments = mutableSetOf<String>()
     private val mutableState = MutableStateFlow(HarnessState(busySendMode = preferences.busySendMode))
     val state: StateFlow<HarnessState> = mutableState.asStateFlow()
 
@@ -651,22 +696,177 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun sendMessage(text: String, steer: Boolean) = withClient { api ->
-        val id = mutableState.value.selectedSessionId ?: return@withClient
-        if (text.isBlank()) return@withClient
+    /**
+     * 发一条消息：文本 + 待发附件一起组装成 content 数组。
+     *
+     * `/命令` 分支只在不带附件时走 —— 命令是发给宿主的一行文本，附件跟着它没有意义；
+     * 带附件时按普通消息发。
+     *
+     * 防重复提交靠的是**在调用线程上同步**「取走并清空待发附件」，**不是**靠禁用按钮：
+     * 清空之后 `canSubmit` 自然为 false，第二次点击组装出的 parts 就是空的。
+     * 之所以不能把取状态留在协程里做：`launchOperation` 会切到 IO，双击的第二次点击
+     * 完全可能抢在它前面读到同一批附件，于是同一条消息（连同同一张图）发两遍。
+     * 发送失败时把附件还回去，别让一次网络抖动吃掉用户挑好的图。
+     */
+    fun sendMessage(text: String, steer: Boolean) {
+        val api = client ?: return
+        val id = mutableState.value.selectedSessionId ?: return
+        val attachments = mutableState.value.pendingAttachments
         val line = text.trimEnd()
-        if (line.startsWith('/')) {
-            val execution = api.executeCommand(id, line)
-            if (execution.result.kind == "error") {
-                throw DshApiException(409, "COMMAND_FAILED", execution.result.text ?: "Command failed.")
+        if (attachments.isEmpty() && line.startsWith('/')) {
+            launchOperation {
+                val execution = api.executeCommand(id, line)
+                if (execution.result.kind == "error") {
+                    throw DshApiException(409, "COMMAND_FAILED", execution.result.text ?: "Command failed.")
+                }
+                update { copy(history = api.history(id), commands = api.sessionCommands(id)) }
             }
-            update { copy(history = api.history(id), commands = api.sessionCommands(id)) }
-            return@withClient
+            return
         }
-        api.sendMessage(id, text, steer)
-        chatSessionRefreshPending = true
-        scheduleChatRefresh()
+        val parts = buildList {
+            if (text.isNotBlank()) add(PromptPart.TextPart(text))
+            attachments.forEach { add(it.part) }
+        }
+        if (parts.isEmpty()) return
+        update { copy(pendingAttachments = emptyList()) }
+        launchOperation {
+            try {
+                api.sendMessage(id, parts, steer)
+            } catch (failure: Throwable) {
+                if (failure is CancellationException) throw failure
+                // 没发出去就把附件放回输入区；清空后又新加的条目按 id 去重，不重复。
+                update { copy(pendingAttachments = (attachments + pendingAttachments).distinctBy { it.id }) }
+                throw failure
+            }
+            chatSessionRefreshPending = true
+            scheduleChatRefresh()
+        }
     }
+
+    /**
+     * 把选中的图片内联进「待发附件」。
+     *
+     * 图片不走上传端点（内核的 image part 直接带 base64），所以这里唯一要防的就是
+     * 体积：超限当场拒绝并给出可照做的提示，而不是等一个 413。
+     */
+    fun attachImage(name: String, sizeBytes: Long, mediaType: String, openInput: () -> InputStream) {
+        if (sizeBytes > ChatContentParts.MAX_IMAGE_BYTES) {
+            notify(appString(R.string.attachment_image_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_IMAGE_BYTES)))
+            return
+        }
+        viewModelScope.launch {
+            val bytes = readBytes(ChatContentParts.MAX_IMAGE_BYTES, openInput) ?: return@launch
+            if (bytes.size.toLong() > ChatContentParts.MAX_IMAGE_BYTES) {
+                notify(appString(R.string.attachment_image_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_IMAGE_BYTES)))
+                return@launch
+            }
+            val part = runCatching { ChatContentParts.imagePart(mediaType, bytes, name) }.getOrElse {
+                notify(appString(R.string.attachment_image_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_IMAGE_BYTES)))
+                return@launch
+            }
+            update {
+                copy(
+                    pendingAttachments = pendingAttachments + PendingAttachment(
+                        id = java.util.UUID.randomUUID().toString(),
+                        part = part,
+                        name = name,
+                        sizeBytes = bytes.size.toLong(),
+                        imageBytes = bytes,
+                    ),
+                )
+            }
+        }
+    }
+
+    /**
+     * 上传选中的文件，换回 `receiptId` 后放进「待发附件」。
+     *
+     * 上传是网络动作，单独一个 [attachmentUploading] 只用于显示进度；**不**参与发送键的
+     * 可用性判断，否则"选了个大文件"就等于"暂时发不出消息"，正是上一轮的毛病。
+     */
+    fun attachFile(name: String, sizeBytes: Long, openInput: () -> InputStream) {
+        val api = client ?: return
+        val sessionId = mutableState.value.selectedSessionId ?: return
+        if (sizeBytes > ChatContentParts.MAX_FILE_BYTES) {
+            notify(appString(R.string.attachment_file_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_FILE_BYTES)))
+            return
+        }
+        viewModelScope.launch {
+            update { copy(attachmentUploading = true) }
+            try {
+                val bytes = readBytes(ChatContentParts.MAX_FILE_BYTES, openInput) ?: return@launch
+                if (bytes.size.toLong() > ChatContentParts.MAX_FILE_BYTES) {
+                    notify(appString(R.string.attachment_file_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_FILE_BYTES)))
+                    return@launch
+                }
+                val uploaded = withContext(Dispatchers.IO) { api.uploadAttachment(sessionId, bytes, name) }
+                // 上传期间用户可能换了会话：附件属于发起它的那条会话，别塞到别的会话里。
+                if (mutableState.value.selectedSessionId != sessionId) return@launch
+                update {
+                    copy(
+                        pendingAttachments = pendingAttachments + PendingAttachment(
+                            id = java.util.UUID.randomUUID().toString(),
+                            part = PromptPart.FilePart(uploaded.receiptId),
+                            name = uploaded.name.ifBlank { name },
+                            sizeBytes = bytes.size.toLong(),
+                        ),
+                    )
+                }
+            } catch (failure: Throwable) {
+                if (failure is CancellationException) throw failure
+                update {
+                    copy(
+                        error = when {
+                            // 服务端的上限可能比客户端更严；这时不能引用我们自己的 24 MiB，
+                            // 否则用户会被「明明没到 24 MiB」搞糊涂。
+                            failure is DshApiException && failure.code == "TOO_LARGE" ->
+                                appString(R.string.attachment_file_rejected)
+                            // 端点不存在只有一个现实原因：服务端插件版本过旧。
+                            // 这条提示必须可操作（去升级插件），而不是甩一句 ROUTE_NOT_FOUND。
+                            failure is DshApiException && failure.code == "ROUTE_NOT_FOUND" ->
+                                appString(R.string.attachment_upload_unsupported)
+                            else -> messageOf(failure)
+                        },
+                    )
+                }
+            } finally {
+                update { copy(attachmentUploading = false) }
+            }
+        }
+    }
+
+    /** 从待发附件里删掉一条。 */
+    fun removePendingAttachment(id: String) = update {
+        copy(pendingAttachments = pendingAttachments.filterNot { it.id == id })
+    }
+
+    /** 清空待发附件（例如用户放弃了这条消息）。 */
+    fun clearPendingAttachments() = update { copy(pendingAttachments = emptyList()) }
+
+    /**
+     * 读进内存，但**最多读 limit + 1 字节**就停手（细节与理由见
+     * [ChatContentParts.readAtMost]）：一个谎报体积的文件不该把内存吃穿。
+     * 超限与否由调用方按返回长度判定。
+     */
+    private suspend fun readBytes(limit: Long, openInput: () -> InputStream): ByteArray? =
+        try {
+            withContext(Dispatchers.IO) { openInput().use { ChatContentParts.readAtMost(limit, it) } }
+        } catch (failure: Throwable) {
+            if (failure is CancellationException) throw failure
+            notify(appString(R.string.attachment_read_failed))
+            null
+        }
+
+    /** 走全局错误通道（App 层会转成 snackbar）；文案在这里就已经是人话。 */
+    private fun notify(message: String) = update { copy(error = message) }
+
+    /**
+     * 附件相关的提示必须是本地化文案，而构造参数 `application` 不是属性，
+     * 只能经 `getApplication()` 拿。这两句是要用户照做的（「先压缩再试」），
+     * 不能退化成一句 `IMAGE_TOO_LARGE`。
+     */
+    private fun appString(resId: Int, vararg args: Any): String =
+        getApplication<Application>().getString(resId, *args)
 
     /** 当前选中的会话是否正在运行（决定「排队 / 插话」有没有区别）。 */
     fun selectedSessionRunning(): Boolean {
@@ -678,6 +878,29 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
     fun setBusySendMode(mode: BusySendMode) {
         preferences.busySendMode = mode
         update { copy(busySendMode = mode) }
+    }
+
+    /**
+     * 按需取回一张会话图片。
+     *
+     * 幂等且可反复调用（界面在组合时直接调它）：已缓存的直接返回，正在取的会被
+     * [pendingAttachments] 挡住，取失败的记进 [HarnessState.attachmentFailures] 不再重试。
+     * 这三条合起来保证「一次会话里每张图最多下载一次」。
+     */
+    fun loadAttachmentImage(attachmentId: String) {
+        if (attachmentId.isBlank()) return
+        val api = client ?: return
+        val current = mutableState.value
+        if (current.attachmentImages.containsKey(attachmentId)) return
+        if (attachmentId in current.attachmentFailures) return
+        if (!pendingAttachments.add(attachmentId)) return
+        viewModelScope.launch {
+            val outcome = runCatching { withContext(Dispatchers.IO) { api.readAttachment(attachmentId) } }
+            pendingAttachments.remove(attachmentId)
+            outcome
+                .onSuccess { bytes -> update { copy(attachmentImages = attachmentImages + (attachmentId to bytes)) } }
+                .onFailure { update { copy(attachmentFailures = attachmentFailures + attachmentId) } }
+        }
     }
 
     fun refreshCommands() = withClient { api ->

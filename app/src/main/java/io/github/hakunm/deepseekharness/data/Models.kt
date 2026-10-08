@@ -1,5 +1,6 @@
 package io.github.hakunm.deepseekharness.data
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 
@@ -313,6 +314,61 @@ data class PluginInventory(
     val loadedCount: Int = 0,
     val problemCount: Int = 0,
     val items: List<PluginEntry> = emptyList(),
+)
+
+/**
+ * 一条 prompt 内容 —— DSH 内核的 `PromptContentPart` 联合类型。
+ *
+ * 三种形态（与内核逐字段对齐，多一个字段就可能让服务端的 union 解析失败）：
+ * - [TextPart]：纯文本；
+ * - [ImagePart]：图片，**base64 直接内联**，一步到位，不需要先上传；
+ * - [FilePart]：文件，先经 `chat/sessions/:id/attachments` 换来 `receiptId`，再引用。
+ *
+ * 判别器是 `type`（[SerialName] 的值），这正是 kotlinx.serialization 对 sealed 类型的
+ * 默认判别器字段名，所以序列化结果就是内核要的形状：
+ * `{"type":"image","mediaType":"image/png","data":"..."}`。
+ *
+ * 为什么每个字段都给默认值：本项目用的是**严格解码器**，缺键会直接抛异常
+ * （[AgentPreset.trust] / [PluginInventory.profile] / [ResolvedPath] 三次事故）。
+ * 这些类型虽然主要用于编码，但默认值能让它们在测试与将来可能的回读里保持宽容。
+ */
+@Serializable
+sealed interface PromptPart {
+    @Serializable
+    @SerialName("text")
+    data class TextPart(val text: String = "") : PromptPart
+
+    @Serializable
+    @SerialName("image")
+    data class ImagePart(
+        /** 如 `image/png`；内核按它决定怎么解码 [data]。 */
+        val mediaType: String = "image/png",
+        /** 标准 base64（非 URL-safe）。正常无填充需求，编码器默认带 `=`。 */
+        val data: String = "",
+        /** 可选的原文件名，仅用于展示；为 null 时不发送该键。 */
+        val name: String? = null,
+    ) : PromptPart
+
+    @Serializable
+    @SerialName("file")
+    data class FilePart(val receiptId: String = "") : PromptPart
+}
+
+/**
+ * 保留任务书里的名字。两者是同一个类型，用别名只是为了不产生第二份实现。
+ */
+typealias PromptContentPart = PromptPart
+
+/**
+ * `POST /chat/sessions/:id/attachments` 的响应。
+ *
+ * 字段全带默认值，理由同 [PluginInventory]：服务端将来省略 `name`（或返回 `null`）
+ * 时，不能让整个上传流程因为一个可选字段就解码失败。
+ */
+@Serializable
+data class UploadedAttachment(
+    val receiptId: String = "",
+    val name: String = "",
 )
 
 @Serializable

@@ -106,11 +106,62 @@ class ChatPresentationTest {
         assertEquals("Write inside the workspace", permissions.options[1].description)
     }
 
+    @Test
+    fun keepsAnImageOnlyMessageThatHasNoTextAtAll() {
+        // 这是用户真机报的 bug：Web 端发一张图、不打字，App 里整条消息消失。
+        // 旧实现用 `body.takeIf(String::isNotBlank)` 判定，于是没有文字的消息被直接丢弃。
+        val history = ChatHistory(listOf(entry(
+            type = "user/message",
+            seq = 7,
+            data = """{"source":{"kind":"user"},"content":[{"type":"image","attachment":{
+                "attachmentId":"sha256:9759b45815c74eb5289a46074ad655a0",
+                "mediaType":"image/jpeg","width":1080,"height":2440,"bytes":143847,
+                "name":"shot.jpg"}}]}""",
+        )), hasMore = false)
+
+        val items = history.displayItems()
+        assertEquals(1, items.size)
+        assertEquals(ChatItemKind.USER, items[0].kind)
+        assertEquals("", items[0].body)
+        assertEquals(1, items[0].attachments.size)
+        assertEquals("sha256:9759b45815c74eb5289a46074ad655a0", items[0].attachments[0].attachmentId)
+        assertEquals("image/jpeg", items[0].attachments[0].mediaType)
+    }
+
+    @Test
+    fun stillDropsEventsWithNeitherTextNorAttachment() {
+        // 放宽判据不能顺手把所有空事件都放进来：协议层的空 user/message 仍应被丢掉，
+        // 否则会话里会冒出一堆点不动的空气泡。
+        val history = ChatHistory(listOf(entry(
+            type = "user/message",
+            seq = 8,
+            data = """{"source":{"kind":"user"},"content":[{"type":"text","text":"   "}]}""",
+        )), hasMore = false)
+        assertEquals(0, history.displayItems().size)
+    }
+
+    @Test
+    fun ignoresFilePartsBecauseTheirReceiptIsNotAnAttachmentId() {
+        // `type:"file"` 的 receiptId 指向一次上传的暂存凭证，与服务端持久化的附件存储
+        // 不是同一套东西；当成图片去取只会得到 404，所以这里必须排除。
+        val history = ChatHistory(listOf(entry(
+            type = "user/message",
+            seq = 9,
+            data = """{"source":{"kind":"user"},"content":[
+                {"type":"text","text":"看附件"},
+                {"type":"file","receiptId":"receipt-abc"}]}""",
+        )), hasMore = false)
+
+        val items = history.displayItems()
+        assertEquals(1, items.size)
+        assertEquals("看附件", items[0].body)
+        assertEquals(0, items[0].attachments.size)
+    }
+
     private fun entry(type: String, seq: Int, data: String, view: String? = null) = HistoryEntry(
         event = SessionEvent(type, seq, seq.toLong(), json.parseToJsonElement(data)),
         view = view?.let(json::parseToJsonElement),
     )
-
     private companion object {
         val json = Json { ignoreUnknownKeys = true }
     }

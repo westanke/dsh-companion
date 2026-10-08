@@ -1,12 +1,25 @@
 package io.github.hakunm.deepseekharness.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.graphics.BitmapFactory
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -46,9 +59,12 @@ import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.AttachFile
+import androidx.compose.material.icons.outlined.Image as ImageIcon
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Folder
@@ -100,7 +116,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -120,10 +142,14 @@ import com.mikepenz.markdown.m3.markdownTypography
 import io.github.hakunm.deepseekharness.HarnessState
 import io.github.hakunm.deepseekharness.HarnessViewModel
 import io.github.hakunm.deepseekharness.ApprovalUiState
+import io.github.hakunm.deepseekharness.PendingAttachment
 import io.github.hakunm.deepseekharness.R
 import io.github.hakunm.deepseekharness.SessionFileOpen
+import io.github.hakunm.deepseekharness.data.ChatContentParts
+import io.github.hakunm.deepseekharness.data.ChatAttachment
 import io.github.hakunm.deepseekharness.data.ChatDisplayItem
 import io.github.hakunm.deepseekharness.data.ChatItemKind
+import io.github.hakunm.deepseekharness.data.ChatLinkTarget
 import io.github.hakunm.deepseekharness.data.ChatSession
 import io.github.hakunm.deepseekharness.data.ChatWorkspace
 import io.github.hakunm.deepseekharness.data.AgentPreset
@@ -141,6 +167,18 @@ import io.github.hakunm.deepseekharness.data.TodoItem
 import io.github.hakunm.deepseekharness.data.displayItems
 import io.github.hakunm.deepseekharness.data.permissionSelect
 import io.github.hakunm.deepseekharness.data.todoItems
+import java.io.InputStream
+
+/**
+ * 一次性反馈。
+ *
+ * 刻意用系统 Toast 而不是 Snackbar：ChatDetail 没有 Scaffold/SnackbarHost，
+ * 为了一句「已复制」去引入整套宿主结构，改动面远大于收益；而这些反馈都是
+ * 「动作已完成」的通知，不需要用户在其中做选择（审批面板那种才需要留在界面上）。
+ */
+private fun toast(context: Context, text: String) {
+    Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+}
 
 @Composable
 fun ChatScreen(state: HarnessState, viewModel: HarnessViewModel, wide: Boolean) {
@@ -345,6 +383,45 @@ private fun ChatDetail(
     var modelSheet by remember(selected.id) { mutableStateOf(false) }
     var filesSheet by remember(selected.id) { mutableStateOf(false) }
     var tasksExpanded by rememberSaveable(selected.id) { mutableStateOf(true) }
+
+    // Markdown 里的链接会被注解成 `LinkAnnotation.Url`，由 Compose 的 Text 通过
+    // `LocalUriHandler` 打开。没有这个 provider 时用的是系统默认 handler，它只会把
+    // uri 丢给 Intent —— 而我们消息里的链接大量是**服务端绝对路径**（以及我一度写过的
+    // 相对路径），Intent 处理不了就静默失败，用户看到的现象是「点了没反应」。
+    //
+    // 所以这里换成分流处理：服务端路径交给 roots/resolve（复用已测过的链路），
+    // http(s) 交系统浏览器，其余明确告知不支持，绝不猜。
+    val context = LocalContext.current
+    val linkHandler = remember(context) {
+        object : UriHandler {
+            override fun openUri(uri: String) {
+                when (val target = ChatLinkTarget.classify(uri)) {
+                    is ChatLinkTarget.ServerPath -> viewModel.openSessionFile(target.path)
+
+                    is ChatLinkTarget.Web -> {
+                        val opened = runCatching {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(target.url)))
+                        }.isSuccess
+                        if (!opened) toast(context, context.getString(R.string.link_open_failed))
+                    }
+
+                    is ChatLinkTarget.Unsupported -> toast(
+                        context,
+                        when (target.reason) {
+                            // 相对路径无法定位是有意为之：服务端只接受绝对路径，
+                            // 猜一个基准目录可能打开**另一个**文件。
+                            ChatLinkTarget.Reason.RELATIVE_PATH, ChatLinkTarget.Reason.EMPTY ->
+                                context.getString(R.string.link_relative_path)
+                            ChatLinkTarget.Reason.ANCHOR ->
+                                context.getString(R.string.link_anchor_unsupported)
+                            ChatLinkTarget.Reason.UNKNOWN_SCHEME ->
+                                context.getString(R.string.link_scheme_unsupported)
+                        },
+                    )
+                }
+            }
+        }
+    }
     val liveItems = state.liveChat?.takeIf { it.sessionId == selected.id }?.displayItems().orEmpty()
     val displayItems = state.history?.displayItems().orEmpty() + liveItems
     val todos = state.history?.todoItems().orEmpty()
@@ -356,12 +433,13 @@ private fun ChatDetail(
         }
     }
 
-    Column(modifier.imePadding()) {
-        ConversationHeader(selected, state, viewModel, onBack, onOpenFiles = { filesSheet = true })
-        if (todos.isNotEmpty()) {
-            TodoPanel(todos, tasksExpanded, onToggle = { tasksExpanded = !tasksExpanded })
-        }
-        LazyColumn(
+    CompositionLocalProvider(LocalUriHandler provides linkHandler) {
+        Column(modifier.imePadding()) {
+            ConversationHeader(selected, state, viewModel, onBack, onOpenFiles = { filesSheet = true })
+            if (todos.isNotEmpty()) {
+                TodoPanel(todos, tasksExpanded, onToggle = { tasksExpanded = !tasksExpanded })
+            }
+            LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f).fillMaxWidth(),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp),
@@ -383,7 +461,14 @@ private fun ChatDetail(
                     )
                 }
             }
-            items(displayItems, key = { it.id }) { item -> ChatItem(item) }
+            items(displayItems, key = { it.id }) { item ->
+                ChatItem(
+                    item = item,
+                    images = state.attachmentImages,
+                    failures = state.attachmentFailures,
+                    onLoadImage = viewModel::loadAttachmentImage,
+                )
+            }
         }
         when (val approvals = state.approvalState) {
             ApprovalUiState.None -> Composer(
@@ -393,6 +478,11 @@ private fun ChatDetail(
                 // 判据是「这个会话的 agent 是否在运行」，不是全局 busy ——
                 // 后者连一次后台刷新都会置位，会让用户在任何请求期间都发不出消息。
                 sessionRunning = viewModel.selectedSessionRunning(),
+                attachments = state.pendingAttachments,
+                attachmentUploading = state.attachmentUploading,
+                onAttachImage = viewModel::attachImage,
+                onAttachFile = viewModel::attachFile,
+                onRemoveAttachment = viewModel::removePendingAttachment,
                 onModelClick = { modelSheet = true },
                 onPermissionSelect = viewModel::selectPermissionPreset,
                 onSubmit = { steer -> viewModel.sendMessage(message, steer); message = "" },
@@ -416,6 +506,7 @@ private fun ChatDetail(
                 onReject = {},
                 onAllowOnce = {},
             )
+            }
         }
     }
     if (modelSheet) ModelSheet(state, viewModel) { modelSheet = false }
@@ -881,14 +972,37 @@ private fun Composer(
     onValueChange: (String) -> Unit,
     state: HarnessState,
     sessionRunning: Boolean,
+    attachments: List<PendingAttachment>,
+    attachmentUploading: Boolean,
+    onAttachImage: (name: String, sizeBytes: Long, mediaType: String, openInput: () -> InputStream) -> Unit,
+    onAttachFile: (name: String, sizeBytes: Long, openInput: () -> InputStream) -> Unit,
+    onRemoveAttachment: (String) -> Unit,
     onModelClick: () -> Unit,
     onPermissionSelect: (String) -> Unit,
     onSubmit: (steer: Boolean) -> Unit,
 ) {
     val canWrite = "chat.write" in state.device?.scopes.orEmpty()
     // 刻意**不**把 state.busy 放进可提交条件：全局 busy 连一次刷新都会置位。
-    // 防重复提交靠「提交后立即清空输入框」——清空后 isNotBlank 为 false，按钮自然失效。
-    val canSubmit = ComposerSendPolicy.canSubmit(value, canWrite)
+    // 防重复提交靠「提交后立即清空输入框与待发附件」——清空后两者都空，按钮自然失效。
+    // 同理：附件上传中也不禁用发送键（那会重犯「运行中就发不出消息」的老毛病），
+    // 未上传完的文件干脆还不在待发列表里。
+    val canSubmit = ComposerSendPolicy.canSubmit(value, canWrite) || (canWrite && attachments.isNotEmpty())
+    val context = LocalContext.current
+    // 图片走内核的内联 image part（不需要上传），文件要先换 receiptId。
+    val imageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            val name = attachmentName(context, uri)
+            onAttachImage(name, attachmentSize(context, uri), ChatContentParts.imageMediaType(context.contentType(uri), name)) {
+                requireNotNull(context.contentResolver.openInputStream(uri))
+            }
+        }
+    }
+    val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            val name = attachmentName(context, uri)
+            onAttachFile(name, attachmentSize(context, uri)) { requireNotNull(context.contentResolver.openInputStream(uri)) }
+        }
+    }
     val defaultMode = ComposerSendPolicy.resolve(sessionRunning, state.busySendMode)
     val defaultIsSteer = defaultMode == BusySendMode.STEER
     val current = state.sessionModels?.current
@@ -904,6 +1018,33 @@ private fun Composer(
             shadowElevation = 3.dp,
         ) {
             Column(Modifier.padding(horizontal = 8.dp, vertical = 3.dp)) {
+                if (attachments.isNotEmpty() || attachmentUploading) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(top = 3.dp, bottom = 1.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        attachments.forEach { attachment ->
+                            AttachmentChip(attachment) { onRemoveAttachment(attachment.id) }
+                        }
+                        if (attachmentUploading) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                CircularProgressIndicator(Modifier.size(15.dp), strokeWidth = 2.dp)
+                                Text(
+                                    stringResource(R.string.attachment_uploading),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                    }
+                }
                 Box(Modifier.fillMaxWidth().height(34.dp).padding(horizontal = 3.dp, vertical = 2.dp)) {
                     if (value.isEmpty()) {
                         Text(
@@ -963,6 +1104,15 @@ private fun Composer(
                         enabled = canWrite && !state.busy,
                         onSelect = onPermissionSelect,
                     )
+                    // 两个附件入口只在有 chat.write 时出现 —— 没有写权限时选了也发不出去。
+                    if (canWrite) {
+                        IconButton(onClick = { imageLauncher.launch("image/*") }, modifier = Modifier.size(40.dp)) {
+                            Icon(Icons.Outlined.ImageIcon, stringResource(R.string.attach_image), Modifier.size(19.dp))
+                        }
+                        IconButton(onClick = { fileLauncher.launch(arrayOf("*/*")) }, modifier = Modifier.size(40.dp)) {
+                            Icon(Icons.Outlined.AttachFile, stringResource(R.string.attach_file), Modifier.size(19.dp))
+                        }
+                    }
                     // 运行中，在发送键旁标出「回车会做什么」——否则用户只能靠试。
                     if (sessionRunning) {
                         Text(
@@ -1004,6 +1154,98 @@ private fun Composer(
         }
     }
 }
+
+/**
+ * 待发附件条上的一条：图片给缩略图，其他给图标；名称、体积与删除键都在这里。
+ *
+ * 缩略图按需**降采样**解码（只解到约 96px），而不是把 8 MiB 的原图整张读进 Bitmap —
+ * 那样几张图就能把输入区卡住。
+ */
+@Composable
+private fun AttachmentChip(attachment: PendingAttachment, onRemove: () -> Unit) {
+    val thumbnail = attachment.imageBytes?.let { bytes ->
+        remember(bytes) { decodeThumbnail(bytes) }
+    }
+    Surface(
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 5.dp, end = 1.dp, top = 3.dp, bottom = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (thumbnail != null) {
+                Image(
+                    bitmap = thumbnail,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(36.dp).clip(MaterialTheme.shapes.small),
+                )
+            } else {
+                Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Outlined.AttachFile,
+                        contentDescription = null,
+                        modifier = Modifier.size(19.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Column(Modifier.widthIn(max = 132.dp)) {
+                Text(
+                    attachment.name,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Text(
+                    ChatContentParts.formatBytes(attachment.sizeBytes),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            IconButton(onClick = onRemove, modifier = Modifier.size(30.dp)) {
+                Icon(
+                    Icons.Outlined.Close,
+                    stringResource(R.string.attachment_remove),
+                    modifier = Modifier.size(15.dp),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 缩略图解码：先用 `inJustDecodeBounds` 只读尺寸，再按 2 的幂降采样。
+ * 解不出来（不是图片、已损坏）就返回 null，由调用方退回一个图标。
+ */
+private fun decodeThumbnail(bytes: ByteArray, maxPx: Int = 96): androidx.compose.ui.graphics.ImageBitmap? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+    var sample = 1
+    while (bounds.outWidth / (sample * 2) >= maxPx && bounds.outHeight / (sample * 2) >= maxPx) sample *= 2
+    val options = BitmapFactory.Options().apply { inSampleSize = sample }
+    return runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.asImageBitmap() }.getOrNull()
+}
+
+/** 与「文件」页同款：从 ContentResolver 取显示名，取不到就退回 URI 的末段。 */
+private fun attachmentName(context: Context, uri: Uri): String {
+    context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+        if (cursor.moveToFirst() && !cursor.isNull(0)) return cursor.getString(0)
+    }
+    return uri.lastPathSegment?.substringAfterLast('/') ?: "attachment"
+}
+
+private fun attachmentSize(context: Context, uri: Uri): Long {
+    context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+        if (cursor.moveToFirst() && !cursor.isNull(0)) return cursor.getLong(0)
+    }
+    return -1L
+}
+
+private fun Context.contentType(uri: Uri): String? = contentResolver.getType(uri)
 
 @Composable
 private fun TodoPanel(todos: List<TodoItem>, expanded: Boolean, onToggle: () -> Unit) {
@@ -1276,20 +1518,62 @@ private fun permissionIcon(value: String?): ImageVector = when (value) {
 }
 
 @Composable
-private fun ChatItem(item: ChatDisplayItem) {
+private fun ChatItem(
+    item: ChatDisplayItem,
+    images: Map<String, ByteArray> = emptyMap(),
+    failures: Set<String> = emptySet(),
+    onLoadImage: (String) -> Unit = {},
+) {
+    val context = LocalContext.current
+    // 长按复制。
+    //
+    // 为什么不只依赖 SelectionContainer：它在手机上要长按进入选择模式、再拖手柄选范围，
+    // 在滚动的消息流里很难用，而且用户根本不知道该这么操作（他的原话就是「会话内容无法复制」）。
+    // 这里额外给一个**一键复制全文**的手势；SelectionContainer 保留，两者互为补充：
+    // 想复制片段就选中，想复制整条就长按。
+    //
+    // 只对非空正文挂手势：工具调用那类没有正文的行长按了也没有意义，不该有反馈。
+    val copyable = item.body.isNotBlank()
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .then(
+                if (copyable) {
+                    Modifier.combinedClickable(
+                        onClick = {},
+                        onLongClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("message", item.body))
+                            toast(context, context.getString(R.string.copied))
+                        },
+                    )
+                } else {
+                    Modifier
+                },
+            ),
+    ) {
     when (item.kind) {
         ChatItemKind.USER -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            Surface(
+            Column(
                 modifier = Modifier.fillMaxWidth(0.78f).widthIn(max = 560.dp),
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.secondaryContainer,
+                horizontalAlignment = Alignment.End,
             ) {
-                Text(
-                    item.body,
-                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                // 文字可以为空 —— 只发一张图不打字是完全正常的用法，
+                // 旧实现直接丢弃这种消息，所以图片在 App 里整条不见。
+                if (item.body.isNotBlank()) {
+                    Surface(
+                        shape = MaterialTheme.shapes.medium,
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                    ) {
+                        Text(
+                            item.body,
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+                MessageAttachments(item.attachments, images, failures, onLoadImage)
             }
         }
         ChatItemKind.ASSISTANT -> Markdown(
@@ -1299,6 +1583,76 @@ private fun ChatItem(item: ChatDisplayItem) {
         )
         else -> ActivityRow(item)
     }
+    }
+}
+
+/**
+ * 渲染一条消息附带的图片。
+ *
+ * 三态是刻意的：**下载中**显示占位、**失败**显示可读的原因、**成功**显示图片。
+ * 少了中间态，慢网络下用户会以为图丢了；把失败也当成"还在加载"，用户会一直等下去。
+ *
+ * 解码失败（字节取到了但不是有效图片）单独区分：那说明数据有问题，与网络无关，
+ * 提示也不该让用户去重试网络。
+ */
+@Composable
+private fun MessageAttachments(
+    attachments: List<ChatAttachment>,
+    images: Map<String, ByteArray>,
+    failures: Set<String>,
+    onLoadImage: (String) -> Unit,
+) {
+    if (attachments.isEmpty()) return
+    Column(
+        modifier = Modifier.padding(top = 4.dp),
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        attachments.forEach { attachment ->
+            val bytes = images[attachment.attachmentId]
+            LaunchedEffect(attachment.attachmentId) { onLoadImage(attachment.attachmentId) }
+            when {
+                bytes != null -> {
+                    val bitmap = remember(bytes) {
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    }
+                    if (bitmap == null) {
+                        AttachmentNotice(stringResource(R.string.attachment_undecodable))
+                    } else {
+                        Image(
+                            bitmap = bitmap.asImageBitmap(),
+                            contentDescription = attachment.name,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .widthIn(max = 260.dp)
+                                .heightIn(max = 340.dp)
+                                .clip(MaterialTheme.shapes.medium),
+                        )
+                    }
+                }
+
+                attachment.attachmentId in failures ->
+                    AttachmentNotice(stringResource(R.string.attachment_unavailable))
+
+                else -> Box(
+                    Modifier
+                        .size(88.dp)
+                        .clip(MaterialTheme.shapes.small)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                    contentAlignment = Alignment.Center,
+                ) { CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AttachmentNotice(message: String) {
+    Text(
+        message,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.labelSmall,
+    )
 }
 
 @Composable
