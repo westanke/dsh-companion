@@ -261,6 +261,73 @@ class DshClientTest {
         assertEquals("/api/v1/settings/providers/custom-openai/discover", server.takeRequest().path)
     }
 
+    /**
+     * `settings/plugins` 的解码回归。
+     *
+     * 这条测试是对着**服务端实测 payload** 写的，不是照文档臆造的，因为这里有两个已在真实
+     * 环境里踩到过的坑：
+     *
+     * 1. `state` 有**四种**取值，除 loaded / installed-not-loaded / declared-missing 外还有
+     *    `runtime-provided` —— 官方 `@deepseek-ai/` 包随 DSH 运行时安装，不会出现在 profile 的
+     *    `node_modules` 下，这是**正常状态**。按三种写不会崩，但会让健康机器冒出一排「状态未知」。
+     * 2. `profile` / `profilePath` 在服务端是 `string | null`，判定不出 profile 时会**显式发
+     *    `null`**。若声明成非空的 `String = ""`，JSON 里的 null **不会退回默认值，而是让整个
+     *    响应解码失败** —— 比 [AgentPreset.trust] 那次的「缺键」更隐蔽。
+     *
+     * 同时断言「只有 name 的条目」也能解出（字段全带默认值），避免将来某个可选字段再次
+     * 拖垮整个列表。
+     */
+    @Test
+    fun pluginInventoryDecodesRuntimeProvidedStateAndNullProfile() {
+        server.enqueue(
+            MockResponse().setBody(PLUGIN_INVENTORY_RESPONSE).setHeader("Content-Type", "application/json"),
+        )
+        val client = DshClient(server.url("/").toString(), "device-token")
+
+        val inventory = client.pluginInventory()
+
+        assertEquals("/api/v1/settings/plugins", server.takeRequest().path)
+
+        // 官方包：没有 installed、没有 declared，但 state 是正常的 runtime-provided。
+        val official = inventory.items.first { it.name == "@deepseek-ai/dsh-base" }
+        assertEquals("runtime-provided", official.state)
+        assertTrue(official.official)
+        assertEquals(null, official.installed)
+        assertEquals(null, official.declared)
+
+        // 普通插件：实际版本与声明都解得出，且两者不同（这正是要显示实际版本的原因）。
+        val ffmpeg = inventory.items.first { it.name == "dsh-ffmpeg" }
+        assertEquals("loaded", ffmpeg.state)
+        assertEquals("^0.4.5", ffmpeg.declared)
+        assertEquals("0.4.7", ffmpeg.installed)
+
+        // 只有 name 的条目也必须能解 —— 缺字段走默认值，不能整包失败。
+        val bare = inventory.items.first { it.name == "dsh-bare" }
+        assertEquals("", bare.state)
+        assertEquals(null, bare.installed)
+
+        assertEquals("web", inventory.profile)
+        assertEquals(3, inventory.loadedCount)
+        assertEquals(1, inventory.problemCount)
+    }
+
+    @Test
+    fun pluginInventoryAcceptsExplicitNullProfileAndUnavailableReason() {
+        // 服务端在 PROFILE_UNKNOWN 时返回的是显式 null，而不是省略键。
+        server.enqueue(
+            MockResponse().setBody(PLUGIN_INVENTORY_UNAVAILABLE).setHeader("Content-Type", "application/json"),
+        )
+        val client = DshClient(server.url("/").toString(), "device-token")
+
+        val inventory = client.pluginInventory()
+
+        assertEquals(null, inventory.profile)
+        assertEquals(null, inventory.profilePath)
+        assertEquals(false, inventory.available)
+        assertEquals("PROFILE_UNKNOWN", inventory.reason)
+        assertTrue(inventory.items.isEmpty())
+    }
+
     private companion object {
         const val PAIRING_RESPONSE = """{"token":"secret-token","device":{"id":"device-1","name":"Pixel","scopes":["files.read"],"rootIds":["root-1"]}}"""
         const val ENTRIES_RESPONSE = """{"path":"目录","entries":[{"name":"file name.txt","path":"目录/file name.txt","kind":"file","size":5,"modifiedAt":1,"writable":true}]}"""
@@ -277,5 +344,7 @@ class DshClientTest {
         const val COMMAND_EXECUTION_RESPONSE = """{"execution":{"commandId":"permission","result":{"kind":"text","text":"workspace-write"}}}"""
         const val PROVIDER_SETTINGS_RESPONSE = """{"writable":true,"revisionByNamespace":{"llm-pi-ai":3},"customProvider":{"available":true,"protocols":["openai-completions","openai-responses","anthropic-messages"],"revision":3},"providers":[{"id":"custom-openai","displayName":"Custom OpenAI","active":true,"configurable":true,"configured":true,"removable":true,"credential":{"ref":"CUSTOM_OPENAI_API_KEY","configured":true,"writable":true},"config":{"baseURL":"https://api.example/v1","api":"openai-completions","models":[{"id":"model-a"}]}}]}"""
         const val DISCOVERED_MODELS_RESPONSE = """{"models":[{"id":"model-b","name":"Model B"}]}"""
+        const val PLUGIN_INVENTORY_RESPONSE = """{"profile":"web","profilePath":"/home/u/.dsh/profiles/web","available":true,"reason":null,"loadedCount":3,"problemCount":1,"items":[{"name":"@deepseek-ai/dsh-base","declared":null,"installed":null,"loaded":true,"official":true,"state":"runtime-provided"},{"name":"dsh-ffmpeg","declared":"^0.4.5","installed":"0.4.7","loaded":true,"official":false,"state":"loaded"},{"name":"dsh-bare"}]}"""
+        const val PLUGIN_INVENTORY_UNAVAILABLE = """{"profile":null,"profilePath":null,"available":false,"reason":"PROFILE_UNKNOWN","loadedCount":0,"problemCount":0,"items":[]}"""
     }
 }

@@ -119,6 +119,29 @@ Saved addresses and the device token are migrated into the new `Host` structure 
 re-pairing. Migration is idempotent, and old tokens are decrypted with the **legacy Keystore alias**
 before being carried over.
 
+### 6. Plugin inventory page
+
+A new "Plugins" tab shows what is installed on the machine, **which version is actually running**, and
+whether anything is in a bad state.
+
+This one **does require a server-side change**: `dsh-workspace`'s `/api/v1` had 10 endpoints
+(`healthz` / `pairings/exchange` / `devices/self` / `roots` / `trash` / `chat/sessions` /
+`chat/workspaces` / `chat/agent-presets` / `settings/models` / `settings/providers`), **none related to
+plugins**, so `GET /api/v1/settings/plugins` was added to the plugin first.
+
+It distinguishes four states, two of which can only be derived by comparing two sources
+(`dependencies` = what is installed, `dsh.profile.bundles` = what is actually loaded):
+
+| State | Meaning |
+|---|---|
+| `loaded` | Declared and present on disk |
+| `runtime-provided` | An official package shipped with the DSH runtime (not in the profile's `node_modules`) — **normal** |
+| `installed-not-loaded` | Installed but not enabled |
+| `declared-missing` | A non-official package declared for loading but missing — usually means startup trouble |
+
+The gap between "installed" and "running" is exactly the point — on the reference machine it revealed
+that `dsh-hyperframes` and `dsh-remotion` are installed but not enabled.
+
 > **DSH 0.2.x compatibility**: this fork also carries the upstream fix for an enum-contract mismatch.
 > DSH 0.2.x no longer returns `trust` on `AgentPreset`, while the client's strict decoder requires it,
 > so the Agent preset picker failed entirely with

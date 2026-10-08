@@ -5,6 +5,61 @@
 
 ---
 
+## 2026-10-08 · 插件清单页（配合服务端 `PLUGIN-001`）
+
+### 为什么
+
+用户反馈第 2 条：**「功能单调点，无法查看装的插件情况」**。
+
+这条**无法纯靠客户端解决** —— 核实过 `dsh-workspace` 的对外 API 面：`/api/v1` 原有 10 个端点
+（`healthz` / `pairings/exchange` / `devices/self` / `roots` / `trash` / `chat/sessions` /
+`chat/workspaces` / `chat/agent-presets` / `settings/models` / `settings/providers`）外加 WS `events`，
+**没有任何一个与插件相关**；loopback 管理面 `/manage/status` 也只回 `remote` / `roots` / `devices`。
+
+因此先在插件侧加了 `GET /api/v1/settings/plugins`（见 `dsh-workspace` 的 `PLUGIN-001`），
+本仓库负责把它显示出来。
+
+### 干了什么
+
+- `data/Models.kt` 新增 `PluginEntry` / `PluginInventory`。
+- `data/DshClient.kt` 新增 `pluginInventory()`。
+- `HarnessViewModel` 新增 `pluginInventory` 状态、`refreshPluginInventory()`，并在 `loadSnapshot()`
+  里随顶栏刷新/重连一起带上。
+- 新增 `ui/PluginsScreen.kt`：显示 profile 名、已加载数、问题数，逐条列出名称/实际版本/状态徽标；
+  `problemCount > 0` 时给出提示条。
+- `ui/App.kt` 新增「插件」页签，由 `settings.read` scope 门控。
+- 中英字符串各 +23 条。
+
+### 两处契约缺口（值得记录，因为都是「文档比实现少写了」的类型）
+
+服务端返回的形态里有两点与最初的任务描述不一致，**若照描述写就会在真实设备上出问题**：
+
+1. **`state` 有四种取值，不是三种。** 除 `loaded` / `installed-not-loaded` / `declared-missing`
+   外还有 **`runtime-provided`** —— 官方 `@deepseek-ai/` 包随 DSH 运行时安装，不会出现在 profile 的
+   `node_modules` 下，这是**正常状态**。按三种写不会崩溃，但会让一台健康机器冒出一排「状态未知」，
+   而假警报比没有信息更糟。
+2. **`profile` / `profilePath` 在服务端是 `string | null`，且判定不出 profile 时会显式发 `null`。**
+   若把它们声明成非空的 `String = ""`，JSON 里的 `null` **不会退回默认值，而是让整个响应解码失败**
+   —— 这比 [AgentPreset.trust] 那次的「缺键」更隐蔽，因为缺键会走默认值、显式 null 不会。
+
+两条都已按**服务端实测 payload** 兜住，并补了专门的解码回归测试
+（`DshClientTest.pluginInventoryDecodesRuntimeProvidedStateAndNullProfile` 与
+`...AcceptsExplicitNullProfileAndUnavailableReason`），断言四种状态、显式 null、
+以及「只有 name 的条目」都能解出。
+
+> 教训沿用上一节：**契约要用真实响应核对，不能只对着文档写**。这次的来源是「任务书比实现落后了一版」
+> —— 服务端加了第四种状态却没有同步给客户端。下游按旧契约写出的不是崩溃，而是更容易被忽略的假警报。
+
+### 测了什么
+
+| 测试类 | 用例 | 结果 |
+|---|---|---|
+| `DshClientTest`（新增 2 条解码回归） | 14 | 全绿 |
+| 其余（含上一节的连接层测试） | 76 | 全绿 |
+| **合计** | **90** | **全绿** |
+
+---
+
 ## 2026-10-08 · 连接层重构：从「单地址」到「一台电脑多个地址」
 
 ### 基于什么

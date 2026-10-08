@@ -170,6 +170,8 @@ class DshClient(
 
     fun providerSettings(): ProviderSettings = get("settings/providers", ProviderSettings.serializer())
 
+    fun pluginInventory(): PluginInventory = get("settings/plugins", PluginInventory.serializer())
+
     fun updateProvider(providerId: String, patch: ProviderPatch): ProviderSettings = patch(
         pathUrl("settings", "providers", providerId),
         patch,

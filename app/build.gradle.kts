@@ -23,9 +23,10 @@ android {
         minSdk = 26
         targetSdk = 36
         // 版本号必须高于上游（1.0.0 / 10000），否则无法覆盖安装，用户在手机上也无法区分装的是哪个。
+        // 1.1.0 = 多地址连接层 + 配置导入；1.2.0 = 插件清单页（配合服务端 PLUGIN-001）。
         // 本仓库相对上游的功能变更见 docs/project/CHANGELOG-DEV.md。
-        versionCode = 10001
-        versionName = "1.1.0"
+        versionCode = 10002
+        versionName = "1.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }

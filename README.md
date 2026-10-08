@@ -112,6 +112,28 @@ Host        一台电脑：名字、凭据、若干地址、上次成功用的�
 从旧版升级时，已保存的地址与设备令牌会自动迁移成新的 `Host` 结构，无需重新配对。
 迁移是幂等的，且**旧格式的令牌会用旧的 Keystore 别名解密**后搬过来。
 
+### 6. 插件清单页
+
+手机上多了一个「插件」页签，能看到这台机器装了哪些插件、**实际跑的是哪个版本**、以及有没有异常状态。
+
+这一条**必须动服务端**：`dsh-workspace` 的 `/api/v1` 原有 10 个端点
+（`healthz` / `pairings/exchange` / `devices/self` / `roots` / `trash` / `chat/sessions` /
+`chat/workspaces` / `chat/agent-presets` / `settings/models` / `settings/providers`），
+**没有任何一个与插件相关**，所以先在插件侧加了 `GET /api/v1/settings/plugins`。
+
+它区分四种状态，其中两种只有对比两个数据源才能得出（`package.json` 的 `dependencies` =
+装了哪些包，`dsh.profile.bundles` = 实际加载了哪些包）：
+
+| 状态 | 含义 |
+|---|---|
+| `loaded` | 声明加载且已落盘 |
+| `runtime-provided` | 官方包随 DSH 运行时自带（不在 profile 的 `node_modules` 里）—— **正常状态** |
+| `installed-not-loaded` | 装了但没启用 |
+| `declared-missing` | 非官方包声明加载却缺失，通常意味着启动会出问题 |
+
+「装了哪些」与「跑着哪些」的差别正是它的价值所在 —— 例如本机实测发现
+`dsh-hyperframes` 与 `dsh-remotion` 装了但未启用。
+
 > **DSH 0.2.x 兼容性**：本分支同样包含上游修复的枚举契约问题 —— 0.2.x 的 `AgentPreset`
 > 不再返回 `trust` 字段，而客户端严格解码要求该字段必填，导致 Agent 预设选择器报
 > `Field 'trust' is required ... missing at path: $.items[0]` 并整体打不开。

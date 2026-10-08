@@ -246,6 +246,51 @@ data class CustomProviderCreate(
     val expectedRevision: Int? = null,
 )
 
+/**
+ * 已安装插件清单里的一条记录。
+ *
+ * 所有字段都带默认值，理由和 [AgentPreset.trust] 那次事故一样：DSH 解码器是严格的
+ * （`ignoreUnknownKeys` 只放过多余的键，缺键照样抛异常），而插件清单的字段明显会随
+ * DSH 版本增减。一个可选的 `official` 今天缺席，就不该把整页清单打挂。
+ *
+ * [state] 取服务端约定的四种值：`loaded` / `installed-not-loaded` / `declared-missing` /
+ * `runtime-provided`（官方包随 DSH 运行时自带，属正常状态）；未知取值由 UI 兜底显示，
+ * 不在这里抛错。
+ */
+@Serializable
+data class PluginEntry(
+    val name: String = "",
+    /** package.json 里的版本声明，如 `^0.4.5`；可能为 null。 */
+    val declared: String? = null,
+    /** node_modules 里实际装上的版本；可能为 null。 */
+    val installed: String? = null,
+    val loaded: Boolean = false,
+    /** 是否 DSH 官方包（`@deepseek-ai/` 前缀）。 */
+    val official: Boolean = false,
+    val state: String = "",
+)
+
+/**
+ * `GET /api/v1/settings/plugins` 的响应。
+ *
+ * [available] 为 false 时 [items] 为空，[reason] 给出人可读的失败原因
+ * （`PROFILE_UNKNOWN` / `MANIFEST_UNREADABLE`），界面必须显示解释而不是空白。
+ *
+ * 注意 [profile] 与 [profilePath] 在服务端是 `string | null`：判定不出 profile 时
+ * 会**显式发送 `null`**。所以它们必须声明为可空 —— 非空属性遇到 JSON 里的 null 不会
+ * 退回默认值，而是直接让整个响应解码失败（比 [AgentPreset.trust] 那次缺键更隐蔽）。
+ */
+@Serializable
+data class PluginInventory(
+    val profile: String? = null,
+    val profilePath: String? = null,
+    val available: Boolean = false,
+    val reason: String? = null,
+    val loadedCount: Int = 0,
+    val problemCount: Int = 0,
+    val items: List<PluginEntry> = emptyList(),
+)
+
 @Serializable
 data class SessionEvent(
     val type: String,

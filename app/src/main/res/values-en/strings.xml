@@ -218,4 +218,28 @@
     <string name="endpoint_kind_wan">WAN</string>
     <string name="endpoint_kind_unknown">Other</string>
     <string name="upgrade_notice">Your previously saved connection was migrated automatically; its address and credential are preserved.</string>
+
+    <!-- Plugin inventory -->
+    <string name="plugins">Plugins</string>
+    <string name="plugins_subtitle">See which plugins are installed in the current profile and which ones are loaded.</string>
+    <string name="plugins_profile">Plugin profile: %1$s</string>
+    <string name="plugins_loaded_stat">Loaded</string>
+    <string name="plugins_problem_stat">Needs attention</string>
+    <string name="plugins_problem_banner">%1$d plugin(s) need attention: some are declared but missing (their features will not work), others are installed but not loaded.</string>
+    <string name="plugins_list_title">Plugin inventory</string>
+    <string name="plugins_empty">No plugin is installed in this profile.</string>
+    <string name="plugins_installed_version">Installed %1$s</string>
+    <string name="plugins_version_unknown">Version unknown</string>
+    <string name="plugins_version_runtime_provided">Provided by the DSH runtime</string>
+    <string name="plugins_declared">Declared %1$s</string>
+    <string name="plugins_official">Official</string>
+    <string name="plugins_state_loaded">Loaded</string>
+    <string name="plugins_state_runtime_provided">Bundled with DSH</string>
+    <string name="plugins_state_installed_not_loaded">Installed, not loaded</string>
+    <string name="plugins_state_declared_missing">Declared but missing</string>
+    <string name="plugins_state_unknown">Unknown state</string>
+    <string name="plugins_unavailable_profile_unknown">The server cannot tell which plugin profile is in use, so the inventory is unavailable. Make sure DSH is started with a --profile argument.</string>
+    <string name="plugins_unavailable_manifest_unreadable">The server cannot read the plugin manifest: package.json may be corrupt, missing, or unreadable.</string>
+    <string name="plugins_unavailable_generic">The server cannot provide the plugin inventory right now (%1$s).</string>
+    <string name="plugins_permission_required">This device does not have the settings.read scope, so the plugin inventory cannot be shown. Enable settings read for this device in the DSH WebUI workspace settings.</string>
 </resources>

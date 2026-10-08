@@ -19,6 +19,7 @@ import io.github.hakunm.deepseekharness.data.RootView
 import io.github.hakunm.deepseekharness.data.AgentPreset
 import io.github.hakunm.deepseekharness.data.ModelSelection
 import io.github.hakunm.deepseekharness.data.PendingApproval
+import io.github.hakunm.deepseekharness.data.PluginInventory
 import io.github.hakunm.deepseekharness.data.ProviderModel
 import io.github.hakunm.deepseekharness.data.ProviderPatch
 import io.github.hakunm.deepseekharness.data.ProviderSettings
@@ -105,6 +106,8 @@ data class HarnessState(
     val sessionModels: SessionModels? = null,
     val commands: List<CommandDescriptor> = emptyList(),
     val providerSettings: ProviderSettings? = null,
+    /** 插件清单；null 表示尚未读取（未连接、无 settings.read 权限或读取失败）。 */
+    val pluginInventory: PluginInventory? = null,
     val discoveredModels: List<ProviderModel> = emptyList(),
     val selectedSessionId: String? = null,
     val history: ChatHistory? = null,
@@ -547,6 +550,11 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         update { copy(providerSettings = api.providerSettings()) }
     }
 
+    fun refreshPluginInventory() = withClient { api ->
+        if ("settings.read" !in mutableState.value.device?.scopes.orEmpty()) return@withClient
+        update { copy(pluginInventory = api.pluginInventory()) }
+    }
+
     fun updateProvider(providerId: String, patch: ProviderPatch) = withClient { api ->
         update { copy(providerSettings = api.updateProvider(providerId, patch), discoveredModels = emptyList()) }
     }
@@ -865,6 +873,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
             chatWorkspaces = chatWorkspaces,
             agentPresets = agentPresets,
             providerSettings = if (canReadSettings) api.providerSettings() else null,
+            pluginInventory = if (canReadSettings) api.pluginInventory() else null,
             selectedRootId = selectedRoot,
             directory = directory,
             trash = if ("files.read" in device.scopes) api.trash() else emptyList(),

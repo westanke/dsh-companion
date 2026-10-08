@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Refresh
@@ -66,7 +67,7 @@ import io.github.hakunm.deepseekharness.R
 import kotlinx.coroutines.launch
 
 private enum class MainSection(val label: Int) {
-    Chat(R.string.chat), Files(R.string.files), Settings(R.string.settings),
+    Chat(R.string.chat), Files(R.string.files), Plugins(R.string.plugins), Settings(R.string.settings),
 }
 
 @Composable
@@ -190,6 +191,7 @@ private fun ConnectedApp(
                         when (target) {
                             MainSection.Chat -> ChatScreen(state, viewModel, wide)
                             MainSection.Files -> FilesScreen(state, viewModel, wide)
+                            MainSection.Plugins -> PluginsScreen(state, viewModel)
                             MainSection.Settings -> SettingsScreen(state, viewModel)
                         }
                     }
@@ -300,12 +302,15 @@ private fun NavigationPanel(
 private fun sectionIcon(section: MainSection): ImageVector = when (section) {
     MainSection.Chat -> Icons.Outlined.ChatBubbleOutline
     MainSection.Files -> Icons.Outlined.FolderOpen
+    MainSection.Plugins -> Icons.Outlined.Extension
     MainSection.Settings -> Icons.Outlined.Settings
 }
 
 private fun sectionEnabled(section: MainSection, scopes: List<String>): Boolean = when (section) {
     MainSection.Chat -> "chat.read" in scopes
     MainSection.Files -> "files.read" in scopes
+    // 插件清单走 /settings/plugins，和模型供应商同一个 settings.read 权限。
+    MainSection.Plugins -> "settings.read" in scopes
     MainSection.Settings -> true
 }
 
