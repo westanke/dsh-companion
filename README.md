@@ -1,4 +1,4 @@
-# dsh-android-app
+# dsh-companion
 
 <p align="center">
   <strong>把你自己的 DeepSeek Harness 带到 Android 手机上。</strong>
@@ -9,21 +9,153 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-v1.0.0-087f8c">
+  <img alt="Upstream" src="https://img.shields.io/badge/upstream-Hakunm%2Fdsh--android--app-555">
   <img alt="Android" src="https://img.shields.io/badge/Android-8.0%2B-3ddc84">
   <img alt="Jetpack Compose" src="https://img.shields.io/badge/UI-Jetpack_Compose_%2B_Material_3-6750a4">
   <img alt="License" src="https://img.shields.io/badge/license-AGPL--3.0-2da44e">
 </p>
 
-`dsh-android-app` 是 DeepSeek Harness 的原生 Android 客户端。它通过 [dsh-workspace](https://github.com/Hakunm/dsh-workspace) 连接你自己的 DSH WebUI，让手机与网页端使用同一套工作区、会话、模型和文件。
+## 关于本仓库
 
-你可以在手机上继续聊天、查看任务进度、处理审批、切换权限与模型，也可以直接浏览和编辑服务器允许访问的文件。App 默认中文，可在设置中切换 English。
+本仓库是 [Hakunm/dsh-android-app](https://github.com/Hakunm/dsh-android-app) 的**衍生版本（fork）**，
+在上游 `v1.0.0` 的基础上继续开发。它保留上游的完整提交历史，因此归属关系可逐条追溯。
 
-> **DSH 0.2.x 兼容性**：本分支在上游 `v1.0.0` 的基础上修复了与 DSH 0.2.x 的枚举契约不匹配问题。
-> 0.2.x 的 `AgentPreset` 不再返回 `trust` 字段，而客户端严格解码要求该字段必填，
-> 导致 Agent 预设选择器报 `Field 'trust' is required ... missing at path: $.items[0]` 并整体打不开。
+- **基于什么**：上游 [Hakunm/dsh-android-app](https://github.com/Hakunm/dsh-android-app)（Android 原生客户端，Jetpack Compose + Material 3）。
+- **为什么有它**：上游的连接模型只支持「一台电脑 = 一个地址」，在真实移动场景下不够用。具体见下一节。
+- **许可证**：上游以 **AGPL-3.0** 发布，本仓库沿用同一许可证，见 [LICENSE](./LICENSE)。
+  上游的版权声明、[NOTICE](./NOTICE) 与 [THIRD_PARTY_LICENSES](./THIRD_PARTY_LICENSES) 全部保留未改动。
+- **我们改了什么、为什么、测了什么**：见 [开发日志](./docs/project/CHANGELOG-DEV.md)。
+
+## 这个版本解决什么问题
+
+手机端日常使用暴露出四个问题，它们看起来互不相干，实际上指向**同一个根因**：
+旧实现把「一台电脑」和「一个地址」当成了同一个东西。它的数据模型只有：
+
+```kotlin
+data class StoredConnection(val endpoint: String, val token: String)
+class DshClient(endpoint: String, token: String?)
+```
+
+`endpoint` 是**单个字符串**。于是：
+
+| 实际遇到的问题 | 真正的根因 |
+|---|---|
+| 只能添加一条路径 | 模型里只有一个 `endpoint: String`，装不下第二个地址 |
+| 出门在外没法配对 | 配对码必须在电脑上生成，而那时人已经不在电脑旁 |
+| 局域网 / 虚拟网 / 公网不能同时保存 | 同上：只有一个地址位 |
+| 会话里提到的文件看不了 | 会话事件中的绝对路径没有与授权根做匹配 |
+
+### 关于「出门在外」这个场景
+
+这一条值得单独说，因为它推翻了上游的一个前提。上游的连接方式是**一次性配对码**：
+在电脑的 WebUI 上生成，拿到手机上输入。这个流程默认「人和电脑在一起」。
+
+但真实场景恰恰相反：**人已经出门了，电脑留在家里，屏幕根本看不到**。此时
+「去电脑上生成一个配对码」不是难用，而是**做不到**。扫码同理 —— 对着看不到的屏幕扫不了。
+
+所以本版本把「配置导入」作为主路径：
+
+```
+电脑上生成一行文本 → 发给自己（微信 / 邮件 / 私密笔记）→ 到了外面粘贴进 App
+```
+
+全程不需要电脑在旁边，也不需要摄像头。配对码被保留为**次要入口**（你正坐在电脑前时它更快），
+并在界面上明确标注了这个前提条件。
+
+## 本仓库相对上游的改动
+
+### 1. 一台电脑，多个地址
+
+连接层重新建模（`app/src/main/java/io/github/hakunm/deepseekharness/data/ConnectionModels.kt`）：
+
+```
+Host        一台电脑：名字、凭据、若干地址、上次成功用的地址
+ ├─ Endpoint   一个可达地址：标签、baseUrl、类型（局域网/虚拟网/公网）、探活历史
+ └─ Credential 凭据：挂在电脑上，而不是挂在地址上
+```
+
+**关键点：这个改动不需要服务端做任何修改。** DSH 的 `devices` 表结构是
+`id, name, token_hash, scopes_json, created_at, last_seen_at, revoked_at` ——
+**根本没有地址列**。设备令牌天然是主机级的，同一个令牌在任何地址上都有效。
+也就是说「多地址」一直是客户端本来就能做到、只是过去没做的事。
+
+启动时的行为：并发探测这台电脑的**全部**地址（每个地址独立超时，实测 1.5 秒），
+按「延迟优先、局域网近似即优先」选路，失败自动回退到下一个可达地址。
+
+### 2. 配置导入取代扫码
+
+`ConnectionShare.kt` 定义了线格式 `DSH1:<Base64URL(JSON)>`，解码端对真实粘贴环境做了容错：
+微信插入的换行与零宽字符、前后带标签文字（`Pixel 9 的配置：DSH1:xxx`）、缺失的 `=` 填充、
+标准与 URL-safe 两种 Base64 字母表、结尾被粘上的标点 —— 全部能正确还原。
+
+生成端是 `tools/emit-config.mjs`。
+
+### 3. 地址诊断
+
+全部地址都连不上时，不再只说一句「连接失败」，而是逐条列出每个地址的结果：
+
+```
+局域网    192.168.1.126:3090   Unreachable — timeout after 1500ms
+虚拟网    100.64.250.1:3090    Reachable · 38 ms
+```
+
+过去用户只能靠猜「我该填哪个地址」，现在他看得到。
+
+### 4. 断开不再清除凭据
+
+上游把「断开连接」和「删除令牌」绑成同一个按钮。于是网络抖一下、手点错一次，
+用户就得重新配对 —— 而重新配对又要求他人在电脑旁。
+现在断开只断连（`disconnect`），删除电脑是独立动作（`removeHost`）。
+
+### 5. 旧数据自动迁移
+
+从旧版升级时，已保存的地址与设备令牌会自动迁移成新的 `Host` 结构，无需重新配对。
+迁移是幂等的，且**旧格式的令牌会用旧的 Keystore 别名解密**后搬过来。
+
+> **DSH 0.2.x 兼容性**：本分支同样包含上游修复的枚举契约问题 —— 0.2.x 的 `AgentPreset`
+> 不再返回 `trust` 字段，而客户端严格解码要求该字段必填，导致 Agent 预设选择器报
+> `Field 'trust' is required ... missing at path: $.items[0]` 并整体打不开。
 > 修复方式是给可选字段补默认值，使**单个字段缺失不再拖垮整个列表**。
-> 改动细节与测试结果见 [开发日志](./docs/project/CHANGELOG-DEV.md)。
+
+## 构建
+
+```bash
+scripts/build.sh                      # 默认 assembleDebug
+scripts/build.sh assembleRelease      # 发布包
+scripts/build.sh :app:testDebugUnitTest   # 单元测试
+```
+
+`scripts/build.sh` 的存在是有原因的，不是多余的包装：
+
+1. **绕开 Gradle wrapper 的静默挂起。** `gradle-wrapper.properties` 里的
+   `distributionUrl` 指向 `services.gradle.org`，该地址在国内网络下不可达，而 wrapper
+   下载失败时**不报错退出，而是挂起**（实测：CPU 0.3%、零网络连接、无 daemon 日志，十几分钟无输出）。
+   脚本直接调用本地已缓存的 Gradle 二进制。
+2. **依赖镜像。** 本机无法访问 `maven.google.com`，需要经阿里云镜像重定向。
+   注意用的是**本项目自带**的 `scripts/init-mirrors.gradle`：工具链里那份会往 project 级
+   仓库追加，与本项目 `settings.gradle.kts` 的 `RepositoriesMode.FAIL_ON_PROJECT_REPOS`
+   冲突并直接构建失败。
+3. **串行化。** Gradle 对同一项目目录是互斥的，脚本用 `flock` 保证并发调用不会互相抢锁。
+
+## 下载与安装
+
+从本仓库的 GitHub Releases 下载：
+
+```text
+DeepSeek-Harness-companion.apk
+```
+
+安装要求：
+
+- Android 8.0（API 26）或更高版本
+- 已运行的 DeepSeek Harness WebUI
+- DSH WebUI 已安装 `dsh-workspace` v1.0.0 或兼容版本
+- 插件中至少添加了一个授权根，并已启用远程访问
+- 手机可以访问插件配置的 IP、域名和端口
+
+正式 APK 使用与上游**相同**的发布证书签名，`applicationId` 也保持一致
+（`io.github.hakunm.deepseekharness`）。因此可以从上游版本**直接覆盖安装**，
+已保存的连接会在首次启动时自动迁移成新的多地址结构，无需重新配对。
 
 ## 界面预览
 
@@ -73,7 +205,26 @@ DeepSeek-Harness-v1.0.0.apk
 2. 输入配对码和设备名称。
 3. 点击“配对并连接”。
 
-设备令牌由 Android Keystore 支持的加密存储保存。App 重启后会恢复连接；在 App 中断开会清除本机令牌，在 WebUI 撤销设备会让令牌立即失效。
+> **地址格式：千万不要带 `/dsh-workspace-api` 前缀。**
+> 这一点很容易搞错，而且错了必然连不上。实测：
+>
+> | 请求 | 结果 |
+> |---|---|
+> | `http://192.168.1.126:3090/api/v1/healthz` | 200 ✅ |
+> | `http://192.168.1.126:3090/dsh-workspace-api/api/v1/healthz` | 401 ❌ |
+> | `http://127.0.0.1:3080/dsh-workspace-api/api/v1/healthz` | 200（但只绑 loopback，手机到不了） |
+>
+> 原因：`3090` 是**插件的远程监听端口**，路由直接挂在根上、**不带前缀**；而
+> `/dsh-workspace-api` 是 DSH Web 在 `3080` 上的挂载面，只绑 `127.0.0.1`。
+> 客户端 `DshClient.normalizeEndpoint()` 会自动补 `/api/v1`，所以如果你填了
+> `http://ip:3090/dsh-workspace-api`，实际会请求 `/dsh-workspace-api/api/v1/...`，
+> 而该路由在 3090 上并不存在。
+
+设备令牌由 Android Keystore 支持的加密存储保存。App 重启后会恢复连接。
+
+> **令牌不会自动过期。** 服务端的 `devices` 表没有过期列，所以一段配置文本一旦发出就长期有效，
+> 只能通过吊销设备使其失效。因此：配置文本只发给自己，一旦怀疑泄露，请立刻在电脑上吊销对应设备
+> （`curl -X DELETE http://127.0.0.1:3090/manage/devices/<id>`），而不是指望它“看不懂”。
 
 ## 聊天不只是收发消息
 

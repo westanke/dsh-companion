@@ -22,8 +22,10 @@ android {
         applicationId = "io.github.hakunm.deepseekharness"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10000
-        versionName = "1.0.0"
+        // 版本号必须高于上游（1.0.0 / 10000），否则无法覆盖安装，用户在手机上也无法区分装的是哪个。
+        // 本仓库相对上游的功能变更见 docs/project/CHANGELOG-DEV.md。
+        versionCode = 10001
+        versionName = "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
@@ -102,6 +104,7 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.mockwebserver)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.test.ext.junit)

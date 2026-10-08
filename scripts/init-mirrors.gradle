@@ -1,0 +1,41 @@
+// 国内构建所需的依赖镜像重定向（随项目走，不依赖本机工具链脚本）。
+//
+// ## 为什么不能直接用工具链里的 init-mirrors.gradle
+//
+// 本机无法访问 maven.google.com，需要镜像重定向。但
+// `/media/wangke/OFFICE/workspace/android-toolchain/init-mirrors.gradle` 会往
+// `allprojects.repositories` 里追加仓库，而本项目 `settings.gradle.kts` 声明了
+// `RepositoriesMode.FAIL_ON_PROJECT_REPOS`。两者相遇会直接构建失败：
+//
+//     Build was configured to prefer settings repositories over project repositories
+//     but repository 'maven' was added by initialization script '.../init-mirrors.gradle'
+//
+// 因此这里只重写 **settings 级**仓库（pluginManagement 与 dependencyResolutionManagement），
+// 完全不触碰 project 级仓库，从而与该约束兼容。
+//
+// 用法：scripts/build.sh 会自动带上 --init-script 指向本文件。
+
+def aliyunGoogle = 'https://maven.aliyun.com/repository/google'
+def aliyunPublic = 'https://maven.aliyun.com/repository/public'
+def googleRaw = 'https://dl.google.com/dl/android/maven2/'
+
+settingsEvaluated { settings ->
+    // 插件解析：阿里云 Google 镜像 + dl.google.com 原始入口（同一仓库的两个可达地址）。
+    settings.pluginManagement.repositories {
+        clear()
+        maven { url aliyunGoogle }
+        maven { url googleRaw }
+        maven { url aliyunPublic }
+        gradlePluginPortal()
+    }
+
+    // 依赖解析：必须 clear() 后再加。否则 settings.gradle.kts 里已声明的
+    // google()/mavenCentral() 会排在最前，在不可达的 maven.google.com 上白白等超时。
+    settings.dependencyResolutionManagement.repositories {
+        clear()
+        maven { url aliyunGoogle }
+        maven { url googleRaw }
+        maven { url aliyunPublic }
+        mavenCentral()
+    }
+}

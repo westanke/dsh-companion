@@ -135,8 +135,51 @@ fun SettingsScreen(state: HarnessState, viewModel: HarnessViewModel) {
             }
 
             SettingsHeading(stringResource(R.string.connection))
-            SettingRow(Icons.Outlined.CloudDone, stringResource(R.string.endpoint), state.endpoint) {
-                StatusLabel(stringResource(R.string.connected), true)
+            val activeHost = state.hosts.firstOrNull { it.id == state.activeHostId }
+            SettingRow(
+                Icons.Outlined.CloudDone,
+                activeHost?.displayName ?: stringResource(R.string.connection),
+                state.endpoint,
+            ) {
+                StatusLabel(
+                    if (state.eventsConnected) stringResource(R.string.online) else stringResource(R.string.offline),
+                    state.eventsConnected,
+                )
+            }
+            // 把当前这台电脑的全部地址列出来，并标出此刻实际走的是哪一个。
+            // 用户换了网络（局域网 → 虚拟网）之后最想知道的就是这件事。
+            activeHost?.let { host ->
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp),
+                ) {
+                    host.endpoints.forEach { endpoint ->
+                        val inUse = endpoint.id == state.activeEndpointId
+                        Surface(
+                            shape = CircleShape,
+                            color = if (inUse) {
+                                MaterialTheme.colorScheme.secondaryContainer
+                            } else {
+                                MaterialTheme.colorScheme.surfaceContainer
+                            },
+                        ) {
+                            Text(
+                                buildString {
+                                    append(endpointKindLabel(endpoint.kind))
+                                    append(" · ")
+                                    append(endpoint.baseUrl)
+                                    if (inUse) {
+                                        append(" · ")
+                                        append(stringResource(R.string.active))
+                                    }
+                                },
+                                Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
+                    }
+                }
             }
             if (state.endpoint.startsWith("http://")) {
                 WarningBanner(stringResource(R.string.http_warning), Modifier.padding(top = 8.dp, bottom = 22.dp))

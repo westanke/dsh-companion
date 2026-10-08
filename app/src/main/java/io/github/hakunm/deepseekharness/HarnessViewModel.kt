@@ -12,6 +12,7 @@ import io.github.hakunm.deepseekharness.data.DeviceView
 import io.github.hakunm.deepseekharness.data.DirectoryPage
 import io.github.hakunm.deepseekharness.data.DshApiException
 import io.github.hakunm.deepseekharness.data.DshClient
+import io.github.hakunm.deepseekharness.data.DshConnectionException
 import io.github.hakunm.deepseekharness.data.FileEntry
 import io.github.hakunm.deepseekharness.data.LiveChatState
 import io.github.hakunm.deepseekharness.data.RootView
@@ -22,7 +23,19 @@ import io.github.hakunm.deepseekharness.data.ProviderModel
 import io.github.hakunm.deepseekharness.data.ProviderPatch
 import io.github.hakunm.deepseekharness.data.ProviderSettings
 import io.github.hakunm.deepseekharness.data.SessionModels
-import io.github.hakunm.deepseekharness.data.SecureConnectionStore
+import io.github.hakunm.deepseekharness.data.ActiveConnection
+import io.github.hakunm.deepseekharness.data.ConnectionCoordinator
+import io.github.hakunm.deepseekharness.data.ConnectionShare
+import io.github.hakunm.deepseekharness.data.Credential
+import io.github.hakunm.deepseekharness.data.CredentialKind
+import io.github.hakunm.deepseekharness.data.Endpoint
+import io.github.hakunm.deepseekharness.data.EndpointKind
+import io.github.hakunm.deepseekharness.data.EndpointProbe
+import io.github.hakunm.deepseekharness.data.Host
+import io.github.hakunm.deepseekharness.data.HostStore
+import io.github.hakunm.deepseekharness.data.KeystoreSecretBox
+import io.github.hakunm.deepseekharness.data.LegacyConnectionMigration
+import io.github.hakunm.deepseekharness.data.SharedPreferencesKeyValueStore
 import io.github.hakunm.deepseekharness.data.TrashEntry
 import io.github.hakunm.deepseekharness.data.WorkspaceEvent
 import io.github.hakunm.deepseekharness.data.chatDelta
@@ -68,6 +81,19 @@ data class HarnessState(
     val healthOk: Boolean = false,
     val connected: Boolean = false,
     val endpoint: String = "",
+    // ——— 多主机 / 多地址连接层（新） ———
+    /** 已保存的全部电脑。 */
+    val hosts: List<Host> = emptyList(),
+    /** 当前连上的电脑 id。 */
+    val activeHostId: String? = null,
+    /** 当前实际使用的地址 id（多地址里的胜出者）。 */
+    val activeEndpointId: String? = null,
+    /** 最近一次探活的逐地址结果，用于诊断面板。 */
+    val endpointProbes: List<EndpointProbe> = emptyList(),
+    /** 正在并发探活/建连。 */
+    val connecting: Boolean = false,
+    /** 界面上被选中查看/编辑的电脑（不一定是当前连上的那台）。 */
+    val selectedHostId: String? = null,
     val device: DeviceView? = null,
     val roots: List<RootView> = emptyList(),
     val sessions: List<ChatSession> = emptyList(),
@@ -94,10 +120,23 @@ data class HarnessState(
 )
 
 class HarnessViewModel(application: Application) : AndroidViewModel(application) {
-    private val store = SecureConnectionStore(application)
+    private val keyValueStore = SharedPreferencesKeyValueStore(application)
+    private val hostStore = HostStore(keyValueStore, KeystoreSecretBox())
+    private val coordinator = ConnectionCoordinator()
+    /** 旧版令牌用的是另一个 Keystore 别名，迁移时必须用它解密。 */
+    private val legacySecretBox = KeystoreSecretBox(KeystoreSecretBox.LEGACY_DEVICE_TOKEN_ALIAS)
     private val mutableState = MutableStateFlow(HarnessState())
     val state: StateFlow<HarnessState> = mutableState.asStateFlow()
-    private var client: DshClient? = null
+
+    /**
+     * 当前活跃连接。null 表示未连接。
+     *
+     * 旧实现是一个可变的 `client` 字段；改成「活跃连接」是因为现在一个主机可能有多个地址，
+     * 光有 client 无法回答「我现在连的是哪台电脑的哪个地址」—— 而这正是诊断面板和
+     * 后续自动切换都需要的。
+     */
+    private var active: ActiveConnection? = null
+    private val client: DshClient? get() = active?.client
     private var eventSubscription: Closeable? = null
     private var chatRefreshJob: Job? = null
     @Volatile private var chatRefreshPending = false
@@ -116,26 +155,179 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         update { copy(endpointDraft = normalized.removeSuffix("/api/v1"), healthOk = true) }
     }
 
+    /**
+     * 用一次性配对码把一台电脑加进来并连接。
+     *
+     * 配对码适合「电脑就在手边」的场合（同一局域网，或你正坐在电脑前）。
+     * 人已经出门在外、看不到电脑屏幕时请改用 [importConfiguration] ——
+     * 旧版只有配对码这一条路，这正是用户放弃它的直接原因。
+     */
     fun pair(endpoint: String, code: String, deviceName: String) = launchOperation {
         require(code.isNotBlank()) { "Pairing code is required." }
         require(deviceName.isNotBlank()) { "Device name is required." }
         val unauthenticated = DshClient(endpoint)
         unauthenticated.health()
         val pairing = unauthenticated.pair(code, deviceName)
-        val paired = DshClient(unauthenticated.endpoint, pairing.token)
-        store.save(unauthenticated.endpoint, pairing.token)
-        client = paired
-        val snapshot = loadSnapshot(paired, pairing.device)
-        update { snapshot.copy(restoring = false, busy = true, connected = true, healthOk = true) }
-        connectEvents(paired)
+        val host = hostFromPairing(unauthenticated.endpoint, pairing.token, pairing.device, deviceName)
+        hostStore.upsert(host)
+        update { copy(hosts = hostStore.loadHosts(), selectedHostId = host.id) }
+        connectHostInternal(host, pairing.device)
     }
 
+    /**
+     * 导入一段配置文本（形如 `DSH1:...`），把一台电脑加进来并连接。
+     *
+     * 这是取代扫码的主路径：配置文本可以在电脑上生成后发给自己（微信/邮件），
+     * 到了外面再粘贴。全程不需要电脑在旁边，也不需要摄像头。
+     */
+    fun importConfiguration(text: String) = launchOperation {
+        val payload = ConnectionShare.decode(text)
+            ?: throw IllegalArgumentException("CONFIG_INVALID")
+        val host = ConnectionShare.buildHost(payload)
+        hostStore.upsert(host)
+        update { copy(hosts = hostStore.loadHosts(), selectedHostId = host.id) }
+        connectHostInternal(host)
+    }
+
+    /** 连接已保存的某台电脑：并发探活其全部地址并自动选路。 */
+    fun connectHost(hostId: String) = launchOperation {
+        val host = hostStore.host(hostId) ?: return@launchOperation
+        update { copy(selectedHostId = hostId) }
+        connectHostInternal(host)
+    }
+
+    /** 给某台电脑追加一个可达地址（例如新增虚拟网地址）。 */
+    fun addEndpoint(hostId: String, label: String, baseUrl: String) = launchOperation {
+        val host = hostStore.host(hostId) ?: return@launchOperation
+        val normalized = DshClient.normalizeEndpoint(baseUrl).removeSuffix("/api/v1")
+        if (host.endpoints.any { it.baseUrl == normalized }) return@launchOperation
+        val endpoint = Endpoint.create(label = label, baseUrl = normalized, id = "ep-${nextId()}")
+        hostStore.upsert(
+            host.copy(
+                endpoints = host.endpoints + endpoint,
+                updatedAt = System.currentTimeMillis(),
+            ),
+        )
+        update { copy(hosts = hostStore.loadHosts()) }
+    }
+
+    /** 删除某台电脑的一个地址。保留最后一个地址的行为由界面负责拦截。 */
+    fun removeEndpoint(hostId: String, endpointId: String) = launchOperation {
+        val host = hostStore.host(hostId) ?: return@launchOperation
+        if (host.endpoints.size <= 1) throw IllegalArgumentException("LAST_ENDPOINT")
+        val endpoints = host.endpoints.filterNot { it.id == endpointId }
+        hostStore.upsert(
+            host.copy(
+                endpoints = endpoints,
+                preferredEndpointId = host.preferredEndpointId?.takeIf { id -> endpoints.any { it.id == id } },
+                updatedAt = System.currentTimeMillis(),
+            ),
+        )
+        update { copy(hosts = hostStore.loadHosts()) }
+    }
+
+    /** 重命名一台电脑。 */
+    fun renameHost(hostId: String, displayName: String) = launchOperation {
+        val host = hostStore.host(hostId) ?: return@launchOperation
+        hostStore.upsert(host.copy(displayName = displayName.trim(), updatedAt = System.currentTimeMillis()))
+        update { copy(hosts = hostStore.loadHosts()) }
+    }
+
+    /**
+     * 删除一台电脑（含其凭据）。
+     *
+     * 与 [disconnect] 分开：断开只是断连，删除才是抹掉令牌。
+     */
+    fun removeHost(hostId: String) {
+        if (mutableState.value.activeHostId == hostId) disconnect()
+        hostStore.remove(hostId)
+        update { copy(hosts = hostStore.loadHosts(), selectedHostId = selectedHostId?.takeIf { it != hostId }) }
+    }
+
+    fun selectHost(hostId: String?) = update { copy(selectedHostId = hostId) }
+
+    /** 把当前连接状态落回主机记录：探活结果 + 实际选中的地址。 */
+    private suspend fun connectHostInternal(host: Host, device: DeviceView? = null) {
+        update { copy(connecting = true, endpointProbes = emptyList(), error = null) }
+        val connection = coordinator.connect(host).getOrElse { failure ->
+            val probes = (failure as? DshConnectionException)?.probes.orEmpty()
+            if (probes.isNotEmpty()) hostStore.upsert(applyProbes(host, probes))
+            update {
+                copy(
+                    connecting = false,
+                    hosts = hostStore.loadHosts(),
+                    endpointProbes = probes,
+                    error = messageOf(failure),
+                )
+            }
+            return
+        }
+        val recorded = applyProbes(connection.host, connection.probes).withPreferred(connection.endpoint.id)
+        hostStore.upsert(recorded)
+        active = connection
+        val resolvedDevice = device ?: connection.client.currentDevice()
+        val snapshot = loadSnapshot(connection.client, resolvedDevice)
+        update {
+            snapshot.copy(
+                restoring = false,
+                busy = true,
+                connecting = false,
+                connected = true,
+                healthOk = true,
+                hosts = hostStore.loadHosts(),
+                activeHostId = recorded.id,
+                activeEndpointId = connection.endpoint.id,
+                endpointProbes = connection.probes,
+            )
+        }
+        connectEvents(connection.client)
+    }
+
+    private fun applyProbes(host: Host, probes: List<EndpointProbe>): Host =
+        probes.fold(host) { acc, probe -> acc.withEndpointProbe(probe.endpointId, probe.latencyMs, probe.error) }
+
+    private fun hostFromPairing(
+        endpoint: String,
+        token: String,
+        device: DeviceView,
+        displayName: String,
+    ): Host {
+        val now = System.currentTimeMillis()
+        val baseUrl = DshClient.normalizeEndpoint(endpoint).removeSuffix("/api/v1")
+        val endpointId = "ep-paired"
+        val existing = hostStore.loadHosts().firstOrNull { it.id == "host-${device.id}" }
+        return Host(
+            id = "host-${device.id}",
+            displayName = displayName.trim().ifBlank { device.name },
+            endpoints = listOf(Endpoint.create(label = EndpointKind.infer(baseUrl).name, baseUrl = baseUrl, id = endpointId)),
+            preferredEndpointId = endpointId,
+            credential = Credential(
+                kind = CredentialKind.DEVICE_TOKEN,
+                secret = token,
+                deviceId = device.id,
+                deviceName = device.name,
+                scopes = device.scopes,
+                issuedAt = existing?.credential?.issuedAt?.takeIf { it > 0L } ?: now,
+            ),
+            createdAt = existing?.createdAt ?: now,
+            updatedAt = now,
+        )
+    }
+
+    private fun nextId(): String = java.util.UUID.randomUUID().toString().take(8)
+
+    /**
+     * 断开当前连接。
+     *
+     * 注意**不再清除已保存的主机**：旧实现把「断开」和「删除令牌」绑成一个动作，
+     * 于是网络抖一下、手点错一次，用户就得重新配对 —— 而配对又要求电脑在身边。
+     * 现在断开只断连；删主机是独立的 [removeHost]。
+     */
     fun disconnect() {
         eventSubscription?.close()
         eventSubscription = null
-        client = null
-        store.clear()
-        mutableState.value = HarnessState(restoring = false)
+        active = null
+        mutableState.value = HarnessState(restoring = false, hosts = hostStore.loadHosts())
     }
 
     fun clearError() = update { copy(error = null) }
@@ -556,25 +748,48 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         loadDirectory()
     }
 
+    /**
+     * 启动时恢复连接：读取已保存的主机（必要时先迁移旧版数据），再自动尝试最近用过的那台。
+     *
+     * 与旧实现的一个关键差别：旧版在恢复失败时执行 `store.clear()`，把令牌一并删掉。
+     * 那意味着「此刻网络不通」会被误判成「凭据失效」—— 用户回到家才发现要重新配对，
+     * 而重新配对又要求他真的在电脑前。现在连不上只保留未连接状态，主机记录不动，
+     * 由用户决定重试还是删除。
+     */
     private fun restoreConnection() {
         viewModelScope.launch {
-            val stored = withContext(Dispatchers.IO) { store.load() }
-            if (stored == null) {
+            val hosts = withContext(Dispatchers.IO) { loadOrMigrateHosts() }
+            if (hosts.isEmpty()) {
                 update { copy(restoring = false) }
                 return@launch
             }
-            runCatching {
-                val restored = DshClient(stored.endpoint, stored.token)
-                val device = withContext(Dispatchers.IO) { restored.currentDevice() }
-                val snapshot = withContext(Dispatchers.IO) { loadSnapshot(restored, device) }
-                client = restored
-                update { snapshot.copy(restoring = false, connected = true, endpointDraft = restored.endpoint.removeSuffix("/api/v1")) }
-                connectEvents(restored)
-            }.onFailure {
-                store.clear()
-                update { copy(restoring = false, error = messageOf(it)) }
+            // updatedAt 会在每次探活后刷新，所以「最近活动过」近似等于「上次用过的」。
+            val target = hosts.maxByOrNull { it.updatedAt } ?: hosts.first()
+            update {
+                copy(
+                    hosts = hosts,
+                    selectedHostId = target.id,
+                    endpointDraft = target.endpoints.firstOrNull()?.baseUrl.orEmpty(),
+                    restoring = true,
+                )
             }
+            runCatching { connectHostInternal(target) }
+                .onFailure { update { copy(restoring = false, connecting = false, error = messageOf(it)) } }
         }
+    }
+
+    /** 读取主机列表；为空时尝试把旧版单连接数据迁进来。迁移是幂等的。 */
+    private fun loadOrMigrateHosts(): List<Host> {
+        val existing = hostStore.loadHosts()
+        if (existing.isNotEmpty()) return existing
+        return runCatching {
+            LegacyConnectionMigration.migrate(
+                storage = keyValueStore,
+                legacySecretBox = legacySecretBox,
+                hostStore = hostStore,
+            )
+            hostStore.loadHosts()
+        }.getOrDefault(emptyList())
     }
 
     private fun connectEvents(api: DshClient) {
@@ -725,6 +940,9 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
     override fun onCleared() {
         chatRefreshJob?.cancel()
         eventSubscription?.close()
+        // 协调层自带后台 scope 来跑阻塞式健康检查（协程取消打不断 OkHttp 的阻塞调用），
+        // 不显式关闭的话，探活期间挂死的调用会一直占着 IO 线程直到 OkHttp 自身超时。
+        coordinator.close()
         super.onCleared()
     }
 

@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "dsh-android-app"
+rootProject.name = "dsh-companion"
 include(":app")

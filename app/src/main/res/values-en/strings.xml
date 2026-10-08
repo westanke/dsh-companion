@@ -49,7 +49,7 @@
     <string name="language">Language</string>
     <string name="chinese">中文</string>
     <string name="english">English</string>
-    <string name="disconnect">Disconnect and clear token</string>
+    <string name="disconnect">Disconnect</string>
     <string name="error">Error</string>
     <string name="file_too_large">The mobile editor opens text files up to 2 MiB.</string>
     <string name="etag_conflict">The file changed elsewhere. Refresh before editing again.</string>
@@ -184,4 +184,38 @@
     <string name="archive_session_warning">The session will be hidden from the default list, but its log will be preserved. Use DSH WebUI to manage archived sessions in this version.</string>
     <string name="name">Name</string>
     <string name="version">Current version</string>
+
+    <!-- Multi-host / multi-endpoint connection layer -->
+    <string name="saved_computers">Saved computers</string>
+    <string name="no_hosts_yet">No computer saved yet. Add one below.</string>
+    <string name="connect_this_computer">Connect</string>
+    <string name="remove_computer">Remove this computer</string>
+    <string name="remove_computer_title">Remove “%1$s”?</string>
+    <string name="remove_computer_warning">Its addresses and device credential will be deleted. You will need to pair or import the configuration again.</string>
+    <string name="endpoint_count">%1$d address(es)</string>
+    <string name="last_used_hint">Last used</string>
+    <string name="credentials_expired">Credential expired — pair again or re-import the configuration</string>
+    <string name="no_credentials">No credential saved</string>
+
+    <string name="import_from_computer">Import configuration from computer</string>
+    <string name="import_explanation">Built for when you are already away and cannot see the computer screen: generate a short configuration text on the computer (send it to yourself or keep it in a private note), then paste it here. No QR code and no camera needed.</string>
+    <string name="import_hint">Paste the configuration text starting with DSH1:</string>
+    <string name="import_and_connect">Import and connect</string>
+    <string name="import_invalid">This configuration text could not be recognized. Make sure it was copied completely and not truncated.</string>
+    <string name="import_security_note">This text is effectively a key. Send it only to yourself — never to a group chat or a public place.</string>
+
+    <string name="manual_pairing">Manual pairing (one-time code)</string>
+    <string name="manual_pairing_hint">The pairing code must be generated on the computer, so this suits the case where you are still next to it.</string>
+    <string name="expand">Expand</string>
+    <string name="collapse">Collapse</string>
+
+    <string name="connecting_endpoints">Probing %1$d address(es)…</string>
+    <string name="endpoint_diagnostics">Address diagnostics</string>
+    <string name="endpoint_reachable">Reachable · %1$d ms</string>
+    <string name="endpoint_unreachable">Unreachable</string>
+    <string name="endpoint_kind_lan">LAN</string>
+    <string name="endpoint_kind_virtual">Virtual net</string>
+    <string name="endpoint_kind_wan">WAN</string>
+    <string name="endpoint_kind_unknown">Other</string>
+    <string name="upgrade_notice">Your previously saved connection was migrated automatically; its address and credential are preserved.</string>
 </resources>

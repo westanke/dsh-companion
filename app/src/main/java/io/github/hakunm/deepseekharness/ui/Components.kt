@@ -27,6 +27,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.hakunm.deepseekharness.R
+import io.github.hakunm.deepseekharness.data.EndpointKind
 
 @Composable
 fun BrandMark(modifier: Modifier = Modifier) {
@@ -171,3 +172,19 @@ fun SettingRow(
         trailing?.invoke(this)
     }
 }
+
+/**
+ * 地址类型的可读标签。
+ *
+ * 放在共享组件里是因为有两个地方要显示它（未连接首屏的电脑列表、设置页的连接信息），
+ * 而它必须与 [EndpointKind] 的判定保持一致 —— 两处各写一份迟早会漂移。
+ */
+@Composable
+fun endpointKindLabel(kind: EndpointKind): String = stringResource(
+    when (kind) {
+        EndpointKind.LAN -> R.string.endpoint_kind_lan
+        EndpointKind.VIRTUAL_NET -> R.string.endpoint_kind_virtual
+        EndpointKind.WAN -> R.string.endpoint_kind_wan
+        EndpointKind.UNKNOWN -> R.string.endpoint_kind_unknown
+    },
+)

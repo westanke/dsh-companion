@@ -1,5 +1,161 @@
 # 开发日志
 
+本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
+上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
+
+---
+
+## 2026-10-08 · 连接层重构：从「单地址」到「一台电脑多个地址」
+
+### 基于什么
+
+- 上游 [Hakunm/dsh-android-app](https://github.com/Hakunm/dsh-android-app) `v1.0.0`（commit `b0bf711`）。
+- 许可证 **AGPL-3.0**。上游版权声明、`NOTICE`、`THIRD_PARTY_LICENSES` 全部原样保留。
+- 起点已包含上游修复的 DSH 0.2.x 枚举契约问题（见下方条目）。
+
+### 为什么
+
+来自真实使用反馈的四条问题，追查后发现**根因是同一个**：旧模型把「一台电脑」和「一个地址」
+焊成了同一个东西。
+
+```kotlin
+// 改动前
+data class StoredConnection(val endpoint: String, val token: String)
+//                                    ^^^^^^^^ 单个字符串，装不下第二个地址
+class DshClient(endpoint: String, private val token: String? = null)
+```
+
+| 反馈原文 | 追查到的根因 |
+|---|---|
+| 「只能添加一条路径」 | `endpoint` 只有一个位置 |
+| 「我出去了，配对码谁给我？」 | 配对码必须在电脑上生成，而人已经不在电脑旁 |
+| 「我出去有可能是局域网，也有可能虚拟网，或者 Tailscale/ZeroTier」 | 同上：只有一个地址位 |
+| 「会话中的文件无法查看」 | 会话事件里的绝对路径没有与授权根做匹配（**本项尚未实现**） |
+
+第 2 条推翻了上游的一个隐含前提：上游流程默认「人和电脑在一起」，而真实场景相反 ——
+**人已出门，电脑在家，屏幕看不到**。此时「去电脑上生成配对码」不是难用，是做不到。
+
+### 干了什么
+
+**新增连接层模型**（`data/ConnectionModels.kt`）：
+
+```
+Host          一台电脑：id / 名字 / 地址列表 / 首选地址 / 凭据 / 时间戳
+ ├─ Endpoint     一个地址：id / 标签 / baseUrl / 类型 / 启用 / 探活延迟 / 最后错误
+ └─ Credential   凭据：挂在电脑上而非地址上
+```
+
+- `EndpointKind` 按地址推断类型；`100.64.0.0/10` 归为虚拟网（Tailscale 与 BeyondTunnel 都用这个 CGNAT 网段）。
+- `EndpointSelection.rank` 定死选路规则：延迟优先，但**局域网近似即优先**
+  （局域网地址延迟不超过最快地址的 1.5 倍则排前）—— 同网段直连更稳、不烧虚拟网流量。
+- **不需要服务端任何修改**：依据是 DSH 的 `devices` 表结构
+  `id, name, token_hash, scopes_json, created_at, last_seen_at, revoked_at` **没有地址列**，
+  设备令牌天然是主机级的，同一令牌在任何地址上都有效。
+
+**新增多主机持久化**（`data/HostStore.kt` + `data/AndroidConnectionStorage.kt`）：
+
+- 整个 `List<Host>` 序列化后**整体加密**（Android Keystore AES-GCM，`IV || 密文`单串）再落盘，明文绝不落盘。
+- 解密/解析失败返回空列表而**不抛异常**（否则一条坏数据把用户锁进启动崩溃循环），原值保留 + 另存副本。
+- 旧数据迁移：用**旧的 Keystore 别名**解密旧令牌（旧格式 IV 与密文分开存，需手工重组）转成新 `Host`，幂等。
+
+**新增并发探活选路**（`data/ConnectionCoordinator.kt`）：
+
+- 并发探测全部地址，每个地址**独立计时、独立超时**（默认 1500ms），总耗时接近单个超时而非累加。
+- 全部失败抛 `DshConnectionException(probes)`，携带逐地址失败原因供诊断面板展示。
+- **必须记录的坑**：`DshClient.health()` 是同步阻塞的 OkHttp 调用，**超时无法靠
+  `withTimeoutOrNull` 实现**（超时到点后仍要等这次调用返回，最坏等到 OkHttp 自带的 45 秒读超时）——
+  看着有超时，实际没用。现实现把调用交给自有 scope、只对 `Deferred.await()` 设 deadline，
+  于是 timeout 由协调层自己拥有，不依赖外部注入的 HTTP 超时。
+- **`close()` 的完整语义**：拒绝新的探活、并立即取消在途探活的**等待层**
+  （注意：只 `probeScope.cancel()` 不够，详见下方「一处值得记录的错误判断」）。
+  仍做不到的是让已经发出的阻塞 HTTP 调用提前结束、释放 IO 线程 —— 根治需要 OkHttp `callTimeout`。
+
+**新增配置导入**（`data/ConnectionShare.kt` + `tools/emit-config.mjs`）：
+
+- 线格式 `DSH1:` + UTF-8 JSON 的 Base64 **URL-safe 无填充**；窄格式只写
+  `displayName` / `endpoints[]{label,baseUrl}` / `token` / `deviceName` / `scopes`，
+  不写本机状态字段（每个地址省约 40 字符）。
+- 解码容错覆盖：内部空白换行、零宽字符、BOM、带/不带前缀、大小写前缀、
+  URL-safe 与标准两种字母表、缺失 `=` 填充、结尾粘上的标点。
+- **一个反直觉的失败模式**：早期实现只认行首 `DSH1:`，而真实粘贴常带标签
+  （`Pixel 9 的配置：DSH1:xxx`）。标签里的 Latin 字母与数字**本身就在 Base64 字母表内**，
+  所以「过滤非字母表字符」这条兜底完全无效，会被当正文吞进去冲掉整段。
+  正解是用 `DSH1:` 哨兵在整段里定位。
+- encode 对非法配置抛异常（生成端在电脑上，能立刻改）；decode 对任何非法输入返回 null 绝不抛
+  （此刻用户人在外面，崩溃比明确报错更糟）。
+- **安全边界**：文本不加密，它本身就是凭据载体（内含设备令牌），等价于一把钥匙。
+  安全性由「发给谁」决定，界面与 KDoc 都明确提示只发给自己。
+
+**界面**：`ui/ConnectScreen.kt` 重写（新增「已保存的电脑」列表含每地址类型与探活结果、
+「从电脑导入配置」主路径、地址诊断面板；手动配对降为可折叠次要入口并标注前提）；
+`ui/SettingsScreen.kt` 显示当前电脑名与全部地址并标出**此刻实际使用**的那个；
+`ui/App.kt` 增加 `CONFIG_INVALID` 本地化；字符串资源中英各新增 27 条。
+
+**行为语义**：`disconnect()` **不再删除凭据**（上游把断开与删令牌绑成一个动作，
+导致网络抖动或误触就要重新配对，而重新配对又要求人在电脑旁）；
+启动恢复失败**不再清除已保存的主机**（上游 `store.clear()` 把「此刻网络不通」误判成「凭据失效」）；
+启动时自动连接**最近活动过**的那台电脑。
+
+### 测了什么
+
+| 测试类 | 用例数 | 结果 |
+|---|---|---|
+| `HostStoreTest` | 26 | 全绿 |
+| `ConnectionShareTest` | 23 | 全绿 |
+| `ConnectionCoordinatorTest` | 14 | 全绿 |
+| `DshClientTest`（上游原有） | 12 | 全绿 |
+| `ChatPresentationTest`（上游原有） | 3 | 全绿 |
+
+覆盖：密文落盘（断言磁盘不含明文令牌）、两类损坏数据容错、迁移幂等性、
+并发探活全部成功/部分失败/全部失败、局域网近似即优先、单地址超时不拖累整批、取消异常透传、
+粘贴容错 23 种敌意输入、编码长度预算回归护栏。
+
+**一处值得记录的错误判断（我错了，同事用实测纠正）**：
+`ConnectionCoordinatorTest.closeCancelsInFlightProbeAndRejectsNewOnes` 最初失败（5.0s，断言「在途探活应随
+close() 被取消，实际 null」）。我当时的判断是「这在协程取消模型下物理上做不到」，并要求放宽断言。
+**这个判断是错的。** 打不断的只是那次 `Call.execute()`，而**调用方的等待是一个普通 suspend 点，可取消**。
+正确修法是监听 close 信号后**显式 cancel 掉正在等待的那一层**。修好后该用例 5.021s → 0.016s，断言原样保留。
+
+过程中暴露的两个协程语义坑（会反复被踩，记录在此）：
+
+1. **只 `probeScope.cancel()` 不够**：在途 `probeAll` 不会提前返回（Job 停在 Cancelling），
+   而且最后会产出一条**假失败探活**（`error = timeout after Nms`）喂给诊断与落盘 ——
+   地址其实没失败，是协调器被关了。这个副作用比「慢」更严重。
+2. **子协程抛出的 `CancellationException` 不会上传父协程**：它会被 `JobSupport.childCancelled`
+   当作「该子协程正常取消」处理；而父协程正挂在 `call.await()` 上，没有人叫醒它。
+   所以「监听关闭信号后就 throw CE」这种写法仍然会等满超时 —— 必须显式 cancel 等待层。
+
+保留下来、如实写进 KDoc 的限制：已发出的阻塞 HTTP 调用仍会占用 IO 线程直到 OkHttp 自身读超时；
+根治需要给 `DshClient` 加 OkHttp `callTimeout`（见「已知未做」）。
+
+### 构建链路修复（这三个问题会让任何人在本机构建失败）
+
+1. **上游 `gradlew` 在 git 中被记录为 `100644`（没有执行位）** —— `git ls-files -s gradlew`
+   可复现。clone 之后直接运行 `./gradlew` 会得到 `Permission denied`；而它又被管道里的
+   `| tail` 掩盖成 `exit 0`，非常有欺骗性（看起来「构建成功」，其实 Gradle 从未启动）。
+   本仓库修正为 `100755`。
+2. **Gradle wrapper 静默挂起**：`distributionUrl` 指向不可达的 `services.gradle.org`；
+   本地缓存的 Gradle 属于另一个 URL（腾讯云镜像），哈希不匹配 → wrapper 认为未下载 →
+   尝试下载 → 网络不通 → **不报错、不退出、十几分钟无任何输出**。
+   实测该目录下有两个哈希目录，其中一个只有 20MB 的 `.part` 残骸。
+3. 依赖镜像脚本与 `RepositoriesMode.FAIL_ON_PROJECT_REPOS` 冲突 → 构建直接失败。
+   改为项目自带的 `scripts/init-mirrors.gradle`（只重写 settings 级仓库）。
+
+### 已知未做
+
+- **会话中文件查看**（第 4 条）未实现。方向：会话事件的绝对路径
+  （`events[N].event.data.meta.diffs[0].path` 与 `meta.path`）与授权根做最长前缀匹配，
+  转相对路径后经 `GET /roots/:id/content?path=...` 读取。
+- **查看已安装插件**（第 2 条）需服务端加接口：`dsh-workspace` 目前只有 10 个接口
+  （`healthz` / `devices/self` / `roots` / `trash` / `chat/sessions` / `chat/workspaces` /
+  `chat/agent-presets` / `settings/models` / `settings/providers` / `pairings/exchange`），
+  **没有任何插件相关接口**，因此无法纯靠客户端解决。
+- **`DshClient` 的 OkHttp `callTimeout`**：加上后阻塞调用才真正可被超时中断，
+  `ConnectionCoordinator` 也能退回更简单的实现。
+- 文件区重构（按根分组 / 最近 / 收藏 / 搜索）。
+
+---
+
 ## 2026-10-08 · 兼容 DSH 0.2.x 的字符串枚举契约（下游分支）
 
 - **背景**：上游 `Hakunm/dsh-android-app` v1.0.0 使用 kotlinx.serialization 严格解码。

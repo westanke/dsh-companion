@@ -317,5 +317,8 @@ private fun localError(value: String): String = when {
     value.startsWith("RATE_LIMITED") -> stringResource(R.string.rate_limited)
     value.startsWith("AGENT_PRESET_LOCKED") || value.startsWith("DSH_AGENT_PRESET_LOCKED") ->
         stringResource(R.string.agent_preset_locked)
+    // 配置文本解析失败必须给一句人能看懂的话：此刻用户人已经到了外面，
+    // 屏幕上只有一段粘贴进来的文本，一句 "CONFIG_INVALID" 帮不了他。
+    value.startsWith("CONFIG_INVALID") -> stringResource(R.string.import_invalid)
     else -> value
 }
