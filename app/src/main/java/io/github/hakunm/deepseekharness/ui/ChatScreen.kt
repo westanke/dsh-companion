@@ -33,6 +33,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
@@ -100,8 +102,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -111,16 +121,22 @@ import io.github.hakunm.deepseekharness.HarnessState
 import io.github.hakunm.deepseekharness.HarnessViewModel
 import io.github.hakunm.deepseekharness.ApprovalUiState
 import io.github.hakunm.deepseekharness.R
+import io.github.hakunm.deepseekharness.SessionFileOpen
 import io.github.hakunm.deepseekharness.data.ChatDisplayItem
 import io.github.hakunm.deepseekharness.data.ChatItemKind
 import io.github.hakunm.deepseekharness.data.ChatSession
 import io.github.hakunm.deepseekharness.data.ChatWorkspace
 import io.github.hakunm.deepseekharness.data.AgentPreset
+import io.github.hakunm.deepseekharness.data.BusySendMode
 import io.github.hakunm.deepseekharness.data.CommandDescriptor
+import io.github.hakunm.deepseekharness.data.ComposerSendPolicy
 import io.github.hakunm.deepseekharness.data.ModelSelection
 import io.github.hakunm.deepseekharness.data.ModelView
 import io.github.hakunm.deepseekharness.data.PendingApproval
 import io.github.hakunm.deepseekharness.data.PermissionSelect
+import io.github.hakunm.deepseekharness.data.ResolvedPath
+import io.github.hakunm.deepseekharness.data.SessionFileRef
+import io.github.hakunm.deepseekharness.data.SessionFileRefs
 import io.github.hakunm.deepseekharness.data.TodoItem
 import io.github.hakunm.deepseekharness.data.displayItems
 import io.github.hakunm.deepseekharness.data.permissionSelect
@@ -327,6 +343,7 @@ private fun ChatDetail(
     }
     var message by remember(selected.id) { mutableStateOf("") }
     var modelSheet by remember(selected.id) { mutableStateOf(false) }
+    var filesSheet by remember(selected.id) { mutableStateOf(false) }
     var tasksExpanded by rememberSaveable(selected.id) { mutableStateOf(true) }
     val liveItems = state.liveChat?.takeIf { it.sessionId == selected.id }?.displayItems().orEmpty()
     val displayItems = state.history?.displayItems().orEmpty() + liveItems
@@ -340,7 +357,7 @@ private fun ChatDetail(
     }
 
     Column(modifier.imePadding()) {
-        ConversationHeader(selected, state, viewModel, onBack)
+        ConversationHeader(selected, state, viewModel, onBack, onOpenFiles = { filesSheet = true })
         if (todos.isNotEmpty()) {
             TodoPanel(todos, tasksExpanded, onToggle = { tasksExpanded = !tasksExpanded })
         }
@@ -373,10 +390,12 @@ private fun ChatDetail(
                 value = message,
                 onValueChange = { message = it },
                 state = state,
+                // 判据是「这个会话的 agent 是否在运行」，不是全局 busy ——
+                // 后者连一次后台刷新都会置位，会让用户在任何请求期间都发不出消息。
+                sessionRunning = viewModel.selectedSessionRunning(),
                 onModelClick = { modelSheet = true },
                 onPermissionSelect = viewModel::selectPermissionPreset,
-                onSteer = { viewModel.sendMessage(message, true); message = "" },
-                onSend = { viewModel.sendMessage(message, false); message = "" },
+                onSubmit = { steer -> viewModel.sendMessage(message, steer); message = "" },
             )
             ApprovalUiState.Loading -> ApprovalLoading()
             is ApprovalUiState.Pending -> approvals.items.firstOrNull()?.let { approval ->
@@ -400,6 +419,12 @@ private fun ChatDetail(
         }
     }
     if (modelSheet) ModelSheet(state, viewModel) { modelSheet = false }
+    if (filesSheet) {
+        SessionFilesSheet(state, viewModel) {
+            filesSheet = false
+            viewModel.closeSessionFile()
+        }
+    }
 }
 
 @Composable
@@ -408,6 +433,7 @@ private fun ConversationHeader(
     state: HarnessState,
     viewModel: HarnessViewModel,
     onBack: (() -> Unit)?,
+    onOpenFiles: () -> Unit,
 ) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
@@ -429,6 +455,9 @@ private fun ConversationHeader(
             )
             if (session.pendingInteraction == "approval") ApprovalStatusLabel(Modifier.padding(top = 2.dp))
         }
+        IconButton(onClick = onOpenFiles) {
+            Icon(Icons.Outlined.FolderOpen, stringResource(R.string.session_files))
+        }
         IconButton(onClick = viewModel::refreshHistory, enabled = !state.busy) {
             Icon(Icons.Outlined.Refresh, stringResource(R.string.refresh))
         }
@@ -442,6 +471,249 @@ private fun ConversationHeader(
         }
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+}
+
+/**
+ * 「本会话的文件」面板。
+ *
+ * 刻意做成一个**独立面板**，不去动消息气泡的渲染（那块一千多行，风险与收益不匹配）：
+ * 列表由 [SessionFileRefs] 从已加载的会话历史里提取，点一条就交给
+ * [HarnessViewModel.openSessionFile] 把内容取回来。
+ *
+ * 为什么非要服务端帮一下：会话事件里是**服务器绝对路径**，而 `/roots` 刻意不返回根的
+ * 绝对路径，客户端手上永远缺这一环，只能由 `roots/resolve` 完成这次转换。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SessionFilesSheet(state: HarnessState, viewModel: HarnessViewModel, onClose: () -> Unit) {
+    // 只认当前会话的结果：切会话后残留的详情不该再显示（否则会看到上一个会话的文件）。
+    val opened = state.sessionFileOpen?.takeIf { it.sessionId == state.selectedSessionId }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onClose,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        if (opened == null) {
+            SessionFileList(state, viewModel::openSessionFile)
+        } else {
+            SessionFileDetail(opened, viewModel::closeSessionFile)
+        }
+    }
+}
+
+@Composable
+private fun SessionFileList(state: HarnessState, onOpen: (String) -> Unit) {
+    val history = state.history
+    // 解析整段历史是有成本的；只在历史对象变化时重算，而不是每次重组都跑一遍。
+    val refs = remember(history) { SessionFileRefs.refs(history?.events.orEmpty()) }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(bottom = 28.dp)) {
+        Text(stringResource(R.string.session_files), style = MaterialTheme.typography.headlineSmall)
+        Text(
+            stringResource(R.string.session_files_subtitle),
+            modifier = Modifier.padding(top = 4.dp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        if (refs.isEmpty()) {
+            EmptyState(
+                Icons.Outlined.FolderOpen,
+                stringResource(R.string.session_files_empty),
+                Modifier.fillMaxWidth().padding(vertical = 24.dp),
+            )
+            return@Column
+        }
+        LazyColumn(Modifier.fillMaxWidth().fillMaxHeight(0.72f).padding(top = 10.dp)) {
+            items(refs, key = { it.path }) { ref ->
+                SessionFileRow(ref) { onOpen(ref.path) }
+            }
+            if (history?.hasMore == true) {
+                item("session-files-partial") {
+                    Text(
+                        stringResource(R.string.session_files_partial),
+                        modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SessionFileRow(ref: SessionFileRef, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Icon(
+            Icons.Outlined.Description,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.secondary,
+        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                ref.path.substringAfterLast('/').ifBlank { ref.path },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            // 完整路径要能看全：同名文件在不同目录里，只显示文件名是分不出来的。
+            Text(
+                ref.path,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+        if (ref.count > 1) {
+            Text(
+                stringResource(R.string.session_file_count, ref.count),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SessionFileDetail(open: SessionFileOpen, onBack: () -> Unit) {
+    val resolved = open.resolved
+    val preview = open.preview
+    val failure = open.failure
+    Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(bottom = 28.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back))
+            }
+            Text(
+                stringResource(R.string.session_file_detail),
+                modifier = Modifier.padding(start = 4.dp),
+                style = MaterialTheme.typography.titleMedium,
+            )
+        }
+        SelectionContainer {
+            Text(
+                open.requestedPath,
+                fontFamily = FontFamily.Monospace,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+        when {
+            open.loading -> Box(
+                Modifier.fillMaxWidth().height(140.dp),
+                contentAlignment = Alignment.Center,
+            ) { CircularProgressIndicator(strokeWidth = 2.dp) }
+
+            // 不在授权根内是常见结果，说清楚「为什么点不开」，而不是丢一句网络错误。
+            open.outsideRoots -> SessionFileNotice(
+                Icons.Outlined.Lock,
+                stringResource(R.string.session_file_outside_roots),
+            )
+
+            failure != null -> SessionFileNotice(
+                Icons.Outlined.WarningAmber,
+                // 端点不存在只有一个现实原因：服务端插件版本过旧。把它与普通失败分开，
+                // 用户才知道该做什么（升级插件），而不是反复检查自己的路径。
+                if (failure == "PLUGIN_TOO_OLD") {
+                    stringResource(R.string.session_file_plugin_too_old)
+                } else {
+                    stringResource(R.string.session_file_failed, failure)
+                },
+            )
+
+            resolved?.kind == "directory" -> SessionFileNotice(
+                Icons.Outlined.Folder,
+                stringResource(R.string.session_file_directory),
+            )
+
+            open.tooLarge -> SessionFileNotice(
+                Icons.Outlined.WarningAmber,
+                stringResource(R.string.session_file_too_large),
+            )
+
+            preview == null -> SessionFileNotice(
+                Icons.Outlined.Description,
+                stringResource(R.string.session_file_binary),
+            )
+
+            preview.isEmpty() -> SessionFileNotice(
+                Icons.Outlined.Description,
+                stringResource(R.string.session_file_empty),
+            )
+
+            else -> {
+                resolved?.let { SessionFileMeta(it) }
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp)
+                        .heightIn(max = 400.dp)
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    SelectionContainer {
+                        Text(
+                            preview,
+                            fontFamily = FontFamily.Monospace,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+                Text(
+                    if (open.truncated) stringResource(R.string.session_file_truncated)
+                    else stringResource(R.string.session_file_files_hint),
+                    modifier = Modifier.padding(top = 10.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SessionFileMeta(resolved: ResolvedPath) {
+    val size = resolved.size?.let(::formatFileSize)
+    val parts = listOfNotNull(resolved.contentType, size)
+    if (parts.isEmpty()) return
+    Text(
+        parts.joinToString(" · "),
+        modifier = Modifier.padding(top = 10.dp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.labelSmall,
+    )
+}
+
+@Composable
+private fun SessionFileNotice(icon: ImageVector, text: String) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 18.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+private fun formatFileSize(size: Long): String = when {
+    size < 1024 -> "$size B"
+    size < 1024 * 1024 -> "%.1f KiB".format(size / 1024.0)
+    else -> "%.1f MiB".format(size / 1024.0 / 1024.0)
 }
 
 @Composable
@@ -608,12 +880,17 @@ private fun Composer(
     value: String,
     onValueChange: (String) -> Unit,
     state: HarnessState,
+    sessionRunning: Boolean,
     onModelClick: () -> Unit,
     onPermissionSelect: (String) -> Unit,
-    onSteer: () -> Unit,
-    onSend: () -> Unit,
+    onSubmit: (steer: Boolean) -> Unit,
 ) {
     val canWrite = "chat.write" in state.device?.scopes.orEmpty()
+    // 刻意**不**把 state.busy 放进可提交条件：全局 busy 连一次刷新都会置位。
+    // 防重复提交靠「提交后立即清空输入框」——清空后 isNotBlank 为 false，按钮自然失效。
+    val canSubmit = ComposerSendPolicy.canSubmit(value, canWrite)
+    val defaultMode = ComposerSendPolicy.resolve(sessionRunning, state.busySendMode)
+    val defaultIsSteer = defaultMode == BusySendMode.STEER
     val current = state.sessionModels?.current
     val session = state.sessions.find { it.id == state.selectedSessionId }
     val agentName = state.agentPresets.find { it.id == session?.agentPreset }?.name ?: session?.agentPreset
@@ -638,9 +915,29 @@ private fun Composer(
                     BasicTextField(
                         value = value,
                         onValueChange = onValueChange,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize().onKeyEvent { event ->
+                            // 物理键盘（外接键盘、桌面模式）的 Enter。
+                            // 软键盘的「发送」键走下面的 KeyboardActions.onSend。
+                            if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                            if (event.key != Key.Enter && event.key != Key.NumPadEnter) return@onKeyEvent false
+                            val alternate = event.isCtrlPressed || event.isMetaPressed
+                            // 空闲且没按修饰键时放行，让 Enter 保持换行（多行输入是正常需求）。
+                            if (!sessionRunning && !alternate) return@onKeyEvent false
+                            if (!canSubmit) return@onKeyEvent false
+                            val steer = ComposerSendPolicy
+                                .resolve(sessionRunning, state.busySendMode, alternate) == BusySendMode.STEER
+                            onSubmit(steer)
+                            true
+                        },
                         textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
                         cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.secondary),
+                        // 运行中才把软键盘的回车变成「发送」；空闲时保持默认换行。
+                        keyboardOptions = KeyboardOptions(
+                            imeAction = if (sessionRunning) ImeAction.Send else ImeAction.Default,
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onSend = { if (canSubmit) onSubmit(defaultIsSteer) },
+                        ),
                     )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -666,29 +963,41 @@ private fun Composer(
                         enabled = canWrite && !state.busy,
                         onSelect = onPermissionSelect,
                     )
+                    // 运行中，在发送键旁标出「回车会做什么」——否则用户只能靠试。
+                    if (sessionRunning) {
+                        Text(
+                            stringResource(
+                                if (defaultIsSteer) R.string.send_mode_steer else R.string.send_mode_queue,
+                            ),
+                            modifier = Modifier.padding(end = 4.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
                     TooltipBox(
                         positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
                         tooltip = { PlainTooltip { Text(stringResource(R.string.steer)) } },
                         state = rememberTooltipState(),
                     ) {
-                        IconButton(onClick = onSteer, enabled = value.isNotBlank() && !state.busy && canWrite) {
+                        // 插话按钮保留为**显式入口**，固定走 steer，不受设置项影响 ——
+                        // 设置项管的是「默认」，而它管的是「我要插话，就现在」。
+                        IconButton(onClick = { onSubmit(true) }, enabled = canSubmit) {
                             Icon(Icons.Outlined.SubdirectoryArrowRight, stringResource(R.string.steer))
                         }
                     }
                     Surface(
-                        onClick = onSend,
-                        enabled = value.isNotBlank() && !state.busy && canWrite,
+                        onClick = { onSubmit(defaultIsSteer) },
+                        enabled = canSubmit,
                         modifier = Modifier.size(44.dp),
                         shape = CircleShape,
-                        color = if (value.isNotBlank() && !state.busy && canWrite) {
+                        color = if (canSubmit) {
                             MaterialTheme.colorScheme.primary
                         } else MaterialTheme.colorScheme.surfaceContainerHighest,
-                        contentColor = if (value.isNotBlank() && !state.busy && canWrite) {
+                        contentColor = if (canSubmit) {
                             MaterialTheme.colorScheme.onPrimary
                         } else MaterialTheme.colorScheme.onSurfaceVariant,
                     ) {
-                        if (state.busy) CircularProgressIndicator(Modifier.padding(12.dp), strokeWidth = 2.dp)
-                        else Icon(Icons.AutoMirrored.Outlined.Send, stringResource(R.string.send), Modifier.padding(11.dp))
+                        Icon(Icons.AutoMirrored.Outlined.Send, stringResource(R.string.send), Modifier.padding(11.dp))
                     }
                 }
             }

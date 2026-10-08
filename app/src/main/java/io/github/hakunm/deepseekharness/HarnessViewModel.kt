@@ -23,8 +23,12 @@ import io.github.hakunm.deepseekharness.data.PluginInventory
 import io.github.hakunm.deepseekharness.data.ProviderModel
 import io.github.hakunm.deepseekharness.data.ProviderPatch
 import io.github.hakunm.deepseekharness.data.ProviderSettings
+import io.github.hakunm.deepseekharness.data.ResolvedPath
 import io.github.hakunm.deepseekharness.data.SessionModels
 import io.github.hakunm.deepseekharness.data.ActiveConnection
+import io.github.hakunm.deepseekharness.data.AppPreferences
+import io.github.hakunm.deepseekharness.data.BusySendMode
+import io.github.hakunm.deepseekharness.data.ComposerSendPolicy
 import io.github.hakunm.deepseekharness.data.ConnectionCoordinator
 import io.github.hakunm.deepseekharness.data.ConnectionShare
 import io.github.hakunm.deepseekharness.data.Credential
@@ -66,6 +70,30 @@ data class OpenDocument(
     val hasBom: Boolean = false,
     val lineEnding: String = "\n",
     val contentType: String? = null,
+)
+
+/**
+ * 「本会话的文件」面板里正在查看的那一条。
+ *
+ * 故意不复用全局 `error` 通道：路径不在授权根内是**正常结果**（agent 提到的文件未必
+ * 授权给这台手机），用户需要的是面板里一句解释，而不是一次全局错误提示。
+ * [preview] 截断到 [HarnessViewModel] 里的预览上限；[tooLarge] / [outsideRoots] /
+ * [failure] 三者互斥地说明「为什么看不到内容」。
+ */
+data class SessionFileOpen(
+    /** 发起这次打开操作的会话 id。切到别的会话后，这个结果就不该再显示。 */
+    val sessionId: String,
+    /** 会话里原样的绝对路径（请求的目标）。 */
+    val requestedPath: String,
+    val loading: Boolean = true,
+    val resolved: ResolvedPath? = null,
+    val preview: String? = null,
+    val truncated: Boolean = false,
+    val tooLarge: Boolean = false,
+    /** 服务端说不属于任何授权根（或不是普通文件）。 */
+    val outsideRoots: Boolean = false,
+    /** 其他失败原因，已是可直接展示的文本。 */
+    val failure: String? = null,
 )
 
 sealed interface ApprovalUiState {
@@ -118,7 +146,17 @@ data class HarnessState(
     val currentPath: String = "",
     val directory: DirectoryPage? = null,
     val document: OpenDocument? = null,
+    /** 会话文件面板正在查看的那一条（null 表示面板显示路径列表）。 */
+    val sessionFileOpen: SessionFileOpen? = null,
     val trash: List<TrashEntry> = emptyList(),
+    /**
+     * 智能体正在运行时，Enter 与主发送按钮的默认行为。
+     *
+     * 与 [busy] 的区别很重要：[busy] 是「有任何操作在跑」（连刷新都算），
+     * 而这里关心的是「**这个会话的 agent 是否在运行**」—— 只有后者才谈得上排队与插话。
+     * 早期实现用 [busy] 去禁用发送按钮，结果是任何一次后台刷新都会让用户发不出消息。
+     */
+    val busySendMode: BusySendMode = BusySendMode.QUEUE,
     val error: String? = null,
 )
 
@@ -128,7 +166,8 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
     private val coordinator = ConnectionCoordinator()
     /** 旧版令牌用的是另一个 Keystore 别名，迁移时必须用它解密。 */
     private val legacySecretBox = KeystoreSecretBox(KeystoreSecretBox.LEGACY_DEVICE_TOKEN_ALIAS)
-    private val mutableState = MutableStateFlow(HarnessState())
+    private val preferences = AppPreferences(application)
+    private val mutableState = MutableStateFlow(HarnessState(busySendMode = preferences.busySendMode))
     val state: StateFlow<HarnessState> = mutableState.asStateFlow()
 
     /**
@@ -389,6 +428,124 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /**
+     * 打开会话里提到的一个文件（服务器绝对路径）。
+     *
+     * 分两步：先用服务端的 `roots/resolve` 把绝对路径换成「授权根 + 相对路径」
+     * （这一步客户端做不了 —— `/roots` 刻意不返回根的绝对路径），再用既有的
+     * [openEntry] 同款读取逻辑把内容取回来。
+     *
+     * 成功时顺带把「文件」页也切到这个文件（`selectedRootId` / `currentPath` /
+     * `document`），于是用户切到「文件」分区就能拿到完整编辑器（含保存），
+     * 面板里则只做只读预览。
+     */
+    fun openSessionFile(absolutePath: String) {
+        val api = client ?: return
+        val sessionId = mutableState.value.selectedSessionId ?: return
+        update { copy(sessionFileOpen = SessionFileOpen(sessionId, absolutePath)) }
+        viewModelScope.launch {
+            val outcome = runCatching { withContext(Dispatchers.IO) { loadSessionFile(api, sessionId, absolutePath) } }
+            // 用户可能在读取期间切了会话；结果只对发起它的那个会话有效。
+            if (mutableState.value.selectedSessionId != sessionId) return@launch
+            outcome
+                .onSuccess { opened ->
+                    update {
+                        copy(
+                            sessionFileOpen = opened.open,
+                            selectedRootId = opened.rootId ?: selectedRootId,
+                            currentPath = opened.currentPath ?: currentPath,
+                            document = opened.document ?: document,
+                        )
+                    }
+                }
+                .onFailure { failure ->
+                    update {
+                        copy(
+                            sessionFileOpen = SessionFileOpen(
+                                sessionId = sessionId,
+                                requestedPath = absolutePath,
+                                loading = false,
+                                // 端点不存在几乎只有一个原因：服务端插件版本过旧。
+                                // 这条提示必须可操作（「去升级插件」），否则用户会去
+                                // 反复检查自己的路径 —— 那是错误的方向。
+                                failure = if (failure is DshApiException && failure.code == "ROUTE_NOT_FOUND") {
+                                    "PLUGIN_TOO_OLD"
+                                } else {
+                                    messageOf(failure)
+                                },
+                            ),
+                        )
+                    }
+                }
+        }
+    }
+
+    /** 关闭面板里的文件详情，回到路径列表。 */
+    fun closeSessionFile() = update { copy(sessionFileOpen = null) }
+
+    private fun loadSessionFile(api: DshClient, sessionId: String, absolutePath: String): SessionFileOutcome {
+        val resolved = api.resolvePath(absolutePath)
+            ?: return SessionFileOutcome(
+                SessionFileOpen(sessionId, absolutePath, loading = false, outsideRoots = true),
+            )
+        val parent = resolved.path.substringBeforeLast('/', "")
+        if (resolved.kind == "directory") {
+            // 目录没有可预览的内容；但把「文件」页切过去，用户就能就地浏览。
+            return SessionFileOutcome(
+                open = SessionFileOpen(sessionId, absolutePath, loading = false, resolved = resolved),
+                rootId = resolved.rootId,
+                currentPath = resolved.path,
+            )
+        }
+        val entry = sessionFileEntry(api, resolved, parent)
+        val tooLarge = entry.size > MAX_EDIT_BYTES
+        val content = if (tooLarge) null else api.readFile(resolved.rootId, resolved.path)
+        val decoded = content?.let { decodeUtf8(it.bytes) }
+        val text = decoded?.text
+        return SessionFileOutcome(
+            open = SessionFileOpen(
+                sessionId = sessionId,
+                requestedPath = absolutePath,
+                loading = false,
+                resolved = resolved,
+                preview = text?.take(PREVIEW_CHARS),
+                truncated = text != null && text.length > PREVIEW_CHARS,
+                tooLarge = tooLarge,
+            ),
+            rootId = resolved.rootId,
+            currentPath = parent,
+            document = OpenDocument(
+                entry = entry,
+                text = text,
+                etag = content?.etag.orEmpty(),
+                hasBom = decoded?.hasBom == true,
+                lineEnding = decoded?.lineEnding ?: "\n",
+                contentType = content?.contentType,
+            ),
+        )
+    }
+
+    /**
+     * `roots/resolve` 只说「是文件还是目录、多大、何时改」，**没有 `writable`**，
+     * 而「文件」页的保存按钮正是看这个字段。目录列表能给出权威值（顺带修正大小与时间），
+     * 所以优先取列表里的那一条；列表读不到时退回保守构造：`writable = false` ——
+     * 宁可让只读文件显示为只读，也不要放开保存按钮换一个 403。
+     */
+    private fun sessionFileEntry(api: DshClient, resolved: ResolvedPath, parent: String): FileEntry {
+        val listed = runCatching {
+            api.entries(resolved.rootId, parent).entries.firstOrNull { it.path == resolved.path }
+        }.getOrNull()
+        if (listed != null) return listed
+        return FileEntry(
+            name = resolved.path.substringAfterLast('/').ifBlank { resolved.path },
+            path = resolved.path,
+            kind = resolved.kind,
+            size = resolved.size ?: 0L,
+            modifiedAt = resolved.modifiedAt,
+            writable = false,
+        )
+    }
+
     fun createSession(workspaceId: String, preset: String?) = withClient { api ->
         val created = api.createSession(workspaceId, preset?.takeIf(String::isNotBlank))
         val sessions = api.sessions()
@@ -509,6 +666,18 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         api.sendMessage(id, text, steer)
         chatSessionRefreshPending = true
         scheduleChatRefresh()
+    }
+
+    /** 当前选中的会话是否正在运行（决定「排队 / 插话」有没有区别）。 */
+    fun selectedSessionRunning(): Boolean {
+        val id = mutableState.value.selectedSessionId ?: return false
+        return mutableState.value.sessions.firstOrNull { it.id == id }?.running == true
+    }
+
+    /** 改「智能体运行时」的默认提交行为，并立刻落盘（下次启动保持）。 */
+    fun setBusySendMode(mode: BusySendMode) {
+        preferences.busySendMode = mode
+        update { copy(busySendMode = mode) }
     }
 
     fun refreshCommands() = withClient { api ->
@@ -958,6 +1127,14 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
     private data class DecodedText(val text: String, val hasBom: Boolean, val lineEnding: String)
     private data class LiveKey(val sessionId: String, val turn: Int, val step: Int)
 
+    /** [loadSessionFile] 的产物：面板要展示的结果 +「文件」页要跟着切换的状态。 */
+    private data class SessionFileOutcome(
+        val open: SessionFileOpen,
+        val rootId: String? = null,
+        val currentPath: String? = null,
+        val document: OpenDocument? = null,
+    )
+
     private fun decodeUtf8(bytes: ByteArray): DecodedText? {
         val hasBom = bytes.size >= 3 && bytes.copyOfRange(0, 3).contentEquals(UTF8_BOM)
         val content = if (hasBom) bytes.copyOfRange(3, bytes.size) else bytes
@@ -984,6 +1161,13 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
 
     private companion object {
         const val MAX_EDIT_BYTES = 2L * 1024 * 1024
+
+        /**
+         * 面板只读预览的字符上限。整个文件的完整内容仍然会按 2 MiB 上限读进
+         * `document`（供「文件」页的编辑器使用），这里截断只是为了不让一个
+         * 超大 Text 把底部面板的滚动拖垮。
+         */
+        const val PREVIEW_CHARS = 20_000
         val UTF8_BOM = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
     }
 }

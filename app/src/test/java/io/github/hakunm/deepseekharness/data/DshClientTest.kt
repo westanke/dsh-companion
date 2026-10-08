@@ -328,6 +328,53 @@ class DshClientTest {
         assertTrue(inventory.items.isEmpty())
     }
 
+    /**
+     * `roots/resolve` 的错误分流：**「路径打不开」与「端点不存在」必须分开**。
+     *
+     * 为什么单独测这个：服务端插件版本过旧时该端点不存在，返回 `404 ROUTE_NOT_FOUND`。
+     * 若按状态码笼统地把所有 404 都当成「不在授权根内」，用户在手机上会看到
+     * 「这个路径不在授权根内」—— 于是他去反复检查自己的路径，而真正该做的是升级插件。
+     * 这个分流是「提示是否可操作」的分界线，值得钉死。
+     */
+    @Test
+    fun resolvePathTreatsOutsideRootsAsNormalButSurfacesAMissingRoute() {
+        // 路径确实不在授权根内：这是会话里的常态，返回 null 而不是抛异常。
+        server.enqueue(
+            MockResponse().setResponseCode(404)
+                .setBody("""{"error":{"code":"PATH_OUTSIDE_ROOTS","message":"not inside any root"}}""")
+                .setHeader("Content-Type", "application/json"),
+        )
+        val client = DshClient(server.url("/").toString(), "device-token")
+        assertEquals(null, client.resolvePath("/etc/hostname"))
+        assertEquals("/api/v1/roots/resolve?path=%2Fetc%2Fhostname", server.takeRequest().path)
+
+        // 端点不存在（插件太旧）：必须抛出去，让界面提示可操作的「升级插件」。
+        server.enqueue(
+            MockResponse().setResponseCode(404)
+                .setBody("""{"error":{"code":"ROUTE_NOT_FOUND","message":"no such route"}}""")
+                .setHeader("Content-Type", "application/json"),
+        )
+        val failure = runCatching { client.resolvePath("/etc/hostname") }.exceptionOrNull()
+        assertTrue(failure is DshApiException)
+        assertEquals("ROUTE_NOT_FOUND", (failure as DshApiException).code)
+    }
+
+    @Test
+    fun resolvePathReturnsTheRelativePathForAnAbsolutePath() {
+        server.enqueue(
+            MockResponse()
+                .setBody("""{"rootId":"root-1","path":"project/README.md","kind":"file","size":12,"modifiedAt":1,"contentType":"text/markdown"}""")
+                .setHeader("Content-Type", "application/json"),
+        )
+        val client = DshClient(server.url("/").toString(), "device-token")
+
+        val resolved = client.resolvePath("/srv/project/README.md")
+
+        assertEquals("root-1", resolved?.rootId)
+        assertEquals("project/README.md", resolved?.path)
+        assertEquals("file", resolved?.kind)
+    }
+
     private companion object {
         const val PAIRING_RESPONSE = """{"token":"secret-token","device":{"id":"device-1","name":"Pixel","scopes":["files.read"],"rootIds":["root-1"]}}"""
         const val ENTRIES_RESPONSE = """{"path":"目录","entries":[{"name":"file name.txt","path":"目录/file name.txt","kind":"file","size":5,"modifiedAt":1,"writable":true}]}"""

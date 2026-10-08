@@ -32,7 +32,9 @@ import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.ModelTraining
+import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
 import androidx.compose.material.icons.outlined.PhoneAndroid
+import androidx.compose.material.icons.outlined.SubdirectoryArrowRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -68,6 +70,7 @@ import io.github.hakunm.deepseekharness.HarnessState
 import io.github.hakunm.deepseekharness.HarnessViewModel
 import io.github.hakunm.deepseekharness.BuildConfig
 import io.github.hakunm.deepseekharness.R
+import io.github.hakunm.deepseekharness.data.BusySendMode
 import io.github.hakunm.deepseekharness.data.CustomProviderCreate
 import io.github.hakunm.deepseekharness.data.ProviderModel
 import io.github.hakunm.deepseekharness.data.ProviderPatch
@@ -215,6 +218,42 @@ fun SettingsScreen(state: HarnessState, viewModel: HarnessViewModel) {
                     icon = { Icon(Icons.Outlined.Language, null) },
                 ) { Text(stringResource(R.string.english)) }
             }
+
+            // 智能体运行时的发送行为。放在这里是因为它不是「聊天页的临时开关」，
+            // 而是一条会影响每次输入的长期习惯，用户需要能一眼看到自己设成了什么。
+            SettingsHeading(stringResource(R.string.busy_send_mode))
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                SegmentedButton(
+                    selected = state.busySendMode == BusySendMode.QUEUE,
+                    onClick = { viewModel.setBusySendMode(BusySendMode.QUEUE) },
+                    shape = SegmentedButtonDefaults.itemShape(0, 2),
+                    icon = { Icon(Icons.AutoMirrored.Outlined.PlaylistAdd, null) },
+                ) { Text(stringResource(R.string.busy_send_mode_queue)) }
+                SegmentedButton(
+                    selected = state.busySendMode == BusySendMode.STEER,
+                    onClick = { viewModel.setBusySendMode(BusySendMode.STEER) },
+                    shape = SegmentedButtonDefaults.itemShape(1, 2),
+                    icon = { Icon(Icons.Outlined.SubdirectoryArrowRight, null) },
+                ) { Text(stringResource(R.string.busy_send_mode_steer)) }
+            }
+            Text(
+                stringResource(
+                    if (state.busySendMode == BusySendMode.QUEUE) {
+                        R.string.busy_send_mode_queue_desc
+                    } else {
+                        R.string.busy_send_mode_steer_desc
+                    },
+                ),
+                modifier = Modifier.padding(top = 8.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text(
+                stringResource(R.string.busy_send_mode_subtitle),
+                modifier = Modifier.padding(top = 4.dp, bottom = 28.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
 
             SettingsHeading(stringResource(R.string.about))
             SettingRow(

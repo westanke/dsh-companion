@@ -26,6 +26,15 @@
     <string name="tool_call">Tool call</string>
     <string name="send">Send</string>
     <string name="steer">Steer</string>
+    <!-- Shown next to the send key while the agent is running -->
+    <string name="send_mode_queue">Enter=queue</string>
+    <string name="send_mode_steer">Enter=steer</string>
+    <string name="busy_send_mode">Sending while the agent runs</string>
+    <string name="busy_send_mode_subtitle">What Enter or the send key does while a run is in progress. The other behaviour is always available: press Ctrl/Cmd+Enter on a hardware keyboard, or tap the steer button next to it.</string>
+    <string name="busy_send_mode_queue">Queue</string>
+    <string name="busy_send_mode_queue_desc">Handle it after the current turn finishes</string>
+    <string name="busy_send_mode_steer">Steer</string>
+    <string name="busy_send_mode_steer_desc">Send it as additional guidance into the running turn</string>
     <string name="cancel_run">Cancel run</string>
     <string name="create">Create</string>
     <string name="close">Close</string>
@@ -242,4 +251,21 @@
     <string name="plugins_unavailable_manifest_unreadable">The server cannot read the plugin manifest: package.json may be corrupt, missing, or unreadable.</string>
     <string name="plugins_unavailable_generic">The server cannot provide the plugin inventory right now (%1$s).</string>
     <string name="plugins_permission_required">This device does not have the settings.read scope, so the plugin inventory cannot be shown. Enable settings read for this device in the DSH WebUI workspace settings.</string>
+
+    <!-- Files mentioned in the conversation -->
+    <string name="session_files">Files in this session</string>
+    <string name="session_files_subtitle">Files this session mentioned and that can be located. Only server-side absolute paths are listed; paths inside commands and relative paths are not parsed — better to list too few than to guess wrong.</string>
+    <string name="session_files_empty">This session has not mentioned any openable file path yet.</string>
+    <string name="session_files_partial">Only the loaded messages were scanned; tap “Load older messages” first to cover earlier ones.</string>
+    <string name="session_file_count">%1$d×</string>
+    <string name="session_file_detail">File details</string>
+    <string name="session_file_outside_roots">This path is not inside any authorized root on the computer, or it is not a regular file, so the server refuses to resolve it and the phone cannot open it. Ask the agent to put it inside an authorized workspace directory.</string>
+    <string name="session_file_failed">Could not open: %1$s</string>
+    <string name="session_file_plugin_too_old">The dsh-workspace plugin on the server is too old and does not provide the path-resolving endpoint yet. Upgrade it to a build that includes roots/resolve and restart DSH.</string>
+    <string name="session_file_directory">This is a directory. The Files tab has been switched to it, so you can browse the contents there.</string>
+    <string name="session_file_too_large">The file is larger than 2 MiB, so it is not previewed in this panel.</string>
+    <string name="session_file_binary">This file is not UTF-8 text, so it cannot be previewed.</string>
+    <string name="session_file_empty">This file is empty.</string>
+    <string name="session_file_truncated">Only the beginning is previewed here; the full content is in the Files tab.</string>
+    <string name="session_file_files_hint">Full content and editing are in the Files tab.</string>
 </resources>

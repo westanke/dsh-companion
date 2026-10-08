@@ -33,6 +33,30 @@ data class FileEntry(
 @Serializable
 data class DirectoryPage(val path: String, val entries: List<FileEntry>, val nextCursor: String? = null)
 
+/**
+ * `GET /roots/resolve?path=<绝对路径>` 的响应：把一个**服务器绝对路径**翻译成
+ * 「它属于哪个授权根 + 相对路径」。
+ *
+ * 为什么需要服务端代劳：会话事件里的路径是绝对路径，而 `/roots` 刻意不返回根的绝对
+ * 路径，客户端没有足够信息自己完成映射；把绝对路径直接喂给 `/roots/:id/content`
+ * 又会被 `PATH_INVALID` 拒绝。响应里**依然不含根的绝对路径**，安全性没有被削弱。
+ *
+ * 所有字段都给了默认值，理由同 [AgentPreset.trust] 与 [PluginInventory]：本项目用的是
+ * 严格解码器（`ignoreUnknownKeys` 只放过多余键，缺键照样抛异常），而字段可能随版本增减。
+ * `size` 与 `contentType` 在服务端是 `number | null` / `string | null`，必须可空 ——
+ * 目录没有大小和内容类型，服务端会**显式发送 `null`**。
+ */
+@Serializable
+data class ResolvedPath(
+    val rootId: String = "",
+    val path: String = "",
+    /** `file` 或 `directory`；未知取值由界面兜底，不在这里抛错。 */
+    val kind: String = "",
+    val size: Long? = null,
+    val modifiedAt: Double = 0.0,
+    val contentType: String? = null,
+)
+
 @Serializable
 data class TrashEntry(
     val id: String,

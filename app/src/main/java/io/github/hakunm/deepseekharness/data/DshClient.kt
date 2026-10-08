@@ -168,6 +168,34 @@ class DshClient(
         SelectedModelEnvelope.serializer(),
     ).selected
 
+    /**
+     * 把服务器绝对路径解析成 `rootId` + 相对路径。
+     *
+     * 返回 null 表示**服务端明确拒绝了这个路径**（`PATH_OUTSIDE_ROOTS` /
+     * `PATH_NOT_ABSOLUTE` / `PATH_NOT_FILE` / `PATH_NOT_FOUND`），这在会话里是常态而不是故障：
+     * agent 完全可能提到授权根之外的文件。所以这些情况不抛异常，让调用方把「不可打开」
+     * 当作正常结果展示。
+     *
+     * **但其他 404/400 必须抛出去**：服务端插件版本过旧时这个端点根本不存在，会返回
+     * `404 ROUTE_NOT_FOUND`。若按状态码笼统地把所有 404 都当成「不在授权根内」，
+     * 用户会去怀疑自己的路径，而真正该做的是升级插件。
+     */
+    fun resolvePath(absolutePath: String): ResolvedPath? {
+        val url = resolve("roots/resolve").newBuilder()
+            .addQueryParameter("path", absolutePath)
+            .build()
+        execute(Request.Builder().url(url).get()).use { response ->
+            if (response.isSuccessful) {
+                return json.decodeFromString(ResolvedPath.serializer(), response.body?.string() ?: "{}")
+            }
+            val raw = response.body?.string().orEmpty()
+            val error = runCatching { json.decodeFromString(ErrorEnvelope.serializer(), raw).error }.getOrNull()
+            val code = error?.code ?: "HTTP_ERROR"
+            if (code in UNRESOLVABLE_CODES) return null
+            throw DshApiException(response.code, code, error?.message ?: "HTTP ${response.code}")
+        }
+    }
+
     fun providerSettings(): ProviderSettings = get("settings/providers", ProviderSettings.serializer())
 
     fun pluginInventory(): PluginInventory = get("settings/plugins", PluginInventory.serializer())
@@ -360,6 +388,20 @@ class DshClient(
     }.build()
 
     companion object {
+        /**
+         * 「这个路径打不开」的权威错误码集合 —— 都属于正常结果，不是故障。
+         *
+         * 刻意**不含**其他 404：`ROUTE_NOT_FOUND` 表示服务端压根没有这个端点（通常是插件
+         * 版本过旧）。把它一并当成「不在授权根内」会把用户引向错误的方向 ——
+         * 他该做的是升级插件，而不是反复检查自己的路径。
+         */
+        private val UNRESOLVABLE_CODES = setOf(
+            "PATH_OUTSIDE_ROOTS",
+            "PATH_NOT_ABSOLUTE",
+            "PATH_NOT_FILE",
+            "PATH_NOT_FOUND",
+        )
+
         private val JSON_MEDIA = "application/json".toMediaType()
         private val OCTET_STREAM = "application/octet-stream".toMediaType()
         private val EMPTY_BODY = ByteArray(0).toRequestBody(OCTET_STREAM)

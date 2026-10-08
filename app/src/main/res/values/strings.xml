@@ -26,6 +26,15 @@
     <string name="tool_call">工具调用</string>
     <string name="send">发送</string>
     <string name="steer">追加引导</string>
+    <!-- 智能体运行时，发送键旁标出「回车会做什么」 -->
+    <string name="send_mode_queue">回车=排队</string>
+    <string name="send_mode_steer">回车=插话</string>
+    <string name="busy_send_mode">智能体运行时的发送方式</string>
+    <string name="busy_send_mode_subtitle">运行中按回车或发送键时的默认行为。另一种行为随时可用：外接键盘按 Ctrl/Cmd+回车，或点旁边的插话键。</string>
+    <string name="busy_send_mode_queue">排队发送</string>
+    <string name="busy_send_mode_queue_desc">等当前这一轮结束后再处理</string>
+    <string name="busy_send_mode_steer">插话发送</string>
+    <string name="busy_send_mode_steer_desc">作为追加引导送进正在运行的那一轮</string>
     <string name="cancel_run">取消运行</string>
     <string name="create">创建</string>
     <string name="close">关闭</string>
@@ -242,4 +251,21 @@
     <string name="plugins_unavailable_manifest_unreadable">服务器读不出插件清单：package.json 可能损坏、缺失或没有读取权限。</string>
     <string name="plugins_unavailable_generic">服务器暂时无法提供插件清单（%1$s）。</string>
     <string name="plugins_permission_required">当前设备没有 settings.read 权限，无法查看插件清单。请在 DSH WebUI 的工作区设置中为此设备启用设置读取权限。</string>
+
+    <!-- 会话里提到的文件 -->
+    <string name="session_files">本会话的文件</string>
+    <string name="session_files_subtitle">会话里出现过、又能定位到的文件。只列服务器绝对路径；命令里的路径与相对路径不参与解析，宁可少列也不猜错。</string>
+    <string name="session_files_empty">本会话还没有提到可打开的文件路径。</string>
+    <string name="session_files_partial">只扫描了已加载的消息；更早的内容请先点「加载更早消息」。</string>
+    <string name="session_file_count">%1$d 次</string>
+    <string name="session_file_detail">文件详情</string>
+    <string name="session_file_outside_roots">这个路径不在本机的授权根内，或不是普通文件，服务端拒绝解析，所以手机上打不开。可以让 agent 把它放进授权的工作区目录。</string>
+    <string name="session_file_failed">打开失败：%1$s</string>
+    <string name="session_file_plugin_too_old">服务端的 dsh-workspace 插件版本过旧，还没有提供路径解析接口。请在电脑上把插件升级到包含 roots/resolve 的版本并重启 DSH。</string>
+    <string name="session_file_directory">这是一个目录。已把「文件」页切到该目录，可以在那里浏览里面的内容。</string>
+    <string name="session_file_too_large">文件超过 2 MiB，不在面板里预览。</string>
+    <string name="session_file_binary">该文件不是 UTF-8 文本，无法预览。</string>
+    <string name="session_file_empty">这是一个空文件。</string>
+    <string name="session_file_truncated">这里只预览了开头部分，完整内容在「文件」页。</string>
+    <string name="session_file_files_hint">完整内容与编辑在「文件」页。</string>
 </resources>
