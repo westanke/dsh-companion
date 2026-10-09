@@ -155,7 +155,7 @@ DSH1:eyJkaXNwbGF5TmFtZSI6IuWutumHjOeahOeUteiEkSIsImVuZHBvaW50cyI6W3sibGFiZWwiOiL
 **结论：能走通，而且已经是默认路径。** 脚本在本机一次跑完「创建配对码 → 兑换设备令牌」两步，
 用户全程看不到配对码，也不需要念它。
 
-### 4.1 服务端事实（只读研究 `/media/wangke/OFFICE/workspace/dsh-workspace-0.2`）
+### 4.1 服务端事实（只读研究 `/media/wangke/OFFICE/workspace/dsh-remote-bridge`）
 
 | 路由 | 方法 | 鉴权 | 源码位置 |
 | --- | --- | --- | --- |

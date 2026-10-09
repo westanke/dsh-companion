@@ -56,8 +56,13 @@ apksigner verify --verbose app\build\outputs\apk\release\app-release.apk
 
 ### 2026-08-15
 
+> **关于本节及下方 `2026-08-14` 一节的截图引用**：文中提到的 `.tmp/*` 截图与 UI 层级文件
+> 都是当时的临时产物，早已随临时目录清理，不在仓库里。已移除这些死引用，
+> 但保留验收结论本身 —— 记录的是「当年验过什么」，不是「文件还在」。
+
+
 - 完整门禁 `docsCheck testDebugUnitTest lintDebug assembleRelease` 通过，8 份文档/22 个任务一致；Release APK 为 2,538,256 字节，SHA-256 `E9FD6DEBD8B5DAD094273E9EDEBB49BF551D73103941B28C77FDC0A153DD5C65`。`apksigner` 验证 APK v2、单一签名者、4096 位 RSA 正式证书，证书 SHA-256 仍为 `A92938B33F59D90993ADA96437F8A8DEF987A27353E46A018661DDC1587046B1`。
-- Android 15 尺寸设备覆盖安装后连接真实 Oracle 新版 listener：空白会话显示当前“工作区写入”权限选择器；输入 `/` 后列出 `compact/export/feedback/goal/permission` 等当前 host 命令，已知内置命令说明按 App 语言显示中文或英文，截图保存为 `.tmp/feature-permission-chat.png` 和 `.tmp/feature-slash-commands-localized.png`。当前服务器没有含 TODO 的运行，任务模块由 projection 单测覆盖，真实实时状态留待下一次产生 TODO 的任务。
+- Android 15 尺寸设备覆盖安装后连接真实 Oracle 新版 listener：空白会话显示当前“工作区写入”权限选择器；输入 `/` 后列出 `compact/export/feedback/goal/permission` 等当前 host 命令，已知内置命令说明按 App 语言显示中文或英文，截图已随临时目录清理，不再保留。当前服务器没有含 TODO 的运行，任务模块由 projection 单测覆盖，真实实时状态留待下一次产生 TODO 的任务。
 - `TODO-001`、`COMMAND-001`、`PERMISSION-001` 与 `BRAND-001` JVM/Lint 门禁通过：`testDebugUnitTest lintDebug` 成功；投影单测覆盖 TODO 状态与权限选项，MockWebServer 验证 `/chat/sessions/{id}/commands` 列举/执行路径和命令正文。Compose 编译与中英双语资源检查通过。
 - Oracle root `web` profile 已安装审批版插件并按用户明确要求重启；`3080` WebUI、`3090` listener、健康检查、审批 OpenAPI 和 Host bundle 哈希通过。旧待审批会话因重启结束，真实 App 允许一次/拒绝验收将使用新会话。
 
@@ -91,13 +96,13 @@ apksigner verify --verbose app\build\outputs\apk\release\app-release.apk
 - `MODEL-001` 真实 Oracle 合约探针通过：返回 37 个供应商、6 个授权会话、当前 `opencode-go/deepseek-v4-pro/max` 和 2 个可路由模型组；Android 15 模型面板显示模型及 Off/High/Max，并成功切换到 High。供应商页显示凭据状态和配置入口，不回显密钥。
 - `MD-001` 使用真实 DSH 回复验收：标题和表格按排版/表格渲染，界面未显示原始 `##`、`**` 与管道表格标记。`multiplatform-markdown-renderer-m3` 固定为 `0.41.0`；`0.43.0` 要求 compile SDK 37，与当前 SDK 36 基线不兼容，因此未采用。
 - `RATE-001` 使用真实会话发送 `Reply with: streaming refresh OK`，正文正常增量完成；连续观察 24 秒无 429 UI、无 `RATE_LIMITED` 日志、无崩溃。最终又移除发送/取消后的同步会话列表请求，改为合并队列刷新；重新构建并覆盖安装后启动日志仍无 `FATAL EXCEPTION` 或 `RATE_LIMITED`。
-- `UI-002` 已在 1080×1920 Android 15 设备检查会话列表、聊天、模型面板、供应商设置、文件页和 Markdown；最终安装截图为 `.tmp/dsh-final.png`，UI 层级为 `.tmp/dsh-final.xml`，没有横向溢出、底部控件裁切或文字遮挡。
+- `UI-002` 已在 1080×1920 Android 15 设备检查会话列表、聊天、模型面板、供应商设置、文件页和 Markdown；最终安装截图与 UI 层级文件已随临时目录清理；未发现横向溢出、底部控件裁切或文字遮挡。
 - 最终命令 `docsCheck testDebugUnitTest lintDebug assembleRelease` 通过；APK v2 唯一签名者为 4096 位 RSA 独立证书，证书 SHA-256 仍为 `A92938B33F59D90993ADA96437F8A8DEF987A27353E46A018661DDC1587046B1`。
 - `UI-003` 在 1080×1920 Android 15 设备验收：全局标题从 30sp 级收紧至 24sp 级，主要聊天正文为 15sp/22sp，消息间距降至 8dp，输入正文区从 74dp 降至 44dp；空输入容器屏幕高度从约 366px 降至约 303px。Markdown 使用独立紧凑排版表，H1-H6 映射至 App 的 24/20/18/15/13sp 层级，“系统环境”等标题不再异常放大。
-- `UI-003` 最终截图为 `.tmp/compact-final-list.png` 与 `.tmp/compact-final-chat.png`；发送按钮保持 44dp，导航/新增按钮保持 48dp。最终 APK 为 2,442,576 字节，SHA-256 `7ABD069C7653686E5413B74E3A1862BEF18C0568E06BE3ECCFF0AAFD4B755515`，正式证书与签名方案不变。
+- `UI-003` 最终截图已随临时目录清理；发送按钮保持 44dp，导航/新增按钮保持 48dp。最终 APK 为 2,442,576 字节，SHA-256 `7ABD069C7653686E5413B74E3A1862BEF18C0568E06BE3ECCFF0AAFD4B755515`，正式证书与签名方案不变。
 - 工作区/供应商/文件编辑扩展通过 `docsCheck testDebugUnitTest lintDebug assembleRelease`：新建会话可从授权根浏览目录并调用插件登记 DSH 工作区；供应商合约覆盖自定义能力/创建；文字编辑器显示同步行号，Markdown 可切换源码与渲染预览。
-- `UI-004` 在 1080×1920 Android 15 复验：聊天输入容器由约 101dp 进一步降至 88dp，用户气泡正文与 Markdown 段落统一为 14sp/20sp，消息区间距为 5dp；新建工作区弹窗压缩标题间距和目录列表后，Agent 下拉与“创建工作区并开始会话”按钮完整显示。截图为 `.tmp/final-compact-chat.png`、`.tmp/feature-line-numbers.png`、`.tmp/feature-markdown-preview.png` 和 `.tmp/final-new-workspace-fixed.png`。
+- `UI-004` 在 1080×1920 Android 15 复验：聊天输入容器由约 101dp 进一步降至 88dp，用户气泡正文与 Markdown 段落统一为 14sp/20sp，消息区间距为 5dp；新建工作区弹窗压缩标题间距和目录列表后，Agent 下拉与“创建工作区并开始会话”按钮完整显示。截图已随临时目录清理。
 - 最终 Release APK 为 2,467,484 字节，SHA-256 `22882C77C519B70FDC65F9FC4CCC54E90A5BA999344C88D014DAA2A217770179`；APK v2 签名通过，唯一 4096 位 RSA 证书 SHA-256 仍为 `A92938B33F59D90993ADA96437F8A8DEF987A27353E46A018661DDC1587046B1`，覆盖安装成功。
-- `APP-004` 文字缩放扩展通过 `docsCheck testDebugUnitTest lintDebug assembleRelease`。Android 15 在 `.bashrc` 源码验证 `100%→150%→100%`，行号沟槽、字体与行高同步变化；Markdown 验收文件验证预览 `100%→150%`，切换回源码仍保持 `150%`。双指处理仅消费两个及以上指针，按钮作为无手势替代。截图为 `.tmp/zoom-source-100.png`、`.tmp/zoom-source-150.png`、`.tmp/zoom-markdown-100.png` 和 `.tmp/zoom-markdown-150.png`；服务器临时文件随后删除。
+- `APP-004` 文字缩放扩展通过 `docsCheck testDebugUnitTest lintDebug assembleRelease`。Android 15 在 `.bashrc` 源码验证 `100%→150%→100%`，行号沟槽、字体与行高同步变化；Markdown 验收文件验证预览 `100%→150%`，切换回源码仍保持 `150%`。双指处理仅消费两个及以上指针，按钮作为无手势替代。截图已随临时目录清理（服务器临时文件随后删除）。
 - 当前 Release APK 为 2,468,808 字节，SHA-256 `EE2676CF422FBDE74730258AA0CF4866CDCF65268DB54716960C9F826A36BD51`；APK v2 签名及唯一 4096 位 RSA 正式证书 SHA-256 `A92938B33F59D90993ADA96437F8A8DEF987A27353E46A018661DDC1587046B1` 复验通过并已覆盖安装。
 - 未完成：局域网 HTTPS、steer/取消、文件编辑与陈旧 ETag 冲突、上传下载、WebSocket 网络切换、旋转/进程恢复及平板实机布局仍待端到端执行。
