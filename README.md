@@ -247,16 +247,17 @@ DeepSeek-Harness-companion-v1.9.0.apk
 
 ## 界面预览
 
+<!-- 导航侧栏截图已移除：v1.2.0 起抽屉内多出「插件」入口，底部还多了当前地址，
+     旧图与实际不符；本机无 Android 设备可重录，宁缺毋滥。 -->
 <p align="center">
-  <img src="./assets/screenshots/app-navigation.jpg" width="47%" alt="App 导航侧栏">
   <img src="./assets/screenshots/chat-demo.jpg" width="47%" alt="聊天与实时回复">
-</p>
-<p align="center">
   <img src="./assets/screenshots/file-browser.jpg" width="47%" alt="授权根目录文件浏览">
-  <img src="./assets/screenshots/file-editor.jpg" width="47%" alt="带行号和缩放的文本编辑器">
 </p>
 <p align="center">
+  <img src="./assets/screenshots/file-editor.jpg" width="47%" alt="带行号和缩放的文本编辑器">
   <img src="./assets/screenshots/workspace-create.jpg" width="47%" alt="创建工作区并开始会话">
+</p>
+<p align="center">
   <img src="./assets/screenshots/model-providers.jpg" width="47%" alt="模型供应商设置">
 </p>
 

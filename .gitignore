@@ -9,6 +9,9 @@ captures/
 .tmp/
 .tmp-*.png
 artifacts/*
+# artifacts/ 里只跟踪这三样：上游基线两个 APK（用于比对「本 fork 证书 ≠ 上游证书」）
+# 与校验和文件。发布用的 APK 一律走 GitHub/Gitee Release 资产，不进仓库 ——
+# 本目录下其它 *.apk 都是本机构建后手工拷贝的副本，天然被忽略。
 !artifacts/DeepSeek-Harness-v1.0.0.apk
 !artifacts/SHA256SUMS.txt
 *.jks

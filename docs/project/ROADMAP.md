@@ -1,5 +1,10 @@
 # 路线图
 
+> 本表承接**上游 v1.0.0** 的任务台账，状态停留在 fork 起点。其中 `in-progress` 项都属于
+> 「实现已随版本发布、但缺真机端到端验收」这一类（HTTPS、steer/取消、平板布局等），
+> **不代表功能尚未实现**。本 fork 自己那条版本线（`REL-005`）与资料清理（`DOC-003`）见文末。
+> 各版本实际改了什么、测了什么，以 `CHANGELOG-DEV.md` 与 `TESTING.md` 为准。
+
 | ID | 状态 | 验收条件 |
 | --- | --- | --- |
 | APP-001 | done | Compose/Material 3 独立工程、包名、双语、图标与正式签名 Release 构建通过 |
@@ -35,3 +40,5 @@
 | REL-002 | done | 创建 GitHub 公开仓库并推送源码；参考高关注 DSH 项目重构中英双语 README，加入真实脱敏截图并发布含正式签名 APK 的 v1.0.0 Release |
 | REL-003 | done | v1.0.0 使用最终 DSH 文案、AGPLv3、真实手机截图和正式签名 APK，以单一根提交重写公开 `main` 与标签并替换 Release 产物 |
 | REL-004 | done | App 加入 `dsh-plugin` topic；App 与插件 README 刷新后继续以各自单一根提交发布，不保留中间修改历史 |
+| REL-005 | done | 本 fork 独立版本线 v1.1.0–v1.9.0：main 与 tag 双推 GitHub/Gitee 并各自发布 Release（含签名 APK）；上游仓库只读、不推送 |
+| DOC-003 | done | 清理过期资料：版本号/用例数/插件名/签名指纹/上游链接与死图；删除历史 APK 与不再相符的截图，README 不留死链；文档内设备令牌脱敏 |

@@ -293,7 +293,7 @@
     <string name="session_file_detail">文件详情</string>
     <string name="session_file_outside_roots">这个路径不在本机的授权根内，或不是普通文件，服务端拒绝解析，所以手机上打不开。可以让 agent 把它放进授权的工作区目录。</string>
     <string name="session_file_failed">打开失败：%1$s</string>
-    <string name="session_file_plugin_too_old">服务端的 dsh-workspace 插件版本过旧，还没有提供路径解析接口。请在电脑上把插件升级到包含 roots/resolve 的版本并重启 DSH。</string>
+    <string name="session_file_plugin_too_old">服务端的 dsh-remote-bridge 插件（旧名 dsh-workspace）版本过旧，还没有提供路径解析接口。请在电脑上把插件升级到 2.0.4 或更高，然后重启 DSH。</string>
     <string name="session_file_directory">这是一个目录。已把「文件」页切到该目录，可以在那里浏览里面的内容。</string>
     <string name="session_file_too_large">文件超过 2 MiB，不在面板里预览。</string>
     <string name="session_file_binary">该文件不是 UTF-8 文本，无法预览。</string>
@@ -309,6 +309,6 @@
     <string name="attachment_image_too_large">图片超过 %1$s，没法内联发送。请先压缩或裁剪，或改用「发送文件」。</string>
     <string name="attachment_file_too_large">文件超过 %1$s，没法作为消息附件上传。</string>
     <string name="attachment_file_rejected">服务端拒绝了该文件：超过了服务器允许的附件大小。请换一个更小的文件。</string>
-    <string name="attachment_upload_unsupported">服务端的 dsh-workspace 插件版本过旧，还没有提供消息附件上传接口。请在电脑上把插件升级到支持 chat/sessions/:id/attachments 的版本并重启 DSH。</string>
+    <string name="attachment_upload_unsupported">服务端的 dsh-remote-bridge 插件（旧名 dsh-workspace）版本过旧，还没有提供消息附件上传接口。请在电脑上把插件升级到 2.0.4 或更高，然后重启 DSH。</string>
     <string name="attachment_read_failed">读取所选文件失败，请换一个再试。</string>
 </resources>

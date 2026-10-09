@@ -108,23 +108,26 @@ $ node tools/emit-config.mjs --name "家里的电脑" --device "interop-fixture-
   - 局域网（eno1）  http://192.168.1.126:3090  [局域网] healthz ok 55ms
   - 虚拟网（utun0）  http://100.64.250.1:3090  [虚拟网] healthz ok 4ms
 [emit-config] 令牌来源   : 自动配对（/manage/pairings → /api/v1/pairings/exchange）
-[emit-config] 令牌        : gGyU…（共 43 字符）
+[emit-config] 令牌        : 已脱敏（共 43 字符）
 [emit-config] 设备        : interop-fixture-1（id 9397b682-8e9c-424d-9ab4-d2744a8460d9） scopes=[files.read, chat.read] roots=[b3cc74d4-4d42-436f-b8af-2d2cd3a02b4b]
 [emit-config] 吊销方法    : curl -X DELETE http://127.0.0.1:3090/manage/devices/9397b682-8e9c-424d-9ab4-d2744a8460d9
 [emit-config] 设备名      : interop-fixture-1
 [emit-config] 权限        : [files.read, chat.read]
 [emit-config] 文本长度    : 419 字符（微信软预算 400，硬上限 2000）
 [emit-config] 自检        : 解码还原成功，往返一致=true
-[emit-config] 还原结果    : {"displayName":"家里的电脑","endpoints":[{"label":"局域网（eno1）","baseUrl":"http://192.168.1.126:3090"},{"label":"虚拟网（utun0）","baseUrl":"http://100.64.250.1:3090"}],"token":"gGyU8G3NWVABSbAm6K-mUQI17zIpYc9dp3kyURlNfkU","deviceName":"interop-fixture-1","scopes":["files.read","chat.read"]}
+[emit-config] 还原结果    : {"displayName":"家里的电脑","endpoints":[{"label":"局域网（eno1）","baseUrl":"http://192.168.1.126:3090"},{"label":"虚拟网（utun0）","baseUrl":"http://100.64.250.1:3090"}],"token":"REDACTED-TOKEN-0000000000000000000000000000","deviceName":"interop-fixture-1","scopes":["files.read","chat.read"]}
 [emit-config] 注意        : 超过软预算，微信里可能被折行（不影响粘贴，解码端能容忍换行）
 [emit-config] 安全提醒    : 这段文本内含设备令牌，等价于一把钥匙 —— 只发给自己（文件传输助手/私密笔记），
                             不要发到群聊、论坛、截图、issue 或任何第三方工具；泄露后请在电脑上吊销该令牌。
 
-DSH1:eyJkaXNwbGF5TmFtZSI6IuWutumHjOeahOeUteiEkSIsImVuZHBvaW50cyI6W3sibGFiZWwiOiLlsYDln5_nvZHvvIhlbm8x77yJIiwiYmFzZVVybCI6Imh0dHA6Ly8xOTIuMTY4LjEuMTI2OjMwOTAifSx7ImxhYmVsIjoi6Jma5ouf572R77yIdXR1bjDvvIkiLCJiYXNlVXJsIjoiaHR0cDovLzEwMC42NC4yNTAuMTozMDkwIn1dLCJ0b2tlbiI6ImdHeVU4RzNOV1ZBQlNiQW02Sy1tVVFJMTd6SXBZYzlkcDNreVVSbE5ma1UiLCJkZXZpY2VOYW1lIjoiaW50ZXJvcC1maXh0dXJlLTEiLCJzY29wZXMiOlsiZmlsZXMucmVhZCIsImNoYXQucmVhZCJdfQ
+DSH1:eyJkaXNwbGF5TmFtZSI6IuWutumHjOeahOeUteiEkSIsImVuZHBvaW50cyI6W3sibGFiZWwiOiLlsYDln5_nvZHvvIhlbm8x77yJIiwiYmFzZVVybCI6Imh0dHA6Ly8xOTIuMTY4LjEuMTI2OjMwOTAifSx7ImxhYmVsIjoi6Jma5ouf572R77yIdXR1bjDvvIkiLCJiYXNlVXJsIjoiaHR0cDovLzEwMC42NC4yNTAuMTozMDkwIn1dLCJ0b2tlbiI6IlJFREFDVEVELVRPS0VOLTAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJkZXZpY2VOYW1lIjoiaW50ZXJvcC1maXh0dXJlLTEiLCJzY29wZXMiOlsiZmlsZXMucmVhZCIsImNoYXQucmVhZCJdfQ
 ```
 
 注意脚本自动探测到了两个地址：`192.168.1.126`（eno1，局域网）与 `100.64.250.1`（utun0，虚拟网）。
 这正是用户要的「一台电脑多个地址」形态 —— 出门在外走虚拟网，在家走局域网。
+
+> 本文档中出现的设备令牌已脱敏为**等长占位符**（原值已在实测后吊销，见 §7.3）。
+> 占位符长度与原值相同，所以下面的 419 字符长度结论、base64 与 JSON 的对应关系都不受影响。
 
 ### 3.2 命令行参数
 
@@ -174,6 +177,10 @@ DSH1:eyJkaXNwbGF5TmFtZSI6IuWutumHjOeahOeUteiEkSIsImVuZHBvaW50cyI6W3sibGFiZWwiOiL
 
 ### 4.2 实测：两步换令牌（可复现命令 + 真实响应）
 
+> 下面的响应取自**当时的插件版本**（响应里的 `pluginVersion` 是 `1.0.0`，那正是本文件写作时的线上版本）。
+> 插件后来改名为 `dsh-remote-bridge`，App 侧当前要求 **≥ 2.0.4**；本节用到的这几条路由未变，
+> 所以这段记录作为「怎么换令牌」的说明仍然有效，但**不要把 `1.0.0` 读成当前版本要求**。
+
 ```console
 $ curl -s -i http://127.0.0.1:3090/api/v1/healthz
 HTTP/1.1 200 OK
@@ -185,7 +192,7 @@ $ curl -s -X POST http://127.0.0.1:3090/manage/pairings \
 
 $ curl -s -X POST http://127.0.0.1:3090/api/v1/pairings/exchange \
     -H 'Content-Type: application/json' -d '{"code":"AA87B-042D8","deviceName":"Pixel 9"}'
-{"token":"QVf4E7yZLvq_LsYafqOwzsRok6OEqjyk2Ziu0t0yW8w",
+{"token":"REDACTED-TOKEN-0000000000000000000000000000",
  "device":{"id":"c63e73cb-baf2-4717-80f1-a21f02f1e3eb","name":"Pixel 9",
            "scopes":["files.read"],"rootIds":[],"createdAt":1791474385314}}
 ```
@@ -229,7 +236,7 @@ $ node tools/emit-config.mjs --name "家里的电脑" --device "interop-fallback
 { "text": "DSH1:eyJkaXNwbGF5TmFtZSI6IuWutumHjOeahOeUteiEkSIs...",
   "payload": { "displayName": "家里的电脑",
                "endpoints": [{"label":"家里局域网","baseUrl":"http://192.168.1.126:3090"}],
-               "token": "F9INm0vlB2MS82fbjBDN25reibvNxpOPCZ1gLx32akY",
+               "token": "REDACTED-TOKEN-0000000000000000000000000000",
                "deviceName": "interop-fallback-2",
                "scopes": ["chat.read","chat.write","files.read","files.write","settings.read"] } }
 ```
@@ -271,7 +278,7 @@ $ [ "$(上面那行)" = "DSH1:eyJkaXNwbGF5TmFtZSI6IuWutumHjOeahOeUteiEkSIsImVuZH
 
 ```console
 $ curl -s http://192.168.1.126:3090/api/v1/devices/self \
-    -H "Authorization: Bearer gGyU8G3NWVABSbAm6K-mUQI17zIpYc9dp3kyURlNfkU"
+    -H "Authorization: Bearer REDACTED-TOKEN-0000000000000000000000000000"
 {"id":"9397b682-8e9c-424d-9ab4-d2744a8460d9","name":"interop-fixture-1",
  "scopes":["files.read","chat.read"],"rootIds":["b3cc74d4-4d42-436f-b8af-2d2cd3a02b4b"]}
 ```
@@ -420,7 +427,7 @@ HTTP 204
 HTTP 204
 
 $ curl -s -o /dev/null -w "HTTP %{http_code}\n" http://192.168.1.126:3090/api/v1/devices/self \
-    -H "Authorization: Bearer gGyU8G3NWVABSbAm6K-mUQI17zIpYc9dp3kyURlNfkU"
+    -H "Authorization: Bearer REDACTED-TOKEN-0000000000000000000000000000"
 HTTP 401
 ```
 
