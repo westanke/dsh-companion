@@ -124,7 +124,7 @@ before being carried over.
 A new "Plugins" tab shows what is installed on the machine, **which version is actually running**, and
 whether anything is in a bad state.
 
-This one **does require a server-side change**: `dsh-workspace`'s `/api/v1` had 10 endpoints
+This one **does require a server-side change**: `dsh-remote-bridge` (then named `dsh-workspace`)'s `/api/v1` had 10 endpoints
 (`healthz` / `pairings/exchange` / `devices/self` / `roots` / `trash` / `chat/sessions` /
 `chat/workspaces` / `chat/agent-presets` / `settings/models` / `settings/providers`), **none related to
 plugins**, so `GET /api/v1/settings/plugins` was added to the plugin first.
@@ -148,6 +148,80 @@ that `dsh-hyperframes` and `dsh-remotion` are installed but not enabled.
 > `Field 'trust' is required ... missing at path: $.items[0]`. The fix adds defaults to optional
 > fields so a single missing field can no longer break the whole list.
 
+### 7. Configurable send behaviour: queue vs. steer (v1.3.0)
+
+What happens when you press send during a run used to be hard-coded. The settings page now offers radio
+options, and while a run is active the send key shows the current default (`Enter=queue` / `Enter=steer`),
+so you do not have to go back to settings to check.
+
+The same release fixed a worse problem: **the agent could not send messages at all while running**. The
+old code disabled the send key with a global `busy` flag that **any background refresh** would set — so
+"cannot send while running" became "cannot send, ever". Files mentioned in a session also became openable
+in this release.
+
+### 8. Session images visible + messages copyable + links tappable + send image/file (v1.4.0)
+
+"Images in a session are invisible" was **two problems stacked**; fixing either alone changed nothing:
+
+1. an image-only message (no text) was judged an **empty message** and dropped entirely;
+2. historical images are only an `attachmentId` **reference** in the event stream; the bytes need a
+   separate request.
+
+Messages are now copyable, links tappable, and the composer can send images and files (images inline as
+base64, files exchanged for a receipt first). Attachment size is rejected **before sending**
+(8 MiB images / 24 MiB files) with advice you can actually follow ("compress it and try again") rather
+than a bare "file too large".
+
+### 9. Native rendering of dsh-ui interactive cards (v1.5.0)
+
+In the web UI the JSON inside a `dsh-ui` fence renders as real components. The app drew the fence as a
+code block, so users saw a lump of **raw JSON** — the most concrete consequence being that **a
+multiple-choice question the assistant raised on the web was impossible to answer on the phone**.
+
+22 component types (card / table / list / button / option / progress / timeline …) now render natively.
+A choice button in a card is equivalent to typing that line and sending it, through the same message path.
+
+### 10. Session files listed at the end of the message stream (v1.6.0)
+
+Matching the web UI: after a turn finishes, files produced by the session are listed automatically at the
+end of the stream (count shown, collapsible, tap to view). The toolbar folder icon **stays**; the two do
+not conflict.
+
+Paths inside `bash` commands are deliberately **not** parsed — most of them are search scopes, variables,
+or text that was merely `echo`ed, and **a false listing is worse than a missing one** (tapping a path that
+will not open makes users think the feature is broken).
+
+### 11. dsh-ui diagnostics switch (v1.7.0)
+
+A new switch in the settings **Debug** group (off by default). When on, each assistant message shows a
+grey line explaining why the card did not render: one result per stage —
+**fence detection → JSON parsing → node dispatch** — tap to expand, long-press to copy.
+
+"Fence not recognised", "JSON broken" and "unknown node type" all looked identical on screen, and in an
+environment with no usable device that left guessing as the only option.
+
+### 12. Failed sends no longer swallow text + attachment failures state the cause (v1.8.0)
+
+- **Failed sends no longer swallow your text**: the body is put back into the input box. Previously only
+  attachments came back and the text was gone — you typed a long message, the send failed, and the box
+  was empty with nothing recoverable.
+- **Attachment failures show the real cause**: 401 expired authorization / 403 missing `files.read` /
+  404 the attachment is really gone are distinguished, instead of always saying "image unavailable (may
+  have been cleaned up)". Authorization failures are retryable — previously one failure was remembered
+  forever, so re-pairing could not heal it.
+
+### 13. Long-press selects text + preview by file type (v1.9.0)
+
+**Gesture split**: long-press is reserved for **text selection**, and copying a whole message moved to
+**double-tap**. Long-press used to be consumed by "copy whole message", so the selection handles never
+appeared and users could only copy the entire block. A one-time dismissible hint at the top of the message
+stream explains the change.
+
+**Preview by type**: `.md` renders as Markdown, `.html` goes through structural extraction
+(headings / paragraphs / lists / quotes / code / links, with `<script>` and `<style>` **discarded
+entirely**). WebView is deliberately **not** used — that would hand execution rights to any file that
+happens to appear in a session.
+
 ## Building
 
 ```bash
@@ -170,24 +244,29 @@ scripts/build.sh :app:testDebugUnitTest     # unit tests
 
 ## Download and install
 
-Download from this repository's GitHub Releases:
+Download from this repository's [GitHub Releases](https://github.com/westanke/dsh-companion/releases/latest):
 
 ```text
-DeepSeek-Harness-companion.apk
+DeepSeek-Harness-companion-v1.9.0.apk
 ```
 
 Requirements:
 
 - Android 8.0 (API 26) or newer
 - A running DeepSeek Harness WebUI
-- `dsh-workspace` v1.0.0 or a compatible version installed in the WebUI
+- `dsh-remote-bridge` **≥ 2.0.4** installed in the WebUI (formerly `dsh-workspace`; 2.0.0 / 2.0.1 are
+  seriously broken: image reads fail entirely and the plugin cannot activate)
 - At least one authorized root added in the plugin, with remote access enabled
 - The phone can reach the IP, domain, and port configured in the plugin
 
-Release APKs are signed with the **same** certificate as upstream, and the `applicationId` is also kept
-identical (`io.github.hakunm.deepseekharness`). You can therefore **install directly over an upstream
-build**; saved connections are migrated automatically into the new multi-address structure on first
-launch, with no re-pairing.
+Release APKs are signed with a dedicated release certificate (`CN=DSH Pocket Client`), not the Android
+debug key; the `applicationId` matches upstream (`io.github.hakunm.deepseekharness`). Later releases from
+this fork use the same certificate, so they upgrade in place. **The certificate differs from upstream's
+original APK** (`CN=Hakunm`), so switching from an upstream build requires uninstalling first — that
+clears saved connections, so pair again under "Connect to DSH" or paste a configuration string.
+
+Release history: `v1.1.0` / `v1.2.0` / `v1.4.0` / `v1.9.0` are tagged; `v1.5.0`–`v1.8.0` are not tagged
+separately — their features shipped together in `v1.9.0`.
 
 ## Screenshots
 
@@ -204,29 +283,11 @@ launch, with no re-pairing.
   <img src="./assets/screenshots/model-providers.jpg" width="47%" alt="Model provider settings">
 </p>
 
-## Download
-
-Download the latest release from [GitHub Releases](https://github.com/Hakunm/dsh-android-app/releases/latest):
-
-```text
-DeepSeek-Harness-v1.0.0.apk
-```
-
-Requirements:
-
-- Android 8.0 / API 26 or newer
-- A running DeepSeek Harness WebUI installation
-- `dsh-workspace` v1.0.0 or a compatible release installed in DSH WebUI
-- At least one authorized root and remote access enabled in the plugin
-- Network reachability from the phone to the configured IP/domain and port
-
-The production APK uses a dedicated release certificate, not the Android debug key. Future releases must use the same certificate for in-place upgrades.
-
 ## Connect to DSH
 
 ### On the server
 
-1. Open **Workspace settings** for `dsh-workspace` in DSH WebUI.
+1. Open **Workspace settings** for `dsh-remote-bridge` (formerly `dsh-workspace`) in DSH WebUI.
 2. Add at least one authorized root.
 3. Enter the bind IP and port under **Remote access**, then save the listener settings.
 4. Select **Enable and create pairing** to receive a ten-minute one-time code.
@@ -237,19 +298,37 @@ The production APK uses a dedicated release certificate, not the Android debug k
 2. Enter the pairing code and a device name.
 3. Select **Pair and connect**.
 
-The device token is stored using Android Keystore-backed encrypted storage. Disconnecting clears the local token. Revoking the device in DSH WebUI invalidates it immediately.
+> **Never include a `/dsh-workspace-api` prefix in the address.** Port `3090` is the plugin's remote
+> listener and its routes sit at the root; `/dsh-workspace-api` is DSH Web's mount path on `3080`, which
+> binds loopback only and is unreachable from the phone. The plugin has been renamed `dsh-remote-bridge`,
+> but the mount prefix keeps its historical name (hard-coded), so it is not a typo — and
+> `/dsh-remote-bridge-api` does not exist either.
+
+The device token is stored using Android Keystore-backed encrypted storage. Disconnecting only drops the
+connection; the token stays until you delete the computer, and the app restores the connection after a
+restart. Revoking the device in DSH WebUI invalidates it immediately.
+
+> **Tokens do not expire on their own.** DSH's `devices` table has no expiry column, so once a
+> configuration string is issued it stays valid until the device is revoked. Send it only to yourself,
+> and if you suspect a leak, revoke that device on the computer
+> (`curl -X DELETE http://127.0.0.1:3090/manage/devices/<id>`) instead of hoping it is unreadable.
 
 ## Chat and task control
 
 - View authorized DSH sessions and live run state.
 - Stream assistant text and reasoning, then reconcile with server history on completion.
 - Render Markdown headings, lists, quotes, code blocks, and tables.
+- Render the assistant's `dsh-ui` interactive cards natively (card / table / list / button / option /
+  progress / timeline …); tapping a choice in a card is equivalent to sending it.
 - Send messages, steer a running task, or cancel it.
+- Send images and files; whether a send during a run queues or steers is chosen in Settings.
 - Follow DSH TODO progress and the currently active item.
 - Type `/` to browse and run host-provided slash commands.
 - Switch between Read only, Workspace write, and Full access permission modes.
 - Review redacted approval details and choose Allow once or Deny.
 - Select a model and reasoning effort. Empty sessions can also select an Agent before the first message.
+- Double-tap to copy a whole message, long-press to select a fragment, and tap links.
+- Files produced by the turn are listed at the end of the message stream; tap one to read it.
 
 ## Workspaces and sessions
 
@@ -341,6 +420,21 @@ Check the conversation for an approval panel. Operations that require permission
 
 Another process changed the server file. Reload, merge the desired content, and save again.
 
+## Known limitations
+
+**No on-device UI verification has been done: this environment has no usable Android device.** Behaviour
+is confirmed only at the unit-test level (169 cases / 0 failures) and in the build artifacts; the on-device
+rendering and gestures are unverified. Specifically unverified:
+
+- the boundary between long-press selection and double-tap copy — the conflict with scrolling
+  (a double-tap misfire while scrolling) needs a real device to judge;
+- layout quality and button hit areas for the 22 `dsh-ui` component types;
+- layout quality of the structured HTML preview (styling is discarded; only structure is kept).
+
+The interface layer (pairing, connection, sessions, files, plugin inventory) was exercised end to end
+against a local DSH WebUI during development; what is listed above is the **UI and gesture** side that has
+not been confirmed on real hardware.
+
 ## Build from source
 
 Use JDK 17 and Android SDK 36:
@@ -362,8 +456,12 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v1.0.0`
+- Version: `v1.9.0` (`versionCode` 10009)
 - Package: `io.github.hakunm.deepseekharness`
+- Unit tests: 169 cases / 0 failures
+- Release APK: `DeepSeek-Harness-companion-v1.9.0.apk`, 2,714,772 bytes,
+  SHA-256 `03007f1cbffb037a51e5e9b87ea0dce76c47dd8a700434fa1abb311544ec3942`
 - Author: [Github@Hakunm](https://github.com/Hakunm)
 - License: [GNU Affero General Public License v3.0](./LICENSE)
-- Server plugin: [dsh-workspace](https://github.com/Hakunm/dsh-workspace)
+- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.0.4**
+  (formerly [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace))
