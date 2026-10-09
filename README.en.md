@@ -461,7 +461,7 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 - Unit tests: 169 cases / 0 failures
 - Release APK: `DeepSeek-Harness-companion-v1.9.0.apk`, 2,714,772 bytes,
   SHA-256 `03007f1cbffb037a51e5e9b87ea0dce76c47dd8a700434fa1abb311544ec3942`
-- Author: [Github@Hakunm](https://github.com/Hakunm)
+- Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)
 - License: [GNU Affero General Public License v3.0](./LICENSE)
 - Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.0.4**
   (formerly [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace))
