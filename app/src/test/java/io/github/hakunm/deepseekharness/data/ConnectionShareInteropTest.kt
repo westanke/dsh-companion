@@ -54,10 +54,14 @@ class ConnectionShareInteropTest {
      * 令牌是脚本在本机自动创建配对码并立刻兑换来的。长度 419。
      */
     private val fixtureRealPairing =
-        "DSH1:eyJkaXNwbGF5TmFtZSI6IuWutumHjOeahOeUteiEkSIsImVuZHBvaW50cyI6W3sibGFiZWwiOiLlsYDln5_nvZHvvIhlbm8x77yJIiwiYmFzZVVybCI6Imh0dHA6Ly8xOTIuMTY4LjEuMTI2OjMwOTAifSx7ImxhYmVsIjoi6Jma5ouf572R77yIdXR1bjDvvIkiLCJiYXNlVXJsIjoiaHR0cDovLzEwMC42NC4yNTAuMTozMDkwIn1dLCJ0b2tlbiI6ImdHeVU4RzNOV1ZBQlNiQW02Sy1tVVFJMTd6SXBZYzlkcDNreVVSbE5ma1UiLCJkZXZpY2VOYW1lIjoiaW50ZXJvcC1maXh0dXJlLTEiLCJzY29wZXMiOlsiZmlsZXMucmVhZCIsImNoYXQucmVhZCJdfQ"
+        "DSH1:eyJkaXNwbGF5TmFtZSI6IuWutumHjOeahOeUteiEkSIsImVuZHBvaW50cyI6W3sibGFiZWwiOiLlsYDln5_nvZHvvIhlbm8x77yJIiwiYmFzZVVybCI6Imh0dHA6Ly8xOTIuMTY4LjEuMTI2OjMwOTAifSx7ImxhYmVsIjoi6Jma5ouf572R77yIdXR1bjDvvIkiLCJiYXNlVXJsIjoiaHR0cDovLzEwMC42NC4yNTAuMTozMDkwIn1dLCJ0b2tlbiI6IkZJWFRVUkUtTk9ULUEtUkVBTC1ERVZJQ0UtVE9LRU4wMDAwMDAwMDAwMDAiLCJkZXZpY2VOYW1lIjoiaW50ZXJvcC1maXh0dXJlLTEiLCJzY29wZXMiOlsiZmlsZXMucmVhZCIsImNoYXQucmVhZCJdfQ"
 
-    /** [fixtureRealPairing] 里那枚已经被吊销的设备令牌，用于断言字段映射。 */
-    private val fixtureRealToken = "gGyU8G3NWVABSbAm6K-mUQI17zIpYc9dp3kyURlNfkU"
+    /** 与 [fixtureRealPairing] 对应的**占位**令牌 —— 不是真令牌，只是同一形状（同为 43 字符）的夹具值。
+     *
+     * 原先这里嵌的是一枚真实设备令牌（虽已吊销），但仓库自己的 SECURITY.md 写着
+     * 「设备令牌不得进入文档或 Git」。测试校验的是字段映射与解码，不是令牌本身。
+     * 长度刻意保持 43 —— fixtureRealPairing 有 `assertEquals(419, …)` 的精确长度断言。 */
+    private val fixtureRealToken = "FIXTURE-NOT-A-REAL-DEVICE-TOKEN000000000000"
 
     /**
      * 无令牌、无 scopes 的最小档：
@@ -75,15 +79,15 @@ class ConnectionShareInteropTest {
      * 再在行首插入空格/制表符，并把前缀拆成 `DS H1:`）。这是真实粘贴链路的常态。
      */
     private val fixtureWechatMangled =
-        "DS H1:eyJkaXNwbGF5TmFtZSI6IuWutumHjOeahOe\n" +
+            "DS H1:eyJkaXNwbGF5TmFtZSI6IuWutumHjOeahOe\n" +
             "   UteiEkSIsImVuZHBvaW50cyI6W3sibGFiZWwiOiL\n" +
             "lsYDln5_nvZHvvIhlbm8x77yJIiwiYmFzZVVybCI\n" +
             "\t6Imh0dHA6Ly8xOTIuMTY4LjEuMTI2OjMwOTAifSx\n" +
             "7ImxhYmVsIjoi6Jma5ouf572R77yIdXR1bjDvvIk\n" +
             " iLCJiYXNlVXJsIjoiaHR0cDovLzEwMC42NC4yNTA\n" +
-            "uMTozMDkwIn1dLCJ0b2tlbiI6ImdHeVU4RzNOV1Z\n" +
-            "BQlNiQW02Sy1tVVFJMTd6SXBZYzlkcDNreVVSbE5\n" +
-            "ma1UiLCJkZXZpY2VOYW1lIjoiaW50ZXJvcC1maXh\n" +
+            "uMTozMDkwIn1dLCJ0b2tlbiI6IkZJWFRVUkUtTk9\n" +
+            "ULUEtUkVBTC1ERVZJQ0UtVE9LRU4wMDAwMDAwMDA\n" +
+            "wMDAiLCJkZXZpY2VOYW1lIjoiaW50ZXJvcC1maXh\n" +
             "0dXJlLTEiLCJzY29wZXMiOlsiZmlsZXMucmVhZCI\n" +
             "sImNoYXQucmVhZCJdfQ"
 
