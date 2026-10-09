@@ -1,5 +1,52 @@
 # 测试记录
 
+> **本文件分两段**：前半段是**本 fork**（v1.1.0 → v1.9.0）的记录；后半段「上游 v1.0.0 时期」起
+> 是上游 `Hakunm/dsh-android-app` 的历史，**原样保留**。后半段里出现的证书指纹 `A92938B3…` 与
+> 「4096 位 RSA」指的是**上游 `CN=Hakunm` 证书**；本 fork 自 v1.1.0 起改用独立证书
+> `CN=DSH Pocket Client`（RSA 2048，指纹 `4e7fa1db395c4a2436e7a96fcdf6c606e20a14bad55dfcd60c80892f4f92deb3`）。
+> 两者签名不同，**后半段的签名结论不能套用到本 fork 的产物上**。
+
+## 本 fork（v1.1.0 → v1.9.0）
+
+- **2026-10-09 `DOC-003` 资料清理**：`docsCheck` 通过（8 份文档 / 35 个任务一致）；
+  `:app:testDebugUnitTest --rerun-tasks` **169 用例 / 0 失败 / 0 跳过**（13 个测试类，其中新增
+  GenUiBlocksTest 21、HtmlPreviewTest 7、PreviewKindTest 6）；中英字符串键 291/291 对齐。
+  同时清理过期资料与历史 APK，并删除与实际不符的导航侧栏截图
+  （`app-navigation.jpg`：v1.2.0 起抽屉多出「插件」入口、底部多出当前地址，旧图已失真）。
+- **用例数演进**（以 `CHANGELOG-DEV.md` 各版本小节的记录为准）：
+
+  | 版本 | 全量用例 / 失败 |
+  | --- | --- |
+  | v1.9.0 | 169 / 0 |
+  | v1.7.0 | 156 / 0 |
+  | v1.5.0 | 151 / 0 |
+  | v1.4.0 | 135 / 0 |
+  | v1.3.0 | 112 / 0 |
+
+- **v1.9.0 产物**：`artifacts/DeepSeek-Harness-companion-v1.9.0.apk`，2,714,772 字节，SHA-256
+  `03007f1cbffb037a51e5e9b87ea0dce76c47dd8a700434fa1abb311544ec3942`；versionCode `10009`、
+  versionName `1.9.0`；APK Signature Scheme v2，唯一签名者 `CN=DSH Pocket Client`（RSA 2048）。
+  已从 GitHub Release 下载回验，字节数与哈希一致。
+- **未做真机 UI 验证**：本环境无可用 Android 设备；长按选中/双击复制的手势边界、dsh-ui 卡片
+  实际观感、会话文件预览分流都只过了逻辑测试与构建，需真机确认。
+
+必须通过：
+
+```bash
+# 本机实测命令（离线依赖缓存 + 镜像脚本）
+export JAVA_HOME=/media/wangke/OFFICE/workspace/android-toolchain/jdk17
+export ANDROID_HOME=/media/wangke/OFFICE/workspace/android-toolchain/sdk
+./gradlew :app:testDebugUnitTest -I init-mirrors.gradle
+# 若显示 UP-TO-DATE（等于没跑），加 --rerun-tasks 强制真跑
+```
+
+```powershell
+.\gradlew.bat docsCheck testDebugUnitTest lintDebug assembleRelease
+apksigner verify --verbose app\build\outputs\apk\release\app-release.apk
+```
+
+## 上游 v1.0.0 时期（2026-08-14/15）
+
 - 2026-08-15 README 六图复验：中英文 README 均引用 6 张存在的 JPG；新增图片与用户原始真机截图 SHA-256 一致，截图来源说明已删除。
 - 2026-08-15 最终发布刷新：Temurin 17 下 `docsCheck testDebugUnitTest lintDebug assembleRelease` 通过，8 份文档/31 个任务一致，lint、R8 Release 与专用签名门禁全部成功。正式 APK 为 2,561,512 字节，SHA-256 `80940602D79ACB68D5805122FEC4E6678F39ADEF02DEDAEE4DD7B4856CD7DBBE`。
 - 2026-08-15 README 图片复验：使用用户提供的 4 张真实手机截图展示导航、聊天、带行号/缩放的文本编辑器和模型供应商；连接地址已打码，未采用模拟器截图。Oracle 会话存储与工作区注册表均确认只保留 1 个本次发布演示会话。
@@ -7,21 +54,14 @@
 - 2026-08-15 README 发布复验：Temurin 17 下 `docsCheck testDebugUnitTest` 通过，8 份恢复文档/25 个任务一致；三张已入库 App 截图逐张检查，无设备令牌、API 密钥或服务器连接地址。
 - 2026-08-15 `CI-001`：首个 GitHub hosted run 暴露 Release 签名校验发生在 Gradle 配置阶段，导致无私钥的 `assembleDebug` 也失败。本地以不存在的 `dshSigningProperties` 复现后修复：`docsCheck testDebugUnitTest lintDebug assembleDebug` 通过；`assembleRelease --dry-run` 包含 `verifyDedicatedReleaseSigning -> packageRelease`，验证任务在缺少签名时以 `Dedicated signing config is required` 失败，且配置缓存可正常保存。修复提交的 [GitHub Actions run 31834143207](https://github.com/Hakunm/dsh-android-app/actions/runs/31834143207) 在 Ubuntu hosted runner 成功。
 
-必须通过：
-
-```powershell
-.\gradlew.bat docsCheck testDebugUnitTest lintDebug assembleRelease
-apksigner verify --verbose app\build\outputs\apk\release\app-release.apk
-```
-
-## 2026-08-15
+### 2026-08-15
 
 - 完整门禁 `docsCheck testDebugUnitTest lintDebug assembleRelease` 通过，8 份文档/22 个任务一致；Release APK 为 2,538,256 字节，SHA-256 `E9FD6DEBD8B5DAD094273E9EDEBB49BF551D73103941B28C77FDC0A153DD5C65`。`apksigner` 验证 APK v2、单一签名者、4096 位 RSA 正式证书，证书 SHA-256 仍为 `A92938B33F59D90993ADA96437F8A8DEF987A27353E46A018661DDC1587046B1`。
 - Android 15 尺寸设备覆盖安装后连接真实 Oracle 新版 listener：空白会话显示当前“工作区写入”权限选择器；输入 `/` 后列出 `compact/export/feedback/goal/permission` 等当前 host 命令，已知内置命令说明按 App 语言显示中文或英文，截图保存为 `.tmp/feature-permission-chat.png` 和 `.tmp/feature-slash-commands-localized.png`。当前服务器没有含 TODO 的运行，任务模块由 projection 单测覆盖，真实实时状态留待下一次产生 TODO 的任务。
 - `TODO-001`、`COMMAND-001`、`PERMISSION-001` 与 `BRAND-001` JVM/Lint 门禁通过：`testDebugUnitTest lintDebug` 成功；投影单测覆盖 TODO 状态与权限选项，MockWebServer 验证 `/chat/sessions/{id}/commands` 列举/执行路径和命令正文。Compose 编译与中英双语资源检查通过。
 - Oracle root `web` profile 已安装审批版插件并按用户明确要求重启；`3080` WebUI、`3090` listener、健康检查、审批 OpenAPI 和 Host bundle 哈希通过。旧待审批会话因重启结束，真实 App 允许一次/拒绝验收将使用新会话。
 
-## 2026-08-14
+### 2026-08-14
 
 - `APPROVAL-001` 门禁通过：DshClient 新增待审批读取和单次决定合约测试；`docsCheck testDebugUnitTest lintDebug assembleRelease` 全部成功，Release 已覆盖安装到 Android 15 测试设备。APK 为 2,510,044 字节，SHA-256 `C59D70F965A65EDAFDC847839E4E954111A736F6C77F1F85E63EA219F622F96B`。真实 Oracle 插件包因活动会话仍在等待审批而只暂存未重载，真实决定验收延后且没有替用户批准/拒绝。
 - `APPROVAL-001` 真实故障取证：Oracle DSH、`3080/3090` 和 Node 事件循环均健康；最新会话尾事件为 Bash `approval/asked`，请求把 Skill 安装到工作区外的 `/root/.dsh/skills` 并申请 `danger-full-access`。App 尚无审批 BFF/UI，因此只显示“运行中”且无后续正文。确认安装命令尚未执行、目标 Skill 目录不存在、DSH 下无安装子进程；服务器状态未修改。

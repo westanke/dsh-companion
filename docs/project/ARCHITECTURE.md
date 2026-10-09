@@ -12,6 +12,8 @@ Compose 表现层只消费 `HarnessState` 并调用既有 `HarnessViewModel` 动
 
 助手正文和展开后的思考文本通过 `multiplatform-markdown-renderer-m3` 渲染。聊天 WebSocket 的稳定 `chat.message.delta` 会按 `sessionId + turn + step + block index` 直接累积到 Compose 状态；助手完成事件只标记对应 step，REST 历史返回时原子替换该临时正文，避免闪烁或误清下一步输出。其他持久事件在 250 ms 后合并刷新，会话列表只在生命周期变化时刷新；`RATE_LIMITED` 保持待刷新并静默退避，不进入阻塞错误 UI。StateFlow 更新使用原子 `update`，防止高频 token 与 UI 操作互相覆盖。
 
+助手正文先按 `dsh-ui` 围栏切成「文字段 + 卡片段」：文字走 Markdown 渲染，围栏内容交给原生 dsh-ui 组件树（22 种组件），此前手机上只能看到一坨裸 JSON。四条切分约束都有具体原因：围栏**闭合后才切**（流式输出期间逐字到达，提前切会得到半截 JSON），只认**行首**围栏（正文中间的 ``` 是代码块），标记中**含有** `dsh-ui` 即可（```dsh-ui 与 ```json dsh-ui 两种写法都合法），空卡片不切；解析失败的卡片只影响自己那条，不吞掉整条消息，认不出的组件类型直接跳过而不是画空壳。会话文件预览按 `PreviewKind` 分流：Markdown 走渲染、HTML 走结构化抽取（**不使用 WebView** —— 那等于让一份不可信文件在手机上取得执行权）、其余按等宽源码。消息手势是「长按选中片段 + 双击复制整条」。设置页提供 dsh-ui 诊断开关（默认关），打开后逐条报告围栏识别 / JSON 解析 / 节点分发结果。
+
 Activity 使用 `adjustResize`，Connected `Scaffold` 在应用系统 padding 后消费已处理 inset；聊天 Column 只通过 `imePadding` 补剩余 IME 高度，避免键盘覆盖输入框和重复抬升。会话配置面板同时展示 Agent、模型和思考强度；Agent 仅在会话 `blank=true` 时可切换，首条消息后保持可见但禁用，与 DSH WebUI 和宿主 `agentPreset.select` 规则一致。
 
 历史响应中的 `projections.values.todos` 投影为紧凑、可折叠的当前任务模块；`projections.values.permissions` 驱动输入区权限选择器。App 只允许选择 DSH 当前提供的权限预设，完整访问需显式风险确认。会话打开时从版本化 BFF 读取 host 命令，输入 `/` 时按命令名筛选并补全；发送分支会识别斜杠命令并调用命令执行端点，绝不回退到普通消息接口。

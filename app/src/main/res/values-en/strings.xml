@@ -293,7 +293,7 @@
     <string name="session_file_detail">File details</string>
     <string name="session_file_outside_roots">This path is not inside any authorized root on the computer, or it is not a regular file, so the server refuses to resolve it and the phone cannot open it. Ask the agent to put it inside an authorized workspace directory.</string>
     <string name="session_file_failed">Could not open: %1$s</string>
-    <string name="session_file_plugin_too_old">The dsh-workspace plugin on the server is too old and does not provide the path-resolving endpoint yet. Upgrade it to a build that includes roots/resolve and restart DSH.</string>
+    <string name="session_file_plugin_too_old">The dsh-remote-bridge plugin on the server (formerly dsh-workspace) is too old and does not provide the path-resolving endpoint yet. Upgrade it to 2.0.4 or newer, then restart DSH.</string>
     <string name="session_file_directory">This is a directory. The Files tab has been switched to it, so you can browse the contents there.</string>
     <string name="session_file_too_large">The file is larger than 2 MiB, so it is not previewed in this panel.</string>
     <string name="session_file_binary">This file is not UTF-8 text, so it cannot be previewed.</string>
@@ -309,6 +309,6 @@
     <string name="attachment_image_too_large">The image is larger than %1$s and cannot be inlined. Compress or crop it first, or send it with “Send file”.</string>
     <string name="attachment_file_too_large">The file is larger than %1$s and cannot be uploaded as a message attachment.</string>
     <string name="attachment_file_rejected">The server rejected the file: it exceeds the server’s attachment size limit. Try a smaller file.</string>
-    <string name="attachment_upload_unsupported">The dsh-workspace plugin on the server is too old and does not provide the message-attachment upload endpoint yet. Upgrade it to a build that supports chat/sessions/:id/attachments and restart DSH.</string>
+    <string name="attachment_upload_unsupported">The dsh-remote-bridge plugin on the server (formerly dsh-workspace) is too old and does not provide the message-attachment upload endpoint yet. Upgrade it to 2.0.4 or newer, then restart DSH.</string>
     <string name="attachment_read_failed">Could not read the selected file. Try another one.</string>
 </resources>

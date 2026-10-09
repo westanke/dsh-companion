@@ -270,16 +270,18 @@ separately — their features shipped together in `v1.9.0`.
 
 ## Screenshots
 
+<!-- The navigation-drawer screenshot was removed: since v1.2.0 the drawer also lists
+     "Plugins" and shows the current endpoint underneath, so the old image no longer matched.
+     No Android device is available here to re-take it, so it is omitted rather than left wrong. -->
 <p align="center">
-  <img src="./assets/screenshots/app-navigation.jpg" width="47%" alt="App navigation drawer">
   <img src="./assets/screenshots/chat-demo.jpg" width="47%" alt="Chat and live responses">
-</p>
-<p align="center">
   <img src="./assets/screenshots/file-browser.jpg" width="47%" alt="Authorized-root file browser">
-  <img src="./assets/screenshots/file-editor.jpg" width="47%" alt="Text editor with line numbers and zoom">
 </p>
 <p align="center">
+  <img src="./assets/screenshots/file-editor.jpg" width="47%" alt="Text editor with line numbers and zoom">
   <img src="./assets/screenshots/workspace-create.jpg" width="47%" alt="Create a workspace and start a session">
+</p>
+<p align="center">
   <img src="./assets/screenshots/model-providers.jpg" width="47%" alt="Model provider settings">
 </p>
 
