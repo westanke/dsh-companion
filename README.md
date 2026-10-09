@@ -451,7 +451,7 @@ keyPassword=...
 - 单元测试：169 用例 / 0 失败
 - 正式 APK：`DeepSeek-Harness-companion-v1.9.0.apk`，2,714,772 字节，
   SHA-256 `03007f1cbffb037a51e5e9b87ea0dce76c47dd8a700434fa1abb311544ec3942`
-- 作者：[Github@Hakunm](https://github.com/Hakunm)
+- 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)
 - 许可证：[GNU Affero General Public License v3.0](./LICENSE)
 - 服务端插件：[dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.0.4**
   （旧名 [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace)）
