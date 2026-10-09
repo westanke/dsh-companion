@@ -222,7 +222,10 @@ scripts/build.sh :app:testDebugUnitTest   # 单元测试
 
 ## 下载与安装
 
-从本仓库的 [GitHub Releases](https://github.com/westanke/dsh-companion/releases/latest) 下载：
+从本仓库的 Releases 下载（两站内容相同，任选其一）：
+
+- GitHub：<https://github.com/westanke/dsh-companion/releases/latest>
+- Gitee（国内访问更快）：<https://gitee.com/westanke/dsh-companion/releases/latest>
 
 ```text
 DeepSeek-Harness-companion-v1.9.0.apk
@@ -454,5 +457,5 @@ keyPassword=...
   SHA-256 `03007f1cbffb037a51e5e9b87ea0dce76c47dd8a700434fa1abb311544ec3942`
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)
 - 许可证：[GNU Affero General Public License v3.0](./LICENSE)
-- 服务端插件：[dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.0.4**
+- 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.0.4**
   （旧名 [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace)）

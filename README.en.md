@@ -244,7 +244,10 @@ scripts/build.sh :app:testDebugUnitTest     # unit tests
 
 ## Download and install
 
-Download from this repository's [GitHub Releases](https://github.com/westanke/dsh-companion/releases/latest):
+Download from this repository's Releases (both hosts carry the same file — pick either):
+
+- GitHub: <https://github.com/westanke/dsh-companion/releases/latest>
+- Gitee (faster from mainland China): <https://gitee.com/westanke/dsh-companion/releases/latest>
 
 ```text
 DeepSeek-Harness-companion-v1.9.0.apk
