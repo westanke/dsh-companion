@@ -51,6 +51,7 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -250,6 +251,31 @@ fun SettingsScreen(state: HarnessState, viewModel: HarnessViewModel) {
             )
             Text(
                 stringResource(R.string.busy_send_mode_subtitle),
+                modifier = Modifier.padding(top = 4.dp, bottom = 28.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
+
+            // dsh-ui 诊断开关。放在「关于」正上方，因为它服务的正是「关于版本」那一类问题：
+            // 用户报「卡片没出来」时，让他自己打开就能拿到证据，不必等我们出新包。
+            // 默认关 —— 诊断行是灰字噪音，不该打扰正常使用。
+            SettingsHeading(stringResource(R.string.gen_ui_debug_heading))
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(R.string.gen_ui_debug_title), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        stringResource(R.string.gen_ui_debug_desc),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Switch(checked = state.genUiDebug, onCheckedChange = viewModel::setGenUiDebug)
+            }
+            Text(
+                stringResource(R.string.gen_ui_debug_footnote),
                 modifier = Modifier.padding(top = 4.dp, bottom = 28.dp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall,

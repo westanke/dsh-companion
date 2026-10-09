@@ -1,1 +1,1 @@
-61eec0f64ce534f636edccc3edb4379cccb54bd49af1c8055e017f50c6d5bf5b  artifacts/DeepSeek-Harness-companion-v1.4.0.apk
+03007f1cbffb037a51e5e9b87ea0dce76c47dd8a700434fa1abb311544ec3942  artifacts/DeepSeek-Harness-companion-v1.9.0.apk

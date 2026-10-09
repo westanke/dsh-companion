@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -61,6 +62,8 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.AttachFile
@@ -160,6 +163,15 @@ import io.github.hakunm.deepseekharness.data.ModelSelection
 import io.github.hakunm.deepseekharness.data.ModelView
 import io.github.hakunm.deepseekharness.data.PendingApproval
 import io.github.hakunm.deepseekharness.data.PermissionSelect
+import io.github.hakunm.deepseekharness.data.MessageSegment
+import io.github.hakunm.deepseekharness.data.parseGenUi
+import io.github.hakunm.deepseekharness.data.splitMessageBody
+import io.github.hakunm.deepseekharness.data.GenUiDiagnosis
+import io.github.hakunm.deepseekharness.data.diagnoseGenUi
+import io.github.hakunm.deepseekharness.data.PreviewKind
+import io.github.hakunm.deepseekharness.data.previewKind
+import io.github.hakunm.deepseekharness.data.HtmlBlock
+import io.github.hakunm.deepseekharness.data.extractHtmlBlocks
 import io.github.hakunm.deepseekharness.data.ResolvedPath
 import io.github.hakunm.deepseekharness.data.SessionFileRef
 import io.github.hakunm.deepseekharness.data.SessionFileRefs
@@ -379,7 +391,15 @@ private fun ChatDetail(
         }
         return
     }
-    var message by remember(selected.id) { mutableStateOf("") }
+    // 输入框内容存在 ViewModel 而不是本地 state：发送失败时要把原文还回来，
+    // 而「失败」这个事只有 ViewModel 知道。本地 remember 一旦被 message = "" 清掉就找不回了。
+    var message by remember(selected.id) { mutableStateOf(state.pendingText) }
+    // 发送失败时 ViewModel 会把原文写回 pendingText，这里跟着回填输入框。
+    // 用 LaunchedEffect 而不是把 message 直接绑成 state.pendingText：
+    // 后者会让用户正在输入的字被发送成功后的清空覆盖掉，敲一半的字会凭空蒸发。
+    LaunchedEffect(state.pendingText) {
+        if (state.pendingText.isNotBlank()) message = state.pendingText
+    }
     var modelSheet by remember(selected.id) { mutableStateOf(false) }
     var filesSheet by remember(selected.id) { mutableStateOf(false) }
     var tasksExpanded by rememberSaveable(selected.id) { mutableStateOf(true) }
@@ -425,7 +445,15 @@ private fun ChatDetail(
     val liveItems = state.liveChat?.takeIf { it.sessionId == selected.id }?.displayItems().orEmpty()
     val displayItems = state.history?.displayItems().orEmpty() + liveItems
     val todos = state.history?.todoItems().orEmpty()
+    // 只取**最后一次运行之后**的文件：新回复还在流式输出时（liveChat != null）不显示，
+    // 否则文件列表会随着每个工具调用闪一下 —— 那正是网页版「会话结束后才出现」的由来。
+    val sessionFiles = remember(state.history, state.liveChat) {
+        if (state.liveChat != null) emptyList()
+        else SessionFileRefs.refs(state.history?.events.orEmpty())
+    }
     val listState = rememberLazyListState()
+    // 复制手势提示只需出现一次：记住它被关掉，而不是每次进会话都啰嗦一遍。
+    var copyHintDismissed by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(displayItems.size, state.liveChat?.revision) {
         if (displayItems.isNotEmpty()) {
             if (liveItems.isNotEmpty()) listState.scrollToItem(displayItems.lastIndex)
@@ -445,6 +473,34 @@ private fun ChatDetail(
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
+            // 复制手势提示。
+            //
+            // 为什么需要它：长按既用来「选中片段」又曾经被用来「复制整条」，
+            // 两个手势互相抢，用户既选不了也猜不出怎么复制。改成双击复制之后，
+            // 行为从旧版换掉了，不说一声用户会以为功能没了 —— 所以明确写在最上面。
+            if (displayItems.isNotEmpty() && !copyHintDismissed) {
+                item(key = "copy-hint") {
+                    Row(
+                        Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            stringResource(R.string.copy_hint),
+                            modifier = Modifier.weight(1f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        Text(
+                            stringResource(R.string.copy_hint_dismiss),
+                            modifier = Modifier
+                                .combinedClickable(onClick = { copyHintDismissed = true })
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
+            }
             if (state.history?.hasMore == true) {
                 item {
                     TextButton(onClick = viewModel::loadOlderHistory, modifier = Modifier.fillMaxWidth()) {
@@ -467,7 +523,22 @@ private fun ChatDetail(
                     images = state.attachmentImages,
                     failures = state.attachmentFailures,
                     onLoadImage = viewModel::loadAttachmentImage,
+                    // 卡片里的选择按钮等价于用户在输入框打了一行字再发送：
+                    // 走同一条 send 通道，模型看到的就是一条普通的 user 消息。
+                    onAnswer = { answer -> viewModel.sendMessage(answer, steer = false) },
+                    genUiDebug = state.genUiDebug,
                 )
+            }
+            // 消息流末尾的「本次产生的文件」。
+            //
+            // 网页版是这个形态：会话结束后，文件直接列在对话下方，不必点任何入口。
+            // App 原先只有一个文件夹图标按钮挂在顶栏，用户得先知道它存在 ——
+            // 于是「功能其实有，但用户找不到」。这里补上自动呈现的那一份，
+            // 顶栏按钮保留（大屏下翻历史时仍然好用），两者不冲突。
+            if (state.liveChat == null && sessionFiles.isNotEmpty()) {
+                item(key = "session-files-footer") {
+                    SessionFilesFooter(sessionFiles, viewModel::openSessionFile)
+                }
             }
         }
         when (val approvals = state.approvalState) {
@@ -632,6 +703,67 @@ private fun SessionFileList(state: HarnessState, onOpen: (String) -> Unit) {
     }
 }
 
+/**
+ * 消息流末尾的「本次产生的文件」区块。
+ *
+ * 形态对齐网页版：会话结束后，文件直接出现在对话下方，不需要用户去找入口。
+ * 顶栏那个文件夹按钮保留 —— 翻历史消息时它更省事，两者不重复。
+ *
+ * 默认折叠：文件多的时候（实测单会话能提取出 30 个路径）铺满一屏会把对话顶没，
+ * 但完全不出现又等于没做，所以折叠 + 显示条数，让用户自己决定看不看。
+ */
+@Composable
+private fun SessionFilesFooter(refs: List<SessionFileRef>, onOpen: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 14.dp, bottom = 6.dp),
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.medium)
+                .clickable { expanded = !expanded }
+                .padding(vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                Icons.Outlined.FolderOpen,
+                contentDescription = null,
+                modifier = Modifier.size(17.dp),
+                tint = MaterialTheme.colorScheme.secondary,
+            )
+            Text(
+                stringResource(R.string.session_files_footer),
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                refs.size.toString(),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Icon(
+                if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                contentDescription = null,
+                modifier = Modifier.size(19.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (expanded) {
+            Text(
+                stringResource(R.string.session_files_footer_hint),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 3.dp),
+            )
+            refs.forEach { ref -> SessionFileRow(ref) { onOpen(ref.path) } }
+        }
+    }
+}
+
 @Composable
 private fun SessionFileRow(ref: SessionFileRef, onClick: () -> Unit) {
     Row(
@@ -745,6 +877,9 @@ private fun SessionFileDetail(open: SessionFileOpen, onBack: () -> Unit) {
 
             else -> {
                 resolved?.let { SessionFileMeta(it) }
+                val kind = remember(open.requestedPath, resolved?.contentType, preview) {
+                    previewKind(open.requestedPath, resolved?.contentType)
+                }
                 Box(
                     Modifier
                         .fillMaxWidth()
@@ -752,12 +887,26 @@ private fun SessionFileDetail(open: SessionFileOpen, onBack: () -> Unit) {
                         .heightIn(max = 400.dp)
                         .verticalScroll(rememberScrollState()),
                 ) {
-                    SelectionContainer {
-                        Text(
-                            preview,
-                            fontFamily = FontFamily.Monospace,
-                            style = MaterialTheme.typography.bodySmall,
+                    // 按文件类型选渲染方式。原先不分类型、一律当等宽源码画，
+                    // 于是 .md 的标题与粗体、.html 的满屏尖括号全都原样显示 ——
+                    // 用户看到的是源码而不是文件。Markdown 直接交给 Markdown()，
+                    // HTML 走结构化抽取（**不**用 WebView：那等于让一份不可信文件拿到执行权）。
+                    when (kind) {
+                        PreviewKind.MARKDOWN -> Markdown(
+                            content = preview,
+                            typography = compactMarkdownTypography(),
+                            modifier = Modifier.fillMaxWidth(),
                         )
+
+                        PreviewKind.HTML -> HtmlStructurePreview(preview)
+
+                        else -> SelectionContainer {
+                            Text(
+                                preview,
+                                fontFamily = FontFamily.Monospace,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                     }
                 }
                 Text(
@@ -772,9 +921,91 @@ private fun SessionFileDetail(open: SessionFileOpen, onBack: () -> Unit) {
     }
 }
 
+/**
+ * HTML 预览：把抽出来的结构画成原生控件。
+ *
+ * 刻意不画表格 —— HTML 表格的 colspan/嵌套结构要正确排版得写一个真的排版器，
+ * 而为了预览一份文件不值得。把表格行降级成段落，至少内容不丢。
+ */
 @Composable
-private fun SessionFileMeta(resolved: ResolvedPath) {
-    val size = resolved.size?.let(::formatFileSize)
+private fun HtmlStructurePreview(source: String) {
+    val blocks = remember(source) { extractHtmlBlocks(source) }
+    if (blocks.isEmpty()) {
+        Text(
+            source,
+            fontFamily = FontFamily.Monospace,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        return
+    }
+    SelectionContainer {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            blocks.forEach { block ->
+                when (block.kind) {
+                    HtmlBlock.Kind.HEADING -> Text(
+                        block.text,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+
+                    HtmlBlock.Kind.LIST_ITEM -> Row {
+                        Text("· ", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            block.text,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+
+                    HtmlBlock.Kind.QUOTE -> Row(Modifier.height(IntrinsicSize.Min)) {
+                        Box(
+                            Modifier
+                                .width(2.dp)
+                                .fillMaxHeight()
+                                .background(MaterialTheme.colorScheme.outlineVariant),
+                        )
+                        Text(
+                            block.text,
+                            modifier = Modifier.padding(start = 8.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+
+                    HtmlBlock.Kind.CODE -> Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        shape = MaterialTheme.shapes.small,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            block.text,
+                            modifier = Modifier.padding(8.dp),
+                            fontFamily = FontFamily.Monospace,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+
+                    HtmlBlock.Kind.LINK -> Text(
+                        buildString {
+                            append(block.text)
+                            block.href?.let { append("  ").append(it) }
+                        },
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+
+                    HtmlBlock.Kind.PARAGRAPH -> Text(
+                        block.text,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SessionFileMeta(resolved: ResolvedPath) {    val size = resolved.size?.let(::formatFileSize)
     val parts = listOfNotNull(resolved.contentType, size)
     if (parts.isEmpty()) return
     Text(
@@ -1521,18 +1752,21 @@ private fun permissionIcon(value: String?): ImageVector = when (value) {
 private fun ChatItem(
     item: ChatDisplayItem,
     images: Map<String, ByteArray> = emptyMap(),
-    failures: Set<String> = emptySet(),
+    failures: Map<String, String> = emptyMap(),
     onLoadImage: (String) -> Unit = {},
+    onAnswer: (String) -> Unit = {},
+    genUiDebug: Boolean = false,
 ) {
     val context = LocalContext.current
-    // 长按复制。
+    // 复制全文的手势。
     //
-    // 为什么不只依赖 SelectionContainer：它在手机上要长按进入选择模式、再拖手柄选范围，
-    // 在滚动的消息流里很难用，而且用户根本不知道该这么操作（他的原话就是「会话内容无法复制」）。
-    // 这里额外给一个**一键复制全文**的手势；SelectionContainer 保留，两者互为补充：
-    // 想复制片段就选中，想复制整条就长按。
+    // 为什么是**双击**而不是长按：早期版本给整条消息挂 `combinedClickable(onLongClick = …)`，
+    // 结果长按事件被它吃掉，`SelectionContainer` 的选择手柄永远弹不出来 ——
+    // 用户只能整段复制，想复制中间一句做不到（他的原话：「不能选择性复制，只能复制整段」）。
     //
-    // 只对非空正文挂手势：工具调用那类没有正文的行长按了也没有意义，不该有反馈。
+    // 关键在 Compose 的手势竞争：`combinedClickable` 会**消费**长按事件，子节点里的
+    // `SelectionContainer` 再也收不到，手柄就不出现。把长按让出去、改用双击之后，
+    // 选择与复制两个手势各归各的，互不干扰。
     val copyable = item.body.isNotBlank()
     Box(
         Modifier
@@ -1541,7 +1775,8 @@ private fun ChatItem(
                 if (copyable) {
                     Modifier.combinedClickable(
                         onClick = {},
-                        onLongClick = {
+                        // 双击：命中窗口比单击短得多，但比长按安全 —— 长按要留给选择。
+                        onDoubleClick = {
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             clipboard.setPrimaryClip(ClipData.newPlainText("message", item.body))
                             toast(context, context.getString(R.string.copied))
@@ -1576,13 +1811,117 @@ private fun ChatItem(
                 MessageAttachments(item.attachments, images, failures, onLoadImage)
             }
         }
-        ChatItemKind.ASSISTANT -> Markdown(
-            content = item.body,
-            typography = compactMarkdownTypography(),
-            modifier = Modifier.fillMaxWidth().widthIn(max = 720.dp).padding(horizontal = 2.dp, vertical = 2.dp),
+        ChatItemKind.ASSISTANT -> AssistantBody(
+            body = item.body,
+            streaming = item.streaming,
+            onAnswer = onAnswer,
+            genUiDebug = genUiDebug,
         )
         else -> ActivityRow(item)
     }
+    }
+}
+
+/**
+ * 助手正文：**文字走 Markdown，卡片走原生组件**。
+ *
+ * 为什么不能让整段都交给 Markdown：dsh-ui 围栏会被当成普通代码块，
+ * 用户看到的是一坨裸 JSON —— 这正是「网页版弹的问题，手机上弹不出来」的根因。
+ *
+ * 两个退化路径都刻意保留：
+ * - 围栏**未闭合**（流式输出中）→ 整段按 Markdown 渲染，等闭合了再切；
+ * - 围栏**JSON 坏了** → 该段回落成代码块，而不是让整条消息消失。
+ * 用户宁可看到原始内容，也不要看到空白。
+ */
+@Composable
+private fun AssistantBody(
+    body: String,
+    streaming: Boolean,
+    onAnswer: (String) -> Unit,
+    genUiDebug: Boolean,
+) {
+    val segments = remember(body) { splitMessageBody(body) }
+    // 诊断必须独立于渲染分支算：只有这样才能暴露「解析器说成功、屏幕上却没有卡片」这类不一致。
+    val diagnosis = remember(body, genUiDebug) { if (genUiDebug) diagnoseGenUi(body) else null }
+    val plain = segments.all { it is MessageSegment.Prose }
+    if (plain) {
+        Column {
+            Markdown(
+                content = body,
+                typography = compactMarkdownTypography(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 720.dp)
+                    .padding(horizontal = 2.dp, vertical = 2.dp),
+            )
+            diagnosis?.let { GenUiDebugLine(it) }
+        }
+        return
+    }
+    Column(
+        modifier = Modifier.fillMaxWidth().widthIn(max = 720.dp).padding(horizontal = 2.dp, vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        segments.forEach { segment ->
+            when (segment) {
+                is MessageSegment.Prose -> Markdown(
+                    content = segment.text,
+                    typography = compactMarkdownTypography(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
+                is MessageSegment.Ui -> {
+                    val spec = remember(segment.json) { parseGenUi(segment.json) }
+                    if (spec == null) {
+                        // 解析失败不吞内容：回落成代码块，用户至少还能看到原文。
+                        Markdown(
+                            content = "```json\n${segment.json}\n```",
+                            typography = compactMarkdownTypography(),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    } else {
+                        GenUiCard(spec = spec, onAnswer = onAnswer)
+                    }
+                }
+            }
+        }
+        diagnosis?.let { GenUiDebugLine(it) }
+    }
+}
+
+/**
+ * dsh-ui 诊断行。
+ *
+ * 点一下在「摘要 / 全文」之间切换：一行灰字塞不下全部信息，但用户截图发回来就够了，
+ * 所以摘要页也必须能展开 —— 否则最关键的那句报错会被截断掉，等于白测。
+ */
+@Composable
+private fun GenUiDebugLine(diagnosis: GenUiDiagnosis) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 4.dp)
+            .combinedClickable(onClick = { expanded = !expanded }, onLongClick = {
+                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("genui-debug", diagnosis.details))
+                toast(context, context.getString(R.string.copied))
+            }),
+    ) {
+        Text(
+            diagnosis.summary,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall,
+        )
+        if (expanded) {
+            Text(
+                diagnosis.details,
+                modifier = Modifier.padding(top = 2.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
     }
 }
 
@@ -1599,7 +1938,7 @@ private fun ChatItem(
 private fun MessageAttachments(
     attachments: List<ChatAttachment>,
     images: Map<String, ByteArray>,
-    failures: Set<String>,
+    failures: Map<String, String>,
     onLoadImage: (String) -> Unit,
 ) {
     if (attachments.isEmpty()) return
@@ -1632,7 +1971,7 @@ private fun MessageAttachments(
                 }
 
                 attachment.attachmentId in failures ->
-                    AttachmentNotice(stringResource(R.string.attachment_unavailable))
+                    AttachmentNotice(failures[attachment.attachmentId] ?: stringResource(R.string.attachment_unavailable))
 
                 else -> Box(
                     Modifier

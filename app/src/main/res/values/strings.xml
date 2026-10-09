@@ -31,11 +31,18 @@
     <string name="link_relative_path">这是相对路径，无法定位文件。可以到「本会话的文件」列表里打开</string>
     <string name="link_anchor_unsupported">页内跳转暂不支持</string>
     <string name="link_scheme_unsupported">这类链接暂不支持打开</string>
-    <!-- 长按消息 -->
+    <!-- 消息复制：长按留给「选择片段」，整条复制改用双击 -->
     <string name="copy_message">复制全文</string>
     <string name="copied">已复制</string>
+    <string name="copy_hint">长按可选中复制片段，双击复制整条</string>
+    <string name="copy_hint_dismiss">知道了</string>
     <!-- 会话里的图片附件 -->
     <string name="attachment_unavailable">图片已不可用（可能已被清理）</string>
+    <!-- 取图失败必须说清是哪一类：授权过期、缺 files.read、附件真的没了，各要用户做不同的事 -->
+    <string name="attachment_fail_auth">授权已过期，去设置页重新配对一次</string>
+    <string name="attachment_fail_scope">这个设备没有读取附件的授权（缺 files.read），请重新配对并勾选该权限</string>
+    <string name="attachment_fail_missing">附件已不在服务器上了（可能已被清理）</string>
+    <string name="attachment_fail_other">取图失败：%1$s</string>
     <string name="attachment_undecodable">这张图片无法显示</string>
     <!-- 智能体运行时，发送键旁标出「回车会做什么」 -->
     <string name="send_mode_queue">回车=排队</string>
@@ -266,6 +273,20 @@
     <!-- 会话里提到的文件 -->
     <string name="session_files">本会话的文件</string>
     <string name="session_files_subtitle">会话里出现过、又能定位到的文件。只列服务器绝对路径；命令里的路径与相对路径不参与解析，宁可少列也不猜错。</string>
+    <string name="session_files_footer">本次产生的文件</string>
+    <string name="session_files_footer_hint">点一条即可查看内容</string>
+
+    <!-- 发送失败：必须说人话，并把原文还给用户 -->
+    <string name="send_failed_restore">消息没发出去，内容已放回输入框。原因：%1$s</string>
+    <string name="send_failed_auth">授权失效了，去设置页重新配对一次</string>
+    <string name="send_failed_too_large">内容太大（图不超过 8 MiB，文件不超过 24 MiB）</string>
+    <string name="send_failed_body">服务端不认这条消息的内容格式，通常是插件版本太旧</string>
+
+    <!-- dsh-ui 诊断：卡片没渲染出来时，用户自己就能拿到证据 -->
+    <string name="gen_ui_debug_heading">调试</string>
+    <string name="gen_ui_debug_title">dsh-ui 卡片诊断</string>
+    <string name="gen_ui_debug_desc">打开后，每条助手消息下方会多一行小灰字，说明卡片为什么没渲染成组件。</string>
+    <string name="gen_ui_debug_footnote">点那行灰字可展开全文，长按可复制。看到「⚠」或「见到围栏但未识别」，截图发反馈即可。</string>
     <string name="session_files_empty">本会话还没有提到可打开的文件路径。</string>
     <string name="session_files_partial">只扫描了已加载的消息；更早的内容请先点「加载更早消息」。</string>
     <string name="session_file_count">%1$d 次</string>

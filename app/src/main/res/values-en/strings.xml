@@ -31,11 +31,18 @@
     <string name="link_relative_path">This is a relative path, so the file cannot be located. Open it from the session files list instead</string>
     <string name="link_anchor_unsupported">In-page anchors are not supported yet</string>
     <string name="link_scheme_unsupported">This kind of link cannot be opened yet</string>
-    <!-- Long-press a message -->
+    <!-- Copying: long-press is reserved for selecting a fragment, double-tap copies the whole message -->
     <string name="copy_message">Copy text</string>
     <string name="copied">Copied</string>
+    <string name="copy_hint">Long-press to select a fragment; double-tap to copy the whole message</string>
+    <string name="copy_hint_dismiss">Got it</string>
     <!-- Image attachments in a session -->
     <string name="attachment_unavailable">Image unavailable (it may have been cleaned up)</string>
+    <!-- Distinguish the failure kinds: expired auth, missing files.read, attachment really gone -->
+    <string name="attachment_fail_auth">Authorisation expired — pair again from the settings screen</string>
+    <string name="attachment_fail_scope">This device is not allowed to read attachments (missing files.read); pair again and grant that scope</string>
+    <string name="attachment_fail_missing">The attachment is no longer on the server (it may have been cleaned up)</string>
+    <string name="attachment_fail_other">Could not load the image: %1$s</string>
     <string name="attachment_undecodable">This image cannot be displayed</string>
     <!-- Shown next to the send key while the agent is running -->
     <string name="send_mode_queue">Enter=queue</string>
@@ -266,6 +273,20 @@
     <!-- Files mentioned in the conversation -->
     <string name="session_files">Files in this session</string>
     <string name="session_files_subtitle">Files this session mentioned and that can be located. Only server-side absolute paths are listed; paths inside commands and relative paths are not parsed — better to list too few than to guess wrong.</string>
+    <string name="session_files_footer">Files produced</string>
+    <string name="session_files_footer_hint">Tap one to view its contents</string>
+
+    <!-- Send failures: speak plainly, and give the text back to the user -->
+    <string name="send_failed_restore">Message not sent; its content was put back in the composer. Reason: %1$s</string>
+    <string name="send_failed_auth">The authorisation expired — pair again from the settings screen</string>
+    <string name="send_failed_too_large">Content too large (images up to 8 MiB, files up to 24 MiB)</string>
+    <string name="send_failed_body">The server rejected this message format; the plugin is usually too old</string>
+
+    <!-- dsh-ui diagnostics: lets the user produce evidence when a card fails to render -->
+    <string name="gen_ui_debug_heading">Debug</string>
+    <string name="gen_ui_debug_title">dsh-ui card diagnostics</string>
+    <string name="gen_ui_debug_desc">When on, each assistant message gets a small grey line explaining why a card did not render as a component.</string>
+    <string name="gen_ui_debug_footnote">Tap the grey line to expand it, long-press to copy. If you see a warning sign or “fences seen but not recognised”, send a screenshot.</string>
     <string name="session_files_empty">This session has not mentioned any openable file path yet.</string>
     <string name="session_files_partial">Only the loaded messages were scanned; tap “Load older messages” first to cover earlier ones.</string>
     <string name="session_file_count">%1$d×</string>

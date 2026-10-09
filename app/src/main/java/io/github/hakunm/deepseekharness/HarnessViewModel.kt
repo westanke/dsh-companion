@@ -178,6 +178,15 @@ data class HarnessState(
      * 早期实现用 [busy] 去禁用发送按钮，结果是任何一次后台刷新都会让用户发不出消息。
      */
     val busySendMode: BusySendMode = BusySendMode.QUEUE,
+    /** dsh-ui 诊断行开关，默认关；见 [AppPreferences.genUiDebug]。 */
+    val genUiDebug: Boolean = false,
+    /**
+     * 发送中的输入框原文；发送成功后清空，失败时保留以便还回输入框。
+     *
+     * 为什么需要它：输入框是本地 UI 状态，发请求在协程里，两者对不上时
+     * 「用户刚打的字」就凭空消失了 —— 而用户没有任何办法找回。
+     */
+    val pendingText: String = "",
     /**
      * 已取回的会话图片附件字节，键是 `attachmentId`。
      *
@@ -186,10 +195,14 @@ data class HarnessState(
      */
     val attachmentImages: Map<String, ByteArray> = emptyMap(),
     /**
-     * 取图失败的 id。刻意记住失败而不是反复重试：附件有生命周期（可能已过期或被清理），
-     * 每次重组都重试只会持续打服务端，而界面上的结果不会变好。
+     * 取图失败的 id，值是**人类可读的原因**而不是裸 id。
+     *
+     * 刻意带原因：早期版本只有一个 `Set<String>`，界面上写死一句「图片已不可用
+     * （可能已被清理）」。于是 404（附件真没了）、403（缺 files.read 授权）、
+     * 401（授权失效）、解码失败在屏幕上长得一模一样 —— 用户看到「可能已被清理」，
+     * 我也只能照着猜。带上原因之后，截图发回来就是答案。
      */
-    val attachmentFailures: Set<String> = emptySet(),
+    val attachmentFailures: Map<String, String> = emptyMap(),
     /**
      * 待发附件条。发送时与文本一起组装成 content 数组，发送成功（或用户在输入区点删除）
      * 之后才消失。
@@ -212,6 +225,15 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
     private val preferences = AppPreferences(application)
     /** 正在下载中的附件 id。界面每次组合都会调 loadAttachmentImage，靠它去重。 */
     private val pendingAttachments = mutableSetOf<String>()
+
+    /**
+     * 因**授权**失败的附件 id：允许重试。
+     *
+     * 与 [HarnessState.attachmentFailures] 分开，是因为「记住失败」和「允许重试」
+     * 两件事不能共用一个容器 —— 把「可重试」写进界面文案前缀会漏到用户眼前，
+     * 而塞进 map 的 value 里又要靠字符串嗅探，迟早出错。这里显式分一份集合。
+     */
+    private val retryableAttachmentFailures = mutableSetOf<String>()
     private val mutableState = MutableStateFlow(HarnessState(busySendMode = preferences.busySendMode))
     val state: StateFlow<HarnessState> = mutableState.asStateFlow()
 
@@ -728,18 +750,46 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
             attachments.forEach { add(it.part) }
         }
         if (parts.isEmpty()) return
-        update { copy(pendingAttachments = emptyList()) }
+        // 清空在这里做，但**原文记在局部变量里**：失败时才写回 [HarnessState.pendingText]。
+        // 写成「提交时就存进 state」的话，UI 监听 pendingText 会把刚提交的正文立刻塞回输入框，
+        // 用户看着就像"发了又没发" —— 比吞字还糟。
+        //
+        // 早先的版本只把附件还回去，文字直接吞了 —— 用户打了一长串字、发失败、
+        // 输入框空了，一个字都找不回来。附件能还而文字不能，本身就不讲道理。
+        update { copy(pendingAttachments = emptyList(), pendingText = "") }
         launchOperation {
             try {
                 api.sendMessage(id, parts, steer)
             } catch (failure: Throwable) {
                 if (failure is CancellationException) throw failure
-                // 没发出去就把附件放回输入区；清空后又新加的条目按 id 去重，不重复。
-                update { copy(pendingAttachments = (attachments + pendingAttachments).distinctBy { it.id }) }
+                // 把附件与文字都放回输入区；期间新加的条目按 id 去重，不重复。
+                update {
+                    copy(
+                        pendingAttachments = (attachments + pendingAttachments).distinctBy { it.id },
+                        pendingText = text,
+                    )
+                }
+                notify(appString(R.string.send_failed_restore, describeSendFailure(failure)))
                 throw failure
             }
             chatSessionRefreshPending = true
             scheduleChatRefresh()
+        }
+    }
+
+    /**
+     * 把发送失败翻译成一句用户看得懂的话。
+     *
+     * 直接把 `BODY_INVALID: text is required.` 甩到屏幕上，用户能做的只有 staring。
+     * 这里至少指明「是消息没发出去」以及大概的原因方向，剩下的交给下一步排查。
+     */
+    private fun describeSendFailure(failure: Throwable): String {
+        val raw = messageOf(failure)
+        return when {
+            raw.contains("401") || raw.contains("TOKEN") -> appString(R.string.send_failed_auth)
+            raw.contains("413") || raw.contains("too large") -> appString(R.string.send_failed_too_large)
+            raw.contains("BODY_INVALID") -> appString(R.string.send_failed_body)
+            else -> raw
         }
     }
 
@@ -880,26 +930,80 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         update { copy(busySendMode = mode) }
     }
 
+    /** 开关 dsh-ui 诊断行；立刻生效，不需要重启。 */
+    fun setGenUiDebug(enabled: Boolean) {
+        preferences.genUiDebug = enabled
+        update { copy(genUiDebug = enabled) }
+    }
+
     /**
      * 按需取回一张会话图片。
      *
      * 幂等且可反复调用（界面在组合时直接调它）：已缓存的直接返回，正在取的会被
-     * [pendingAttachments] 挡住，取失败的记进 [HarnessState.attachmentFailures] 不再重试。
-     * 这三条合起来保证「一次会话里每张图最多下载一次」。
+     * [pendingAttachments] 挡住，取失败的连同**原因**记进 [HarnessState.attachmentFailures]
+     * 不再重试。前两条保证「一次会话里每张图最多下载一次」；记原因是因为「不再重试」
+     * 只在原因稳定时才是对的 —— 而授权过期是能被恢复的，界面提示得告诉用户去做什么。
      */
     fun loadAttachmentImage(attachmentId: String) {
         if (attachmentId.isBlank()) return
         val api = client ?: return
         val current = mutableState.value
         if (current.attachmentImages.containsKey(attachmentId)) return
-        if (attachmentId in current.attachmentFailures) return
+        // 授权类失败**不永久记住**：用户重新配对之后图就该能显示，
+        // 而记住失败会让它永远停在「不可用」，除非重启 App。附件真的没了（404）才记死。
+        if (attachmentId in current.attachmentFailures && attachmentId !in retryableAttachmentFailures) return
         if (!pendingAttachments.add(attachmentId)) return
         viewModelScope.launch {
             val outcome = runCatching { withContext(Dispatchers.IO) { api.readAttachment(attachmentId) } }
             pendingAttachments.remove(attachmentId)
             outcome
-                .onSuccess { bytes -> update { copy(attachmentImages = attachmentImages + (attachmentId to bytes)) } }
-                .onFailure { update { copy(attachmentFailures = attachmentFailures + attachmentId) } }
+                .onSuccess { bytes ->
+                    update {
+                        copy(
+                            attachmentImages = attachmentImages + (attachmentId to bytes),
+                            attachmentFailures = attachmentFailures - attachmentId,
+                        )
+                    }
+                    retryableAttachmentFailures.remove(attachmentId)
+                }
+                .onFailure { failure ->
+                    val reason = describeAttachmentFailure(failure)
+                    val retryable = failure.isRetryableAttachmentFailure()
+                    if (retryable) retryableAttachmentFailures.add(attachmentId)
+                    update { copy(attachmentFailures = attachmentFailures + (attachmentId to reason)) }
+                }
+        }
+    }
+
+    /**
+     * 这类失败在重新配对后可能自愈，因此允许重试。
+     *
+     * 判据是**病因**而不是错误码：401/403 是授权状态问题，换一次配对就好了；
+     * 404 是服务端确实没有这份字节，再试一百次也一样。
+     */
+    private fun Throwable.isRetryableAttachmentFailure(): Boolean {
+        val raw = messageOf(this)
+        return raw.contains("401") || raw.contains("403") || raw.contains("TOKEN") ||
+            raw.contains("SCOPE") || raw.contains("FORBIDDEN")
+    }
+
+    /**
+     * 把取图失败翻译成一句能照做的提示。
+     *
+     * 这几个分支对应四类完全不同的病因，用户该做的事也不同：
+     * 401 是授权过期（去重新配对）、403 是缺 `files.read` 授权、404 是附件真不在了、
+     * 其余多半是网络或解码。把它们混成一句「可能已被清理」，用户只会去清缓存 ——
+     * 而缓存不是原因。
+     */
+    private fun describeAttachmentFailure(failure: Throwable): String {
+        val raw = messageOf(failure)
+        return when {
+            raw.contains("401") || raw.contains("TOKEN") -> appString(R.string.attachment_fail_auth)
+            raw.contains("403") || raw.contains("SCOPE") || raw.contains("FORBIDDEN") ->
+                appString(R.string.attachment_fail_scope)
+
+            raw.contains("404") || raw.contains("NOT_FOUND") -> appString(R.string.attachment_fail_missing)
+            else -> appString(R.string.attachment_fail_other, raw)
         }
     }
 

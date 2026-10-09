@@ -24,8 +24,20 @@ class AppPreferences(context: Context) {
             ?: BusySendMode.QUEUE
         set(value) = preferences.edit { putString(KEY_BUSY_SEND_MODE, value.name) }
 
+    /**
+     * dsh-ui 诊断开关：**默认关**。
+     *
+     * 打开后每条助手消息下方显示一行灰字，逐项报告围栏识别 / JSON 解析 / 节点分发的结果。
+     * 存在的理由很直接：这条链路上没有实机可验证，而「没渲染」和「渲染了但空白」
+     * 在屏幕上长得一模一样，靠猜改代码等于掷骰子。有了这行字，用户截图发回来就是完整现场。
+     */
+    var genUiDebug: Boolean
+        get() = preferences.getBoolean(KEY_GEN_UI_DEBUG, false)
+        set(value) = preferences.edit { putBoolean(KEY_GEN_UI_DEBUG, value) }
+
     private companion object {
         const val PREFERENCES_NAME = "dsh_settings"
         const val KEY_BUSY_SEND_MODE = "busy_send_mode"
+        const val KEY_GEN_UI_DEBUG = "gen_ui_debug"
     }
 }

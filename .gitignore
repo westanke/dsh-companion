@@ -18,3 +18,8 @@ signing.properties
 
 # Local build-environment backups (mirror rewrites), not part of the change
 *.orig
+
+# Machine-local mirror init script (repo-root copy only).
+# 仓库里跟项目走的版本是 scripts/init-mirrors.gradle，那份照常提交；
+# 这一行只忽略根目录那份本机专用脚本（用前导斜杠锚定在仓库根，不波及 scripts/）。
+/init-mirrors.gradle
