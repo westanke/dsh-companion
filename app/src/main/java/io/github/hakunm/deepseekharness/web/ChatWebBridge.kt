@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import io.github.hakunm.deepseekharness.R
 import android.content.Intent
 import android.net.Uri
 import android.provider.MediaStore
@@ -84,13 +85,14 @@ class ChatWebBridge(
         val id = "r" + counter.incrementAndGet()
         val conn = viewModel.activeConnection()
 
+        // 这两句是给用户看的，所以走资源：中文界面中文、英文界面英文。
         if (conn == null) {
-            finish(id, 0, errorBody("NO_CONNECTION", "尚未连接任何电脑，请先在会话列表选择一台电脑"))
+            finish(id, 0, errorBody("NO_CONNECTION", appContext.getString(R.string.web_no_connection)))
             return id
         }
         val token = conn.host.credential?.secret
         if (token.isNullOrBlank()) {
-            finish(id, 0, errorBody("NO_TOKEN", "这台电脑还没有设备令牌，请重新配对"))
+            finish(id, 0, errorBody("NO_TOKEN", appContext.getString(R.string.web_no_token)))
             return id
         }
 

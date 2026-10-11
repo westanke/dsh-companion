@@ -47,6 +47,8 @@
     <string name="attachment_fail_auth">Authorisation expired — pair again from the settings screen</string>
     <string name="attachment_fail_scope">This device is not allowed to read attachments (missing files.read); pair again and grant that scope</string>
     <string name="attachment_fail_missing">The attachment is no longer on the server (it may have been cleaned up)</string>
+    <!-- Handoff image (text-only model): the path is outside every authorised root -->
+    <string name="attachment_fail_outside_roots">The image is not inside an authorised root (it may have been moved or deleted)</string>
     <string name="attachment_fail_other">Could not load the image: %1$s</string>
     <string name="attachment_undecodable">This image cannot be displayed</string>
     <!-- Shown next to the send key while the agent is running -->
@@ -368,4 +370,48 @@
     <string name="tool_detail_no_args">This tool took no arguments</string>
     <string name="tool_detail_no_result">No result yet</string>
     <string name="tool_detail_empty_result">Empty result</string>
+
+    <!-- Error text, localized by error code (see data/ErrorMessages.kt).
+         The messages the server and the kernel hand us are English; these are what people read.
+         They say what to do next, not just what went wrong. -->
+    <string name="err_auth_required">Your sign-in has expired — pair this device again</string>
+    <string name="err_pairing_invalid">That pairing code is wrong or has expired</string>
+    <string name="err_device_not_found">This device is no longer listed on that machine</string>
+    <string name="err_root_unusable">That authorized folder is unusable — it may have been moved or renamed</string>
+    <string name="err_scope_missing">This device doesn\'t have the permission for that action</string>
+    <string name="err_admin_loopback">Admin settings can only be changed on the machine itself</string>
+    <string name="err_settings_read_only">Settings are read-only right now</string>
+    <string name="err_path_outside_root">That path is outside every authorized folder</string>
+    <string name="err_path_missing">That path no longer exists — it may have been deleted</string>
+    <string name="err_path_wrong_kind">Wrong kind of path — a file and a folder got mixed up</string>
+    <string name="err_path_exists">Something with that name already exists</string>
+    <string name="err_path_invalid">That path is not valid</string>
+    <string name="err_file_changed">The file changed elsewhere — reload and try again</string>
+    <string name="err_session_missing">That conversation no longer exists</string>
+    <string name="err_workspace_missing">That workspace no longer exists</string>
+    <string name="err_workspace_outside_root">That workspace is outside the authorized folders</string>
+    <string name="err_title_invalid">That name is not valid</string>
+    <string name="err_message_empty">Nothing to send yet</string>
+    <string name="err_command">That command did not run</string>
+    <string name="err_approval_stale">That approval is no longer pending</string>
+    <string name="err_question_unavailable">That question can\'t be answered right now</string>
+    <string name="err_rate_limited">Too many requests — wait a moment and try again</string>
+    <string name="err_paging">Bad paging parameters — refresh the list</string>
+    <string name="err_model_unavailable">That model is unavailable — it may not support the current reasoning effort, or it isn\'t configured</string>
+    <string name="err_model_no_images">The current model can\'t see images</string>
+    <string name="err_model_invalid">That model selection is not valid</string>
+    <string name="err_provider">The provider setup is incomplete — check URL, key and models</string>
+    <string name="err_agent_preset">That agent preset is unavailable</string>
+    <string name="err_listener_invalid">That listen address or port is not valid</string>
+    <string name="err_listener_pending">A listener change is still in progress — wait a moment</string>
+    <string name="err_remote_enabled">Turn off remote access before changing this</string>
+    <string name="err_signed_out">Signed out of DeepSeek — this turn stopped here</string>
+    <string name="err_request_generic">That action didn\'t complete (%1$s)</string>
+    <string name="turn_failed_title">This turn failed</string>
+    <string name="turn_stopped_title">Stopped</string>
+
+    <!-- Both shown on the WebView chat page and returned to it as bridge error details. -->
+    <string name="web_no_connection">Not connected to a machine yet — pick one in the conversation list and this page follows</string>
+    <string name="web_no_token">This machine has no device token yet — pair it again</string>
+    <string name="web_read_only_scope">This device lacks chat.write permission, so it can only view</string>
 </resources>

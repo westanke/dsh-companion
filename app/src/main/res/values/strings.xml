@@ -47,6 +47,8 @@
     <string name="attachment_fail_auth">授权已过期，去设置页重新配对一次</string>
     <string name="attachment_fail_scope">这个设备没有读取附件的授权（缺 files.read），请重新配对并勾选该权限</string>
     <string name="attachment_fail_missing">附件已不在服务器上了（可能已被清理）</string>
+    <!-- 交接图片（纯文本模型发图落进工作区 .dsh-images/ 的那份）：路径不在授权根内 → 读不到 -->
+    <string name="attachment_fail_outside_roots">图片不在已授权的目录里（可能被移动或删除了）</string>
     <string name="attachment_fail_other">取图失败：%1$s</string>
     <string name="attachment_undecodable">这张图片无法显示</string>
     <!-- 智能体运行时，发送键旁标出「回车会做什么」 -->
@@ -365,4 +367,47 @@
     <string name="tool_detail_no_args">这个工具没有参数</string>
     <string name="tool_detail_no_result">还没有结果</string>
     <string name="tool_detail_empty_result">结果为空</string>
+
+    <!-- 出错文案：按错误码本地化（data/ErrorMessages.kt）。
+         服务端与内核给的原文都是英文，这些才是给人看的。写「该怎么办」，不只是「哪错了」。 -->
+    <string name="err_auth_required">登录状态已失效，请重新配对这台设备</string>
+    <string name="err_pairing_invalid">配对码不对，或者已经过期了</string>
+    <string name="err_device_not_found">这台设备已经不在这台电脑的列表里了</string>
+    <string name="err_root_unusable">这个授权目录用不了了（可能被移走或改过名）</string>
+    <string name="err_scope_missing">这台设备的权限不够，做不了这个操作</string>
+    <string name="err_admin_loopback">管理设置只能在电脑本机上改</string>
+    <string name="err_settings_read_only">设置当前是只读的</string>
+    <string name="err_path_outside_root">这个路径不在任何已授权的目录里</string>
+    <string name="err_path_missing">找不到这个路径，可能已经被删了</string>
+    <string name="err_path_wrong_kind">路径类型不对（文件与目录弄反了）</string>
+    <string name="err_path_exists">同名文件已经存在了</string>
+    <string name="err_path_invalid">这个路径不合法</string>
+    <string name="err_file_changed">文件在别处被改过，重新加载再试</string>
+    <string name="err_session_missing">找不到这个会话</string>
+    <string name="err_workspace_missing">找不到这个工作区</string>
+    <string name="err_workspace_outside_root">这个工作区不在已授权的目录里</string>
+    <string name="err_title_invalid">这个名字不合法</string>
+    <string name="err_message_empty">还没输入内容</string>
+    <string name="err_command">这个命令没能执行</string>
+    <string name="err_approval_stale">这个审批已经失效了</string>
+    <string name="err_question_unavailable">这个问题现在答不了</string>
+    <string name="err_rate_limited">请求太频繁，稍等一会儿再试</string>
+    <string name="err_paging">翻页参数不对，刷新一下列表</string>
+    <string name="err_model_unavailable">这个模型现在用不了（可能不支持当前的推理强度，或者没配置好）</string>
+    <string name="err_model_no_images">当前模型看不到图片</string>
+    <string name="err_model_invalid">这个模型选择不合法</string>
+    <string name="err_provider">供应商配置不完整（检查地址、密钥、模型）</string>
+    <string name="err_agent_preset">这个 Agent 预设不可用</string>
+    <string name="err_listener_invalid">监听地址或端口不合法</string>
+    <string name="err_listener_pending">监听设置正在变更，稍等一下</string>
+    <string name="err_remote_enabled">要先关掉远程访问才能改这个</string>
+    <string name="err_signed_out">已经退出 DeepSeek 登录，这一轮就停在这里了</string>
+    <string name="err_request_generic">操作没能完成（%1$s）</string>
+    <string name="turn_failed_title">本轮运行失败</string>
+    <string name="turn_stopped_title">任务已停止</string>
+
+    <!-- WebView 聊天页的两条前置提示：既在页面上显示，也作为桥的错误详情回给页面。 -->
+    <string name="web_no_connection">还没连上电脑 —— 请先在会话列表里选一台，选好本页会自动接着读</string>
+    <string name="web_no_token">这台电脑还没有设备令牌，请重新配对</string>
+    <string name="web_read_only_scope">这台设备没有 chat.write 权限，只能查看</string>
 </resources>

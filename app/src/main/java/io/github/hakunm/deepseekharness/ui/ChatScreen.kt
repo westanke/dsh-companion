@@ -150,6 +150,8 @@ import io.github.hakunm.deepseekharness.R
 import io.github.hakunm.deepseekharness.SessionFileOpen
 import io.github.hakunm.deepseekharness.data.ChatContentParts
 import io.github.hakunm.deepseekharness.data.ChatAttachment
+import io.github.hakunm.deepseekharness.data.ChatTurnFailure
+import io.github.hakunm.deepseekharness.data.localizedErrorRes
 import io.github.hakunm.deepseekharness.data.ChatDisplayItem
 import io.github.hakunm.deepseekharness.data.ChatItemKind
 import io.github.hakunm.deepseekharness.data.ToolCallDetail
@@ -2334,6 +2336,8 @@ private fun ChatItem(
             onAnswer = onAnswer,
             genUiDebug = genUiDebug,
         )
+        // 终局失败：宁可多一个分支，也不要让这条消息落进 else 变成一行空的活动行。
+        ChatItemKind.FAILURE -> item.failure?.let { TurnFailureRow(it) }
         else -> ActivityRow(item)
     }
     }
@@ -2509,6 +2513,87 @@ private fun AttachmentNotice(message: String) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         style = MaterialTheme.typography.labelSmall,
     )
+}
+
+/**
+ * 一轮模型运行的终局失败行。
+ *
+ * 为什么单独一个 Composable 而不是塞进 [ActivityRow]：失败必须有**自己的颜色和图标**，
+ * 而且不能被"折叠成一行摘要" —— 用户要的就是那句"为什么失败了"。
+ * 以前它压根不到客户端：插件把 `turn/end` 的 reason 整段丢掉，客户端收到的
+ * 与"正常跑完"一模一样，于是转圈等到天荒地老。
+ *
+ * 三行信息各自有用，缺一行就得靠猜：
+ * - 标题：「本轮运行失败」/「任务已停止」（后者是登出，不是模型故障）；
+ * - 正文：服务端的原话（429 限流那句话就在这里）；
+ * - 错误码：`code`（可能为空串，空也占位，免得行高忽高忽低）。
+ */
+@Composable
+private fun TurnFailureRow(failure: ChatTurnFailure) {
+    val context = LocalContext.current
+    // 出错文案跟随界面语言：命中错误码就用本地化句子；命不中才退回内核给的原文
+    //（英文，但至少是信息，也方便贴给开发者）。**标题与正文都不再写死在 data 层**——
+    // 以前那里写死中文，英文界面下照样弹中文。
+    // 错误码本身照常显示：它不随语言变，是给排查用的锚点。
+    val headline = stringResource(failure.titleRes)
+    val localizedRes = localizedErrorRes(failure.code)
+    val detail = when {
+        localizedRes == null -> failure.message
+        // 兜底那条要带上错误码，否则「操作没能完成」等于没说。
+        localizedRes == R.string.err_request_generic -> context.getString(localizedRes, failure.code.orEmpty())
+        else -> stringResource(localizedRes)
+    }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 4.dp)
+            // 长按复制整条：把 request id 带给电脑端排查是唯一有效的手段。
+            .combinedClickable(
+                onClick = {},
+                onLongClick = {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(
+                        ClipData.newPlainText(
+                            "turn-failure",
+                            listOfNotNull(headline, detail.ifBlank { null }, failure.code).joinToString("\n"),
+                        ),
+                    )
+                    toast(context, context.getString(R.string.copied))
+                },
+            ),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Outlined.WarningAmber,
+                null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.error,
+            )
+            Text(
+                headline,
+                modifier = Modifier.padding(start = 7.dp),
+                color = MaterialTheme.colorScheme.error,
+                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            if (!failure.code.isNullOrEmpty()) {
+                Text(
+                    failure.code,
+                    modifier = Modifier.padding(start = 6.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+        }
+        if (detail.isNotBlank()) {
+            Text(
+                detail,
+                modifier = Modifier.padding(top = 2.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
 }
 
 @Composable

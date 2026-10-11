@@ -6,11 +6,21 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// 签名配置有三处候选，按顺序取第一个真实存在的：
+//   ① `-PdshSigningProperties=<路径>`（CI / 临时指定）；
+//   ② 本仓库内的 `.secrets/deepseek-harness-android/` —— **实测默认就该找到这个**。
+//      早先这里只写 `../.secrets/...`（仓库外），而实际配置在**仓库内**，
+//      于是那次出包必须显式传 -P 才过 verifyDedicatedReleaseSigning，白折腾一轮；
+//   ③ 仓库外的 `.secrets/`（多项目共享签名时用，保留兼容）。
+// 三处都在 `.gitignore` 内（规则 `*.jks` 与 `signing.properties`），不会误提交。
 val signingFile = providers.gradleProperty("dshSigningProperties").orNull
     ?.let(::file)
-    ?: rootProject.file("../.secrets/deepseek-harness-android/signing.properties")
+    ?: sequenceOf(
+        rootProject.file(".secrets/deepseek-harness-android/signing.properties"),
+        rootProject.file("../.secrets/deepseek-harness-android/signing.properties"),
+    ).firstOrNull { it.isFile }
 val signingValues = Properties().apply {
-    signingFile.takeIf { it.isFile }?.inputStream()?.use(::load)
+    signingFile?.takeIf { it.isFile }?.inputStream()?.use(::load)
 }
 val hasDedicatedSigning = signingValues.isNotEmpty()
 
@@ -430,8 +440,37 @@ android {
         //   · `chat.userQuestions/answered` / `dismissed` → **就地摘掉那张卡**，
         //     电脑端答完后手机端不必等下一次 GET 才消失。
         //   · `PendingQuestionSet` 新增 `viaBridge`（默认 false，兼容老服务端）。
-        versionCode = 10048
-        versionName = "2.2.23"
+        // 2.2.24 = 接住 `chat.turn.failed`：**模型失败不再让客户端傻等**。
+        //   此前限流(429)/配额/密钥失效这些终局失败完全到不了手机 —— 插件把
+        //   turn/end 的 reason 整段丢掉，客户端收到的与「正常跑完」一模一样，
+        //   于是转圈等到天荒地老（用户原话：「要不然客户端一直在傻傻的等」）。
+        //   插件现为失败多发一帧 chat.turn.failed，本版三件事：
+        //   ① 事件层：`markSessionStopped()` **本地立即**把会话置为不在运行
+        //      （服务端标记与该帧到达之间有几百毫秒空档，期间停止按钮还亮着）；
+        //      同时 notify() 弹出服务端原话、清流式缓冲、拉历史、撤挂起的提问卡。
+        //   ② 数据层：新增 `ChatItemKind.FAILURE` + `ChatTurnFailure`；
+        //      实时帧 `chatTurnFailure()` 与历史帧 `turnEndItem()` **两条路都渲染** ——
+        //      失败后用户往往先退出再进会话，实时帧只到一次，历史是唯一能留住它的地方。
+        //   ③ 渲染层：原生 `TurnFailureRow`（红标题 + 错误码 + 原话，**不折叠**，
+        //      长按复制整条好把 request id 带去排查）；WebView 页同步做。
+        //   三个刻意取舍：不翻译 message（本地化按官方 failureMessage() 划分）；
+        //   max-tokens 不算失败（那是「回答被截断」，官方渲染成黄色警示）；
+        //   登出停止单独标 stopped、标题用「任务已停止」。
+        //   注意 429 的 code 是**空串**，客户端按空串保留而非当缺失。
+        // 2.2.25 = 纯文本模型发的图，手机端也**看得见**（用户原话：
+        //   「看，人类如何看懂，把图片显示出来就好了，给一堆路径」，并指路
+        //   「你已接入了官方的图片显示方法，只需要把那个图片的路径读出来」）。
+        //   上一版解决的是「机器能不能读到图」：插件把图落进工作区 `.dsh-images/`，
+        //   消息里追加两行说明（人话 + `[Image: source: /绝对路径]`）。
+        //   本版补人这一半，全在客户端：
+        //   ① 展示层只对**用户消息**解析那两行：按行摘掉说明，换成一个可显示附件
+        //      （注入的上下文正文里也常引用路径，一个字都不动）；
+        //   ② 取字节走官方那条现成通路 `resolvePath` → `readFile(rootId, path)`，
+        //      与文件页预览同一个端点、同一份 `files.read` 授权，没为图片另开口子；
+        //   ③ 渲染复用现有附件管线（缩略图 + 失败原因），新增一条
+        //      「图片不在已授权的目录里」的中英文案。
+        versionCode = 10051
+        versionName = "2.2.26"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }

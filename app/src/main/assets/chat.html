@@ -64,6 +64,15 @@ td,th{max-width:0;word-break:break-word}
 .act .caret{transition:transform .15s;flex:0 0 auto;font-size:10px}
 .act[open] .caret{transform:rotate(90deg)}
 .act .body{margin-top:6px;white-space:pre-wrap;word-break:break-word;color:var(--fg)}
+/* ── 一轮运行的终局失败 ──
+   以前这一行压根到不了手机端：插件把 turn/end 的 reason 整段丢掉，
+   客户端收到的与「正常跑完」一模一样 —— 于是转圈转到天荒地老。
+   所以它必须显眼：红色、带图标、标题加粗，并且**不能折叠**。 */
+.fail{border-left:3px solid var(--danger);background:rgba(192,57,43,.08);
+  border-radius:0 10px 10px 0;padding:9px 11px;margin:8px 0 12px;font-size:13.5px}
+.fail .hd{display:flex;gap:7px;align-items:center;font-weight:700;color:var(--danger)}
+.fail .code{color:var(--muted);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;font-weight:400}
+.fail .msg{margin-top:5px;white-space:pre-wrap;word-break:break-word;color:var(--fg);line-height:1.55}
 /* ── 工具调用组 ──
    组头一行（动作摘要，如「运行了代码，修改了文件」），组内每条也只占一行；
    完整参数与结果要点开单条才显示。这样几十次调用也只占一个块。
@@ -953,6 +962,71 @@ function addAct(label, text) {
   return d;
 }
 
+/* 从一条历史 `turn/end` 事件里解出失败；不是失败就返回 null。
+ *
+ * 与原生 ChatPresentation.turnEndItem 同一判据：只认 reason.kind === 'error'
+ * 与「登出导致的 aborted」两种。max-tokens 刻意排除 —— 内核把它渲染成
+ * 黄色警示（"回答被截断，已有输出保留在对话中"），那不是失败，
+ * 报成红框会让用户以为白跑了一轮。 */
+function turnFailureFrom(ev) {
+  var d = evData(ev);
+  var r = (d && typeof d === "object" && d.reason) || null;
+  if (!r || typeof r !== "object") return null;
+  if (r.kind === "error") {
+    var e = r.error;
+    if (!e || typeof e !== "object") return { message: String(e || "本轮运行失败"), code: null, stopped: false };
+    return {
+      message: typeof e.message === "string" ? e.message : JSON.stringify(e),
+      /* code 可能是空串 —— 保留空串，不当成缺失 */
+      code: typeof e.code === "string" ? e.code : null,
+      stopped: false,
+    };
+  }
+  var inner = r.reason;
+  if (r.kind === "aborted" && inner && inner.kind === "hook" && inner.reason === "deepseek-account/signed-out") {
+    return { message: "任务已因退出 DeepSeek 登录而停止。", code: "ACCOUNT_SIGNED_OUT", stopped: true };
+  }
+  return null;
+}
+
+/* ── 一轮运行的终局失败（限流 429 / 配额 / 密钥 / 登出停止） ──
+ *
+ * 为什么它值得一个专属渲染函数而不是塞进 addAct：用户被"傻等"坑过，
+ * 失败行必须是这条会话里**最显眼**的东西。红色边框、加粗标题、不折叠。
+ *
+ * 三行信息各有分工（与原生 TurnFailureRow 同一口径）：
+ *   .hd  = 标题（「本轮运行失败」/「任务已停止」）+ 错误码；
+ *   .msg = 服务端原话。429 限流那句话就躺在这儿，request id 也在这儿，
+ *          用户截图发回来就是唯一能排查现场的凭据。
+ */
+function addTurnFailure(f) {
+  if (!f) return null;
+  dropEmpty();
+  var d = document.createElement("div");
+  d.className = "fail";
+  var hd = document.createElement("div");
+  hd.className = "hd";
+  hd.textContent = f.stopped ? "任务已停止" : "本轮运行失败";
+  d.appendChild(hd);
+  /* code 可能是空串（免费额度限流就是）—— 空也要占位，
+     否则行高忽高忽低，看起来像渲染出错。 */
+  if (f.code != null) {
+    var c = document.createElement("span");
+    c.className = "code";
+    c.textContent = f.code;
+    hd.appendChild(c);
+  }
+  if (f.message) {
+    var m = document.createElement("div");
+    m.className = "msg";
+    m.textContent = f.message;
+    d.appendChild(m);
+  }
+  sink().appendChild(d);
+  toBottom(true);
+  return d;
+}
+
 /* 系统注入的上下文该挂什么名头。
  *
  * 这些事件的 source.kind 是分类依据：runtime-context 是每轮都塞进来的运行快照，
@@ -1488,6 +1562,13 @@ function renderHistory(hist) {
       return;
     } else if (ev.type === "context/injected" || ev.type === "context") {
       if (showContext) addIfText(function (t) { addAct("上下文注入", t); }, d);
+    } else if (ev.type === "turn/end") {
+      /* 终局失败：reason.kind === 'error'（或登出导致的 aborted）。
+         判据与原生 ChatPresentation.turnEndItem、插件 turnFailureOf 三处一致 ——
+         任何一处放宽，用户就会在没失败时看到红框；任何一处收紧，失败又被咽掉。
+         max-tokens 不在这里：那是"回答被截断"，按普通收尾处理。 */
+      var f = turnFailureFrom(ev);
+      if (f) { flushThink(); flushTools(); addTurnFailure(f); }
     }
   });
 
@@ -1597,6 +1678,25 @@ function connectWS() {
       case "chat.turn.end":
         refreshQuestions();
         break;
+      /* 终局失败：限流 429 / 配额 / 密钥 / 登出停止。
+         插件为失败发的**就是**这一帧（chat.turn.end 那一帧在失败时不发），
+         所以必须先于一切收尾逻辑处理它。
+
+         三件事，缺一件就还是"傻等"：
+           ① 立刻把运行标志关掉 —— 停止按钮亮着、占位符写「运行中…」，
+             用户看着就以为还在跑；
+           ② 当场把红框画进对话流，不用等一次网络往返才看见；
+           ③ 再拉一次历史兜底。这一趟看着与②重复，但它有两个②替不了的作用：
+             把流式半截文字清掉（renderHistory 整块重画），以及万一有的服务端
+             不把失败帧落盘，红框仍能靠实时帧留住。代价是重绘时闪一帧，可接受。 */
+      case "chat.turn.failed": {
+        setRunning(false);
+        clearPend();
+        if (d && d.failure) addTurnFailure(d.failure);
+        refreshQuestions();
+        refreshHistory();
+        break;
+      }
       case "chat.approval.requested":
       case "chat.approval.resolved":
         refreshApprovals();
