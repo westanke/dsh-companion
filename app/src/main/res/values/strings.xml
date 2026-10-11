@@ -87,6 +87,15 @@
     <string name="file_too_large">文件过大，移动编辑器仅打开不超过 2 MiB 的文本。</string>
     <string name="etag_conflict">文件已被其他程序修改，请刷新后重新编辑。</string>
     <string name="binary_file">该文件不是 UTF-8 文本，可下载或替换，但不能直接编辑。</string>
+    <string name="preview_loading">加载中…</string>
+    <string name="preview_image_failed">无法解码这张图片（可能是 HEIC / AVIF，或文件已损坏）。</string>
+    <string name="preview_pdf_failed">无法打开这个 PDF（文件已损坏，或者根本不是 PDF）。</string>
+    <string name="preview_pdf_prev">上一页</string>
+    <string name="preview_pdf_next">下一页</string>
+    <string name="preview_pdf_page">第 %1$d / %2$d 页</string>
+    <string name="preview_pdf_page_limit">共 %1$d 页，只预览前 %2$d 页。</string>
+    <string name="preview_skipped_too_large">文件 %1$s，超过 %2$s 的上限，已跳过预览。</string>
+    <string name="preview_skipped_hint_download">可以下载后用其他应用打开。</string>
     <string name="replace_file">替换文件</string>
     <string name="back">返回</string>
     <string name="go_up">上一级</string>
@@ -121,6 +130,17 @@
     <string name="approval_command_preview">脱敏命令预览</string>
     <string name="reject">拒绝</string>
     <string name="allow_once">允许一次</string>
+    <!-- ask_user_question 问答卡（方案 A：只支持 continued 状态的问题） -->
+    <string name="question_waiting">需要你的回答</string>
+    <string name="question_answered">已回答</string>
+    <string name="question_count">共 %1$d 道题</string>
+    <string name="answer_your_own">填写你的回答</string>
+    <string name="answer_submitting">正在提交…</string>
+    <string name="submit_answer">提交回答</string>
+    <string name="answer_already_queued">这组问题你已经回答过了，答复正在排队</string>
+    <string name="answer_not_pending">这组问题已经不需要回答了</string>
+    <string name="answer_no_write">这台设备没有 chat.write 权限，无法提交回答</string>
+    <string name="answer_failed">提交失败：%1$s</string>
     <string name="full_access">请求完整系统访问权限</string>
     <string name="confirm_full_access">确认高风险操作</string>
     <string name="full_access_warning">此操作将脱离 DSH 沙箱运行，可能访问服务器上的文件、网络和进程。请先检查上方命令；App 不提供永久允许。</string>
@@ -333,4 +353,16 @@
     <string name="attachment_file_rejected">服务端拒绝了该文件：超过了服务器允许的附件大小。请换一个更小的文件。</string>
     <string name="attachment_upload_unsupported">服务端的 dsh-remote-bridge 插件（旧名 dsh-workspace）版本过旧，还没有提供消息附件上传接口。请在电脑上把插件升级到 2.0.4 或更高，然后重启 DSH。</string>
     <string name="attachment_read_failed">读取所选文件失败，请换一个再试。</string>
+
+    <!-- 工具调用详情：点开工具卡片后显示的输入 / 输出 -->
+    <string name="tool_detail_input">输入</string>
+    <string name="tool_detail_output">输出</string>
+    <string name="tool_detail_error">错误</string>
+    <string name="tool_detail_ok">成功</string>
+    <string name="tool_detail_failed">失败</string>
+    <string name="tool_detail_pending">运行中</string>
+    <string name="tool_detail_copy">复制</string>
+    <string name="tool_detail_no_args">这个工具没有参数</string>
+    <string name="tool_detail_no_result">还没有结果</string>
+    <string name="tool_detail_empty_result">结果为空</string>
 </resources>

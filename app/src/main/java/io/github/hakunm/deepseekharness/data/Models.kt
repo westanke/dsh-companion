@@ -97,6 +97,86 @@ data class PendingApproval(
     val requestedAt: Long,
 )
 
+/**
+ * `ask_user_question` 的问答模型（方案 A：**只支持 `continued` 状态**）。
+ *
+ * 为什么只做 continued：`open` 是内核的前台阻塞态 —— Agent 正卡在那里等答案，
+ * 远程客户端答不了，也不该假装答得了。`continued` 才是「问题问出来了、Agent 已经继续跑、
+ * 答复属于补交」的那一类，正好是手机上能补的。
+ *
+ * 字段几乎都给了默认值：插件对 questions 各项是**原样透传**，将来内核往选项里加字段
+ * 不该让老客户端整条解不出来（`DshClient` 的 Json 是 `ignoreUnknownKeys = true`）。
+ * `intent`（如 plan-review）刻意**不建模**：内核明确说它只影响呈现、永不改变协议，
+ * 所以命中与否都按普通选项渲染 —— 特判只会多出一个会过期的分支。
+ */
+@Serializable
+data class QuestionOption(
+    val label: String,
+    val description: String? = null,
+)
+
+@Serializable
+data class ChatQuestion(
+    /** 回传时必须**原样带回**的题目 id。 */
+    val id: String,
+    val question: String,
+    /** 短标题；可能缺席。 */
+    val header: String? = null,
+    /** 补充说明；可能缺席。 */
+    val detail: String? = null,
+    /** 可能缺席或为空 —— 空数组表示这题要自由文本（对应 [QuestionAnswer.custom]）。 */
+    val options: List<QuestionOption> = emptyList(),
+    /**
+     * 单选还是多选，由**提问方**声明。
+     *
+     * 缺省 false（单选）。UI 不许自己猜（比如「选项多就是多选」那种推断）——
+     * 猜错的后果是用户以为能多选、提交上去只剩一个。
+     */
+    val multiSelect: Boolean = false,
+)
+
+/** 一次 `ask_user_question` 调用留下的一组待答问题。 */
+@Serializable
+data class PendingQuestionSet(
+    val callId: String,
+    /** 目前只处理 [QUESTION_STATE_CONTINUED]；其余状态原样收下但不上卡片。 */
+    val state: String = "",
+    val questions: List<ChatQuestion> = emptyList(),
+    /**
+     * 这道题是不是**正阻塞着** agent 前台等待（插件侧由 QuestionBridge 接管）。
+     *
+     * 两种来源的语义不同，值得区分：
+     * - `viaBridge = true`：插件挂起了这次调用，**agent 正卡在这里等答案**。
+     *   在手机上作答，答案会作为那次工具调用的返回值送回去。
+     * - `viaBridge` 缺省（false）：内核那条「已超时、可迟到补交」的路
+     *   （`state = continued`），agent 已经往下干了，答复属于补交。
+     *
+     * 带默认值是因为它由**插件新加**（老服务端不返回它）——
+     * 严格解码器下缺键会让整条解不出来。
+     */
+    val viaBridge: Boolean = false,
+)
+
+/** 一道题的答案。 */
+@Serializable
+data class QuestionAnswer(
+    val id: String,
+    /** 选中的选项 label；没有选项的题填空数组。 */
+    val selected: List<String>,
+    /**
+     * 自由文本答案。刻意用**非空默认值** `""`：kotlinx 默认不编码等于默认值的字段，
+     * 于是「这题不填自由文本」时请求体里干脆没有 `custom` 这个键，
+     * 而不是发一个 `"custom": null` 让服务端去猜。
+     */
+    val custom: String = "",
+)
+
+@Serializable
+data class QuestionAnswerRequest(val answers: List<QuestionAnswer>)
+
+/** 唯一支持远程回答的状态（见 [PendingQuestionSet] 的说明）。 */
+const val QUESTION_STATE_CONTINUED: String = "continued"
+
 @Serializable
 data class CommandInput(val hint: String)
 

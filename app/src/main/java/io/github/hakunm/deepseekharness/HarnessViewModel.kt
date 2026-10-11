@@ -3,6 +3,7 @@ package io.github.hakunm.deepseekharness
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.hakunm.deepseekharness.data.QUESTION_STATE_CONTINUED
 import io.github.hakunm.deepseekharness.data.ChatContentParts
 import io.github.hakunm.deepseekharness.data.ChatHistory
 import io.github.hakunm.deepseekharness.data.ChatSession
@@ -20,11 +21,13 @@ import io.github.hakunm.deepseekharness.data.RootView
 import io.github.hakunm.deepseekharness.data.AgentPreset
 import io.github.hakunm.deepseekharness.data.ModelSelection
 import io.github.hakunm.deepseekharness.data.PendingApproval
+import io.github.hakunm.deepseekharness.data.PendingQuestionSet
 import io.github.hakunm.deepseekharness.data.PluginInventory
 import io.github.hakunm.deepseekharness.data.ProviderModel
 import io.github.hakunm.deepseekharness.data.ProviderPatch
 import io.github.hakunm.deepseekharness.data.ProviderSettings
 import io.github.hakunm.deepseekharness.data.PromptPart
+import io.github.hakunm.deepseekharness.data.QuestionAnswer
 import io.github.hakunm.deepseekharness.data.ResolvedPath
 import io.github.hakunm.deepseekharness.data.SessionModels
 import io.github.hakunm.deepseekharness.data.ActiveConnection
@@ -46,6 +49,10 @@ import io.github.hakunm.deepseekharness.data.SharedPreferencesKeyValueStore
 import io.github.hakunm.deepseekharness.data.TrashEntry
 import io.github.hakunm.deepseekharness.data.WorkspaceEvent
 import io.github.hakunm.deepseekharness.data.chatDelta
+import io.github.hakunm.deepseekharness.data.PreviewKind
+import io.github.hakunm.deepseekharness.data.binaryPreviewByteLimit
+import io.github.hakunm.deepseekharness.data.previewKind
+import io.github.hakunm.deepseekharness.data.previewKindOf
 import java.io.Closeable
 import java.io.InputStream
 import java.io.OutputStream
@@ -73,6 +80,19 @@ data class OpenDocument(
     val hasBom: Boolean = false,
     val lineEnding: String = "\n",
     val contentType: String? = null,
+    /**
+     * 原始字节，**只有图片 / PDF 这类要交给解码器的东西才留**。
+     *
+     * 文本预览走 [text]（已解成 String），再留一份字节纯属浪费；而图片 / PDF 没法从
+     * String 还原，必须留原字节 —— 这是它们与文本预览最本质的区别。
+     */
+    val bytes: ByteArray? = null,
+    /**
+     * 预览是被**主动跳过**的（文件超过该类文件的上限），而不是「还没加载」。
+     *
+     * 两者在界面上完全不同：前者要给「文件过大 + 下载」的出路，后者只是还没读。
+     */
+    val skippedForSize: Boolean = false,
 )
 
 /**
@@ -91,6 +111,8 @@ data class SessionFileOpen(
     val loading: Boolean = true,
     val resolved: ResolvedPath? = null,
     val preview: String? = null,
+    /** 图片 / PDF 的原始字节；文本预览不用这个字段（见 [OpenDocument.bytes]）。 */
+    val bytes: ByteArray? = null,
     val truncated: Boolean = false,
     val tooLarge: Boolean = false,
     /** 服务端说不属于任何授权根（或不是普通文件）。 */
@@ -162,6 +184,18 @@ data class HarnessState(
     val history: ChatHistory? = null,
     val liveChat: LiveChatState? = null,
     val approvalState: ApprovalUiState = ApprovalUiState.None,
+    /**
+     * 当前会话待回答的问题（插件 `/questions`，只留 [QUESTION_STATE_CONTINUED] 的那些）。
+     *
+     * 与 [approvalState] **分开**存：审批是内核阻塞着等决定、必须占用输入区；
+     * 问题是 Agent 已经继续跑了、答复属于补交，不能顶掉输入框。两者的状态机也不同
+     * （审批有 Loading/Deciding，问题只有「待答 / 提交中 / 已答」），混一个字段迟早分不清。
+     */
+    val questions: List<PendingQuestionSet> = emptyList(),
+    /** 正在提交答案的那一组（null = 空闲）。既驱动 loading，也是防重复提交的闸。 */
+    val answeringCallId: String? = null,
+    /** 已经提交成功的 callId：卡片转「已回答」态，不再显示可操作控件。 */
+    val answeredCallIds: Set<String> = emptySet(),
     val eventsConnected: Boolean = false,
     val selectedRootId: String? = null,
     val currentPath: String = "",
@@ -226,6 +260,58 @@ data class HarnessState(
     val attachmentUploading: Boolean = false,
     val error: String? = null,
 )
+
+/**
+ * 宿主命令名：与插件 `chat-adapter.ts` 的判定正则逐字对应。
+ *
+ * 小写字母开头，其余只允许小写字母、数字、下划线、连字符。**两侧必须一致** ——
+ * 放宽会让客户端认为是命令而服务端说`COMMAND_NOT_FOUND`，收紧则命令永远发不出去。
+ */
+private val COMMAND_NAME = Regex("[a-z][a-z0-9_-]*")
+
+/**
+ * 这一行是不是**宿主命令**（`/compact`、`/clear` 那种），而不是技能名。
+ *
+ * ## 为什么必须判别，不能只看 `/` 开头
+ *
+ * 官方把两样东西都做成斜杠开头：宿主命令，与用户技能（`dsh-client-ui-skill/README.md:28`）。
+ * 分流规则由**客户端**做，原文：
+ *
+ * > A name shared with a host command still resolves to the command —
+ * > adjudication claims the line client-side before it ever becomes a prompt.
+ *
+ * 即**命令优先**；不是命令的 `/name` 应当**原样当普通消息发给模型**（同文件 `:85`
+ * 「The user's message reaches the model verbatim, `/name` literal included」），
+ * 由 `dsh-tool-skill` 在 pre-step 边界注入技能正文。
+ *
+ * 我们此前只要输入以 `/` 开头就整条送去 executeCommand，于是**技能一个都调不动**：
+ * 技能名不在宿主命令表里 → `COMMAND_NOT_FOUND`，消息压根到不了模型。
+ *
+ * ## 匹配规则照抄服务端，不自创
+ *
+ * 插件 `chat-adapter.ts` 判定命令用的是
+ * `/^\/([a-z][a-z0-9_-]*)(?=$|[\t\n\r ])/u` 加 `name === match[1]`：
+ * 命令名只允许小写字母开头、其余小写字母/数字/下划线/连字符，**精确匹配**，
+ * 后面可跟空白与参数。两边规则必须一致 —— 这里若放宽，会出现「客户端认为是命令、
+ * 服务端说不认识」；收紧则命令永远发不出去。
+ *
+ * 刻意**不**做大小写不敏感：官方与插件都是精确匹配，我们跟着，避免 `/Compact`
+ * 在我们这儿被当成命令、到服务端却被拒。
+ *
+ * 做成**顶层函数**而不是 ViewModel 的成员，是为了能在 JVM 单测里直接调用 ——
+ * 它是纯逻辑，不碰任何 Android API。
+ */
+internal fun isHostCommandLine(
+    line: String,
+    commands: List<CommandDescriptor>,
+): Boolean {
+    // 命令名后面可以带参数（`/compact 3`），所以只取第一段去比对 ——
+    // 与服务端 `/^\/([a-z][a-z0-9_-]*)(?=$|[\t\n\r ])/u` 的前瞻是同一件事。
+    val head = line.takeWhile { !it.isWhitespace() }
+    if (!head.startsWith('/')) return false
+    val name = COMMAND_NAME.matchEntire(head.removePrefix("/"))?.value ?: return false
+    return commands.any { it.name == name }
+}
 
 class HarnessViewModel(application: Application) : AndroidViewModel(application) {
     private val keyValueStore = SharedPreferencesKeyValueStore(application)
@@ -532,6 +618,10 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
                 sessionModels = null,
                 commands = emptyList(),
                 approvalState = if (id == null) ApprovalUiState.None else ApprovalUiState.Loading,
+                // 换会话就把问答状态清干净：上一组的草稿/已答标记留在界面上会张冠李戴。
+                questions = emptyList(),
+                answeringCallId = null,
+                answeredCallIds = emptySet(),
             )
         }
         if (id != null) {
@@ -546,6 +636,10 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         val id = mutableState.value.selectedSessionId ?: return@withClient
         val history = api.history(id)
         update { copy(history = history) }
+        // 顺手把待答问题也拉一次。这个函数只有两个调用点（切会话、顶栏那个刷新按钮），
+        // 而顶栏刷新正是用户遇到「卡片该出现却没出现」时**唯一**的自救入口 ——
+        // 把问答挂在它上面，就不必再教用户「去哪里重试」。
+        refreshPendingQuestions()
     }
 
     fun loadOlderHistory() = withClient { api ->
@@ -633,9 +727,16 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
             )
         }
         val entry = sessionFileEntry(api, resolved, parent)
-        val tooLarge = entry.size > MAX_EDIT_BYTES
+        // 图片 / PDF 与文本的上限不同：2 MiB 对一张手机截图太紧，但解码前整份字节要进内存，
+        // 所以按类型各给一条闸（见 data/PreviewKind.kt 的 PREVIEW_*_MAX_BYTES）。
+        val provisional = previewKind(resolved.path, resolved.contentType)
+        val cap = binaryPreviewByteLimit(provisional) ?: MAX_EDIT_BYTES
+        val tooLarge = entry.size > cap
         val content = if (tooLarge) null else api.readFile(resolved.rootId, resolved.path)
-        val decoded = content?.let { decodeUtf8(it.bytes) }
+        val kind = previewKindOf(resolved.path, resolved.contentType, content?.bytes)
+        val binary = kind == PreviewKind.IMAGE || kind == PreviewKind.PDF
+        // 图片 / PDF 不解 UTF-8：那是白费一次解码，还会把二进制变成一屏替换字符。
+        val decoded = if (binary) null else content?.let { decodeUtf8(it.bytes) }
         val text = decoded?.text
         return SessionFileOutcome(
             open = SessionFileOpen(
@@ -644,6 +745,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
                 loading = false,
                 resolved = resolved,
                 preview = text?.take(PREVIEW_CHARS),
+                bytes = if (binary) content?.bytes else null,
                 truncated = text != null && text.length > PREVIEW_CHARS,
                 tooLarge = tooLarge,
             ),
@@ -652,6 +754,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
             document = OpenDocument(
                 entry = entry,
                 text = text,
+                bytes = if (binary) content?.bytes else null,
                 etag = content?.etag.orEmpty(),
                 hasBom = decoded?.hasBom == true,
                 lineEnding = decoded?.lineEnding ?: "\n",
@@ -803,7 +906,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         val id = mutableState.value.selectedSessionId ?: return
         val attachments = mutableState.value.pendingAttachments
         val line = text.trimEnd()
-        if (attachments.isEmpty() && line.startsWith('/')) {
+        if (attachments.isEmpty() && isHostCommandLine(line, mutableState.value.commands)) {
             launchOperation {
                 val execution = api.executeCommand(id, line)
                 if (execution.result.kind == "error") {
@@ -989,8 +1092,22 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
     /** 当前选中的会话是否正在运行（决定「排队 / 插话」有没有区别）。 */
     fun selectedSessionRunning(): Boolean {
         val id = mutableState.value.selectedSessionId ?: return false
-        return mutableState.value.sessions.firstOrNull { it.id == id }?.running == true
+        return isSessionRunning(id)
     }
+
+    /**
+     * 这个会话是否正在运行。
+     *
+     * 刻意不限于「当前选中的会话」：`chat.turn.end` 判「这一轮刚结束」时，
+     * 用的是事件里的那个 sessionId —— 它可能不是当前正在看的那个
+     * （比如用户切了会话、另一个会话这时才跑完）。
+     *
+     * 会话列表里查不到时**返回 false**：那份列表来自快照，可能还没刷新到这一轮，
+     * 此时把它当成「已结束」只会多补拉一次 GET，不会漏 —— 反过来若当成还在跑，
+     * 兜底就永远不触发，那才是真的漏。
+     */
+    private fun isSessionRunning(sessionId: String): Boolean =
+        mutableState.value.sessions.firstOrNull { it.id == sessionId }?.running == true
 
     /** 改「智能体运行时」的默认提交行为，并立刻落盘（下次启动保持）。 */
     fun setBusySendMode(mode: BusySendMode) {
@@ -1175,6 +1292,85 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /**
+     * 取当前会话的待回答问题。
+     *
+     * **只对当前选中的会话调**，一次一个 GET。插件的 `resolveAgent` 是「resolve **or resume**」，
+     * 对冷会话调会把那边已经停下的 Agent 拉活 —— 所以这里永远只看 `selectedSessionId`，
+     * 绝不遍历 [HarnessState.sessions]，也不做任何后台轮询。
+     *
+     * 失败**刻意静默**：这条路会挂在全轮的 turn 事件上，插件版本旧（404）或一次网络抖
+     * 都会失败；把错误塞进 snackbar 就等于每轮弹一次。列表也**保留原样**不清空 ——
+     * 已经显示出来的卡片不该因为一次刷新失败就消失（清空只在换会话时发生）。
+     */
+    fun refreshPendingQuestions() {
+        val api = client ?: return
+        val id = mutableState.value.selectedSessionId ?: return
+        viewModelScope.launch {
+            val result = runCatching { withContext(Dispatchers.IO) { api.pendingQuestions(id) } }
+            // 期间用户可能已经切走：这份结果只对发起它的那个会话有效。
+            if (mutableState.value.selectedSessionId != id) return@launch
+            result.onSuccess { sets ->
+                update { copy(questions = sets.filter { it.state == QUESTION_STATE_CONTINUED }) }
+            }
+        }
+    }
+
+    /**
+     * 回答一组问题（`ask_user_question`）。
+     *
+     * 防重复提交两道闸：本地 [HarnessState.answeringCallId] 非空时直接忽略后续点击，
+     * 已经答过的 callId 也不再发；插件的 409 是最后一道防线，但不该让用户点到那一步。
+     */
+    fun answerQuestions(callId: String, answers: List<QuestionAnswer>) {
+        val api = client ?: return
+        val id = mutableState.value.selectedSessionId ?: return
+        if (mutableState.value.answeringCallId != null) return
+        if (callId in mutableState.value.answeredCallIds) return
+        viewModelScope.launch {
+            update { copy(answeringCallId = callId, error = null) }
+            val result = runCatching {
+                withContext(Dispatchers.IO) { api.answerQuestions(id, callId, answers) }
+            }
+            if (mutableState.value.selectedSessionId != id) return@launch
+            result
+                .onSuccess {
+                    update {
+                        copy(
+                            answeringCallId = null,
+                            answeredCallIds = answeredCallIds + callId,
+                        )
+                    }
+                    // 问一次服务端：答复被内核吃掉了的话，这条问题就该从列表里消失；
+                    // 还在的话卡片已经转成「已回答」，不会被误当成没答。
+                    refreshPendingQuestions()
+                }
+                .onFailure { error ->
+                    update { copy(answeringCallId = null, error = describeAnswerFailure(error)) }
+                }
+        }
+    }
+
+    /**
+     * 提交失败的人话。
+     *
+     * 插件用 409 区分两种**完全不同**的情况：答复已经在队列里（你答过了）与问题已经不作答
+     * （这条作废了）。把 code 原样甩给用户，他既看不懂也不知道该不该重试。
+     */
+    private fun describeAnswerFailure(failure: Throwable): String = when {
+        failure is DshApiException && failure.code == "QUESTION_REPLY_QUEUED" ->
+            appString(R.string.answer_already_queued)
+
+        failure is DshApiException && failure.code == "QUESTION_NOT_PENDING" ->
+            appString(R.string.answer_not_pending)
+
+        failure is DshApiException && (failure.status == 403 || failure.code.contains("FORBIDDEN") ||
+            failure.code.contains("SCOPE")) ->
+            appString(R.string.answer_no_write)
+
+        else -> appString(R.string.answer_failed, messageOf(failure))
+    }
+
     fun decideApproval(approval: PendingApproval, allowOnce: Boolean) {
         val api = client ?: return
         val id = mutableState.value.selectedSessionId ?: return
@@ -1237,11 +1433,40 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         }
         withClient { api ->
             val root = mutableState.value.selectedRootId ?: return@withClient
-            if (entry.size > MAX_EDIT_BYTES) {
-                update { copy(document = OpenDocument(entry), error = "FILE_TOO_LARGE") }
+            // 图片与 PDF 有自己的字节上限：文本的 2 MiB 闸对它们太紧（一张手机截图就 3~8 MiB），
+            // 但也不能不设闸 —— 解码前整份字节都要进内存。
+            val provisional = previewKind(entry.name, null)
+            val cap = binaryPreviewByteLimit(provisional) ?: MAX_EDIT_BYTES
+            if (entry.size > cap) {
+                update {
+                    copy(
+                        document = OpenDocument(entry, skippedForSize = true),
+                        // 文本超限沿用既有的全局提示；图片 / PDF 的提示由预览面板自己给
+                        // （带「下载」出路），免得同一条信息在页面顶部与内容区各刷一遍。
+                        error = if (provisional == PreviewKind.IMAGE || provisional == PreviewKind.PDF) null
+                        else "FILE_TOO_LARGE",
+                    )
+                }
                 return@withClient
             }
             val content = api.readFile(root, entry.path)
+            // 拿到字节后重判一次：FileEntry 里没有 contentType，服务端 MIME 也不可靠，
+            // 所以「没有扩展名 / 扩展名是 .bin 的图片」只能靠魔数认出来。
+            val kind = previewKindOf(entry.name, content.contentType, content.bytes)
+            if (kind == PreviewKind.IMAGE || kind == PreviewKind.PDF) {
+                update {
+                    copy(
+                        document = OpenDocument(
+                            entry = entry,
+                            bytes = content.bytes,
+                            etag = content.etag,
+                            contentType = content.contentType,
+                        ),
+                        error = null,
+                    )
+                }
+                return@withClient
+            }
             val decoded = decodeUtf8(content.bytes)
             update {
                 copy(
@@ -1413,6 +1638,14 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
                         "chat.turn.start", "chat.turn.end", "chat.session.status" -> {
                             chatSessionRefreshPending = true
                             scheduleChatRefresh()
+                            // 「这一轮刚结束」= 会话已不在运行。
+                            //
+                            // 这是工具结果帧那条路的兜底：那帧只在提问还挂在前台时才会到，
+                            // agent 若在超时后很快收尾，App 可能整轮都没接住。
+                            // 在轮次结束的**那一刻**补拉一次，之后彻底停止 —— 不是轮询。
+                            if (event.type == "chat.turn.end" && sessionId != null && !isSessionRunning(sessionId)) {
+                                refreshPendingQuestions()
+                            }
                         }
                         "chat.agent-preset.selected" -> {
                             chatSessionRefreshPending = true
@@ -1426,6 +1659,33 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
                         }
                         else -> if (sessionId == mutableState.value.selectedSessionId) scheduleChatRefresh()
                     }
+                    // 待答问题的刷新靠事件驱动，**不引定时器、不轮询**：一条相关事件一次 GET。
+                    //
+                    // `chat.session.event` 是插件给所有「非特殊」会话事件的统一降级形态
+                    //（chat-adapter.ts 的 normalizeDshEvent 末段），`tool/result` 走的正是它。
+                    // 提问超时的那一刻，内核写出一条 tool/result，App 因此收到一帧 ——
+                    // 事件已经到了，只是它没有内容、只有 eventType 与 seq。
+                    // 这里按eventType 精确挑出工具结果，不做「来一帧就拉一次」：
+                    // 一个工具调用会带好几帧无关事件，全拉就是自己造轮询。
+                    if (event.type in QUESTION_REFRESH_EVENTS || isToolResultFrame(event.type, event.data)) {
+                        refreshPendingQuestions()
+                    }
+                    // 插件为问答推的**专属帧**（经 normalizeDshEvent 末段兜成 `chat.<payloadType>`）。
+                    //
+                    // 有了它，手机端不必等「tool/result 帧」或「轮次结束」这两个间接信号：
+                    // 提问一落地就能拿到通知；电脑端答完之后卡片也能**立刻**消失。
+                    when (event.type) {
+                        "chat.userQuestions/requested" -> refreshPendingQuestions()
+                        "chat.userQuestions/answered",
+                        "chat.userQuestions/dismissed" -> {
+                            // 这两帧是「这道题已经不用答了」的确定性事实 ——
+                            // 直接摘掉，不必等一次网络往返（等 GET 只会让卡片多挂一会儿）。
+                            val callId = event.dataString("callId")
+                            if (callId != null) {
+                                update { copy(questions = removeQuestion(questions, callId)) }
+                            }
+                        }
+                    }
                 }
                 if (event.type.startsWith("file.")) loadDirectory()
             },
@@ -1434,6 +1694,8 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
                 if (connected && mutableState.value.selectedSessionId != null) {
                     scheduleChatRefresh()
                     refreshPendingApprovals()
+                    // 断线期间问出来的问题要靠这一下补回来。
+                    refreshPendingQuestions()
                     refreshCommands()
                 }
             },
@@ -1599,3 +1861,53 @@ private fun WorkspaceEvent.dataInt(key: String): Int? =
 
 private fun List<PendingApproval>.toApprovalState(): ApprovalUiState =
     if (isEmpty()) ApprovalUiState.None else ApprovalUiState.Pending(this)
+
+/**
+ * 「待答问题可能变了」的事件类型（用法见 [HarnessViewModel] 的 connectEvents）。
+ *
+ * 刻意**不含** chat.message.delta：那是 token 级的流式增量，跟着它刷新就等于在轮询。
+ * 这里列的都是每轮 / 每条消息一次的结构性事件 —— 少而准。
+ */
+private val QUESTION_REFRESH_EVENTS = setOf(
+    "chat.message.committed",
+    "chat.turn.start",
+    "chat.turn.end",
+    "chat.session.status",
+    "chat.approval.requested",
+    "chat.approval.resolved",
+)
+
+/**
+ * 从待答列表里摘掉一题。
+ *
+ * 用在插件那两帧上：`chat.userQuestions/answered`（本端或电脑端已作答）与
+ * `chat.userQuestions/dismissed`（窗口关闭 / 整轮取消）。
+ * 两者都是「这道题已经不用答了」的**确定性事实**，所以就地摘掉 ——
+ * 而不是等下一次 `GET /questions` 回来，那只会让卡片多挂一个往返。
+ *
+ * 纯函数，便于单测：不改入参、callId 对不上时原样返回。
+ */
+internal fun removeQuestion(
+    questions: List<PendingQuestionSet>,
+    callId: String,
+): List<PendingQuestionSet> =
+    if (questions.none { it.callId == callId }) questions
+    else questions.filterNot { it.callId == callId }
+
+/**
+ * 这一帧是不是 `tool/result`（插件降级成 `chat.session.event` 的那种）。
+ *
+ * 为什么要单独判：插件把**所有**非特殊会话事件统一降级成 `chat.session.event`，
+ * 内容被丢掉，只留 `{sessionId, eventType, seq}`（chat-adapter.ts normalizeDshEvent 末段）。
+ * 一轮里这类帧非常多（每个工具调用好几帧），若「来一帧拉一次」，等于自己造了个轮询。
+ *
+ * 而提问超时的判定完全落在内核那条 tool/result 上：
+ * 折叠器读到 `{pending:true}` 的结果才把问题从 open 改成 continued
+ *（dsh-user-questions/lib/types/projection.js 的 `tool/result` 分支 + isPendingResult）。
+ * 所以**这一帧到达，就是该重新拉取的确切信号** —— 不是启发式，是时序上的事实。
+ */
+internal fun isToolResultFrame(eventType: String?, eventData: Any?): Boolean {
+    if (eventType != "chat.session.event") return false
+    val obj = eventData as? kotlinx.serialization.json.JsonObject ?: return false
+    return obj["eventType"]?.let { it.toString().trim('"') } == "tool/result"
+}

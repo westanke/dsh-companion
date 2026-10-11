@@ -87,6 +87,15 @@
     <string name="file_too_large">The mobile editor opens text files up to 2 MiB.</string>
     <string name="etag_conflict">The file changed elsewhere. Refresh before editing again.</string>
     <string name="binary_file">This is not UTF-8 text. You can download or replace it, but not edit it inline.</string>
+    <string name="preview_loading">Loading…</string>
+    <string name="preview_image_failed">Cannot decode this image (HEIC/AVIF, or the file is damaged).</string>
+    <string name="preview_pdf_failed">Cannot open this PDF (damaged, or not a PDF at all).</string>
+    <string name="preview_pdf_prev">Previous page</string>
+    <string name="preview_pdf_next">Next page</string>
+    <string name="preview_pdf_page">Page %1$d / %2$d</string>
+    <string name="preview_pdf_page_limit">%1$d pages in total — showing the first %2$d.</string>
+    <string name="preview_skipped_too_large">File is %1$s — over the %2$s limit, so the preview was skipped.</string>
+    <string name="preview_skipped_hint_download">Download it and open it in another app.</string>
     <string name="replace_file">Replace file</string>
     <string name="back">Back</string>
     <string name="go_up">Up</string>
@@ -121,6 +130,17 @@
     <string name="approval_command_preview">Redacted command preview</string>
     <string name="reject">Reject</string>
     <string name="allow_once">Allow once</string>
+    <!-- ask_user_question cards (option A: only `continued` questions) -->
+    <string name="question_waiting">Your answer is needed</string>
+    <string name="question_answered">Answered</string>
+    <string name="question_count">%1$d questions</string>
+    <string name="answer_your_own">Type your answer</string>
+    <string name="answer_submitting">Submitting…</string>
+    <string name="submit_answer">Submit answer</string>
+    <string name="answer_already_queued">You already answered this one — the reply is queued</string>
+    <string name="answer_not_pending">This question no longer needs an answer</string>
+    <string name="answer_no_write">This device lacks the chat.write scope, so the answer cannot be submitted</string>
+    <string name="answer_failed">Could not submit: %1$s</string>
     <string name="full_access">Requests full system access</string>
     <string name="confirm_full_access">Confirm high-risk operation</string>
     <string name="full_access_warning">This operation will run outside the DSH sandbox and may access server files, the network, and processes. Review the command above first. The App does not offer permanent approval.</string>
@@ -336,4 +356,16 @@
     <string name="attachment_file_rejected">The server rejected the file: it exceeds the server’s attachment size limit. Try a smaller file.</string>
     <string name="attachment_upload_unsupported">The dsh-remote-bridge plugin on the server (formerly dsh-workspace) is too old and does not provide the message-attachment upload endpoint yet. Upgrade it to 2.0.4 or newer, then restart DSH.</string>
     <string name="attachment_read_failed">Could not read the selected file. Try another one.</string>
+
+    <!-- Tool-call details: input / output shown after expanding a tool card -->
+    <string name="tool_detail_input">Input</string>
+    <string name="tool_detail_output">Output</string>
+    <string name="tool_detail_error">Error</string>
+    <string name="tool_detail_ok">OK</string>
+    <string name="tool_detail_failed">Failed</string>
+    <string name="tool_detail_pending">Running</string>
+    <string name="tool_detail_copy">Copy</string>
+    <string name="tool_detail_no_args">This tool took no arguments</string>
+    <string name="tool_detail_no_result">No result yet</string>
+    <string name="tool_detail_empty_result">Empty result</string>
 </resources>

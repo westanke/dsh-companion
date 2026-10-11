@@ -75,6 +75,8 @@ import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.ModelTraining
+import androidx.compose.material.icons.outlined.QuestionAnswer
+import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Lock
@@ -96,6 +98,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -107,6 +110,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -148,8 +152,12 @@ import io.github.hakunm.deepseekharness.data.ChatContentParts
 import io.github.hakunm.deepseekharness.data.ChatAttachment
 import io.github.hakunm.deepseekharness.data.ChatDisplayItem
 import io.github.hakunm.deepseekharness.data.ChatItemKind
+import io.github.hakunm.deepseekharness.data.ToolCallDetail
+import io.github.hakunm.deepseekharness.data.formatToolDuration
+import io.github.hakunm.deepseekharness.data.prettyToolArguments
 import io.github.hakunm.deepseekharness.data.LiveChatBlock
 import io.github.hakunm.deepseekharness.data.ChatLinkTarget
+import io.github.hakunm.deepseekharness.data.ChatQuestion
 import io.github.hakunm.deepseekharness.data.ChatSession
 import io.github.hakunm.deepseekharness.data.ChatWorkspace
 import io.github.hakunm.deepseekharness.data.AgentPreset
@@ -159,14 +167,16 @@ import io.github.hakunm.deepseekharness.data.ComposerSendPolicy
 import io.github.hakunm.deepseekharness.data.ModelSelection
 import io.github.hakunm.deepseekharness.data.ModelView
 import io.github.hakunm.deepseekharness.data.PendingApproval
+import io.github.hakunm.deepseekharness.data.PendingQuestionSet
 import io.github.hakunm.deepseekharness.data.PermissionSelect
+import io.github.hakunm.deepseekharness.data.QuestionAnswer
 import io.github.hakunm.deepseekharness.data.MessageSegment
 import io.github.hakunm.deepseekharness.data.parseGenUi
 import io.github.hakunm.deepseekharness.data.splitMessageBody
 import io.github.hakunm.deepseekharness.data.GenUiDiagnosis
 import io.github.hakunm.deepseekharness.data.diagnoseGenUi
 import io.github.hakunm.deepseekharness.data.PreviewKind
-import io.github.hakunm.deepseekharness.data.previewKind
+import io.github.hakunm.deepseekharness.data.previewKindOf
 import io.github.hakunm.deepseekharness.data.HtmlBlock
 import io.github.hakunm.deepseekharness.data.extractHtmlBlocks
 import io.github.hakunm.deepseekharness.data.ResolvedPath
@@ -592,6 +602,31 @@ private fun ChatDetail(
                 }
             }
         }
+        // 待回答问题（ask_user_question）。
+        //
+        // 位置与审批面板同一块地方（消息区下方、输入区上方），但**不顶掉输入区**：
+        // 审批是内核阻塞着等决定，用户此刻没别的事可做；而方案 A 只做 `continued` 的问题 ——
+        // Agent 已经继续跑了，答复是补交，把输入框拿走只会让用户连话都发不出去。
+        if (state.questions.isNotEmpty()) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 340.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                state.questions.forEach { set ->
+                    QuestionCard(
+                        set = set,
+                        answered = set.callId in state.answeredCallIds,
+                        submitting = state.answeringCallId == set.callId,
+                        canWrite = canWrite,
+                        onSubmit = { answers -> viewModel.answerQuestions(set.callId, answers) },
+                    )
+                }
+            }
+        }
         // 思考条：消息区**下方**、输入区**上方**的那一条固定位置（网页版 #thinkbar 的位置）。
         // 有思考才渲染，没有时整条不存在 —— 不用 AnimatedVisibility 收起，
         // 那会留下一条带边框的空缝，在输入区上方永久挡着一行。
@@ -998,6 +1033,12 @@ private fun SessionFileDetail(open: SessionFileOpen, onBack: () -> Unit) {
     val resolved = open.resolved
     val preview = open.preview
     val failure = open.failure
+    // 图片 / PDF 的判据与「文件」页**同一套**（previewKindOf 只是多一层魔数兜底）。
+    // 两处必须一致 —— 同一个文件在文件页能看、在会话面板只剩一行字，就是最典型的坏体验。
+    val kind = remember(open.requestedPath, resolved?.contentType, preview, open.bytes) {
+        previewKindOf(open.requestedPath, resolved?.contentType, open.bytes)
+    }
+    val binaryPreview = kind == PreviewKind.IMAGE || kind == PreviewKind.PDF
     Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(bottom = 28.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
@@ -1045,6 +1086,27 @@ private fun SessionFileDetail(open: SessionFileOpen, onBack: () -> Unit) {
                 stringResource(R.string.session_file_directory),
             )
 
+            // 放在 tooLarge 之前是有意的：图片 / PDF 各有自己的字节上限（24 / 32 MiB），
+            // 用文本那条「超过 2 MiB」的提示是错的 —— 顺带在这里给「跳过预览 + 去哪下载」。
+            binaryPreview -> Column(Modifier.fillMaxWidth()) {
+                // 文件信息（类型 · 体积）与文本预览那条路保持一致：超限时用户至少知道是多大
+                resolved?.let { SessionFileMeta(it) }
+                Box(
+                    Modifier.fillMaxWidth().padding(top = 10.dp).heightIn(min = 180.dp, max = 420.dp),
+                ) {
+                    BinaryFilePreview(
+                        kind = kind,
+                        bytes = open.bytes,
+                        sizeBytes = resolved?.size ?: 0L,
+                        skippedForSize = open.tooLarge,
+                        fallbackMessage = stringResource(R.string.session_file_binary),
+                        skippedHint = stringResource(R.string.session_file_files_hint),
+                        onDownload = null,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
+
             open.tooLarge -> SessionFileNotice(
                 Icons.Outlined.WarningAmber,
                 stringResource(R.string.session_file_too_large),
@@ -1062,9 +1124,6 @@ private fun SessionFileDetail(open: SessionFileOpen, onBack: () -> Unit) {
 
             else -> {
                 resolved?.let { SessionFileMeta(it) }
-                val kind = remember(open.requestedPath, resolved?.contentType, preview) {
-                    previewKind(open.requestedPath, resolved?.contentType)
-                }
                 Box(
                     Modifier
                         .fillMaxWidth()
@@ -1378,6 +1437,208 @@ private fun ApprovalPanel(
                 }
             },
         )
+    }
+}
+
+/**
+ * 一道题算不算答完了：有选项的要选中至少一个，没选项的要自由文本非空。
+ *
+ * 抽成纯函数是为了能测（见 `QuestionAnswerTest`）：提交按钮的启用条件就是它对所有题取与，
+ * 而「没选项的题只看 custom」这条最容易在改动里被漏掉 —— 漏了的表现是按钮永远点不亮。
+ */
+internal fun isAnswered(question: ChatQuestion, selected: Collection<String>, custom: String): Boolean =
+    if (question.options.isEmpty()) custom.isNotBlank() else selected.isNotEmpty()
+
+/**
+ * 把界面上的勾选与输入收成请求体。
+ *
+ * 两条规则：
+ * - 有选项的题只带 `selected`，并**按选项原顺序**过滤 —— 用户点选的先后顺序不该影响请求体；
+ * - 没选项的题只带 `custom`（去掉首尾空白）。
+ *
+ * 顺序与 [questions] 一致，`id` 原样回带。
+ */
+internal fun buildAnswers(
+    questions: List<ChatQuestion>,
+    selected: Map<String, Set<String>>,
+    custom: Map<String, String>,
+): List<QuestionAnswer> = questions.map { question ->
+    if (question.options.isEmpty()) {
+        QuestionAnswer(
+            id = question.id,
+            selected = emptyList(),
+            custom = custom[question.id].orEmpty().trim(),
+        )
+    } else {
+        val picked = selected[question.id].orEmpty()
+        QuestionAnswer(
+            id = question.id,
+            selected = question.options.map { it.label }.filter { it in picked },
+        )
+    }
+}
+
+/**
+ * 待回答问题卡片（`ask_user_question`，方案 A 只做 `continued`）。
+ *
+ * 与审批面板的关系：两者都占「消息区下方、输入区上方」那块地方，但**只有审批顶掉输入区**。
+ * 审批是内核阻塞着等决定，用户此刻没别的事可做；问题是 Agent 已经继续跑之后的补答，
+ * 拿掉输入框只会让用户连话都发不出去。
+ *
+ * 外形沿用审批卡那一套（Surface + 描边 + 抬头行 + 底部按钮），信息量与网页版一一对应：
+ * 抬头、每题的 header / question / detail、选项及其说明、没有选项时给自由文本。
+ * 抬头用主色而不是审批那个警告色：它要的是「等你回答」，不是「危险」。
+ */
+@Composable
+private fun QuestionCard(
+    set: PendingQuestionSet,
+    answered: Boolean,
+    submitting: Boolean,
+    canWrite: Boolean,
+    onSubmit: (List<QuestionAnswer>) -> Unit,
+) {
+    // 草稿按 callId 记住：同一组题在重组之间不能丢勾选；换了一组就从零开始，
+    // 免得上一组的答案漏到下一组（那是「提交上去的答案张冠李戴」这类事故的源头）。
+    val selected = remember(set.callId) { mutableStateMapOf<String, Set<String>>() }
+    val custom = remember(set.callId) { mutableStateMapOf<String, String>() }
+    val interactive = canWrite && !submitting && !answered
+    val complete = set.questions.isNotEmpty() && set.questions.all { question ->
+        isAnswered(question, selected[question.id].orEmpty(), custom[question.id].orEmpty())
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(
+            1.dp,
+            if (answered) MaterialTheme.colorScheme.outlineVariant else MaterialTheme.colorScheme.primary,
+        ),
+        shadowElevation = 3.dp,
+    ) {
+        Column(
+            Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(
+                    if (answered) Icons.Outlined.TaskAlt else Icons.Outlined.QuestionAnswer,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = if (answered) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        stringResource(
+                            if (answered) R.string.question_answered else R.string.question_waiting,
+                        ),
+                        color = if (answered) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    if (set.questions.size > 1) {
+                        Text(
+                            stringResource(R.string.question_count, set.questions.size),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+                if (submitting) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+            }
+
+            set.questions.forEach { question ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    question.header?.takeIf(String::isNotBlank)?.let { header ->
+                        Text(
+                            header,
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                    }
+                    Text(question.question, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                    question.detail?.takeIf(String::isNotBlank)?.let { detail ->
+                        Text(
+                            detail,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    if (question.options.isEmpty()) {
+                        // 没有选项 = 这题要自由文本，正好对应协议里的 custom。
+                        OutlinedTextField(
+                            value = custom[question.id].orEmpty(),
+                            onValueChange = { custom[question.id] = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = interactive,
+                            label = { Text(stringResource(R.string.answer_your_own)) },
+                            minLines = 1,
+                            maxLines = 4,
+                            shape = MaterialTheme.shapes.medium,
+                        )
+                    } else {
+                        question.options.forEach { option ->
+                            val checked = selected[question.id]?.contains(option.label) == true
+                            val toggle = {
+                                val current = selected[question.id].orEmpty()
+                                selected[question.id] = when {
+                                    // 单选：再点一次已选中的就是取消（与网页版 radio 的行为对齐不了，
+                                    // 那里 radio 点不掉；这里允许取消是为了让用户能改主意，不会误提交）。
+                                    !question.multiSelect -> if (checked) emptySet() else setOf(option.label)
+                                    checked -> current - option.label
+                                    else -> current + option.label
+                                }
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(MaterialTheme.shapes.small)
+                                    .clickable(enabled = interactive) { toggle() }
+                                    .padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                if (question.multiSelect) {
+                                    Checkbox(checked = checked, onCheckedChange = { toggle() }, enabled = interactive)
+                                } else {
+                                    RadioButton(selected = checked, onClick = { toggle() }, enabled = interactive)
+                                }
+                                Column(Modifier.padding(start = 4.dp)) {
+                                    Text(option.label, style = MaterialTheme.typography.bodyMedium)
+                                    option.description?.takeIf(String::isNotBlank)?.let { description ->
+                                        Text(
+                                            description,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (!answered) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+                    if (submitting) {
+                        Text(
+                            stringResource(R.string.answer_submitting),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                    Button(
+                        onClick = { if (complete) onSubmit(buildAnswers(set.questions, selected, custom)) },
+                        enabled = interactive && complete,
+                    ) {
+                        Text(stringResource(R.string.submit_answer))
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -2255,7 +2516,9 @@ private fun ActivityRow(item: ChatDisplayItem) {
     // 工具行在合并成一组（多条调用）之后也要能展开看细节；
     // 单次调用的那一行没什么可展的，展开反而是噪音。
     val multiTool = item.kind == ChatItemKind.TOOL && item.body.contains('\n')
-    val expandable = item.body.isNotBlank() && (item.kind != ChatItemKind.TOOL || multiTool)
+    // 有逐条明细（输入 / 输出 / 耗时）就一定可展开 —— 这就是「工具调用详情」的入口。
+    val hasTools = item.tools.isNotEmpty()
+    val expandable = hasTools || (item.body.isNotBlank() && (item.kind != ChatItemKind.TOOL || multiTool))
     var expanded by remember(item.id) { mutableStateOf(false) }
     // REASONING 这条分支现在只是兜底：历史（historyItems）与流式（liveItems）两处
     // 都已把思考挡在消息流之外，改由底部思考条 [ChatThinkBar] 承载。
@@ -2271,6 +2534,9 @@ private fun ActivityRow(item: ChatDisplayItem) {
         ChatItemKind.REASONING -> Icons.Outlined.Code
         else -> Icons.Outlined.Build
     }
+    // 失败的工具**不展开也要看得见**：用户点开详情最主要的理由就是「刚才那条命令报了什么错」。
+    val failed = item.tools.any { it.failed }
+    val fallbackName = stringResource(R.string.tool_call)
     Column(Modifier.fillMaxWidth().animateContentSize()) {
         Row(
             modifier = Modifier
@@ -2280,7 +2546,12 @@ private fun ActivityRow(item: ChatDisplayItem) {
                 .padding(horizontal = 4.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(icon, null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(
+                if (failed) Icons.Outlined.WarningAmber else icon,
+                null,
+                modifier = Modifier.size(16.dp),
+                tint = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             Text(
                 label,
                 modifier = Modifier.padding(start = 7.dp),
@@ -2291,9 +2562,14 @@ private fun ActivityRow(item: ChatDisplayItem) {
             item.title?.takeIf { item.kind == ChatItemKind.CONTEXT }?.let {
                 Text(" · $it", color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            if (!expanded && item.body.isNotBlank()) {
+            // 折叠时的预览：优先用原来的正文首行；正文为空（例如只有参数的调用）就退回工具名，
+            // 否则这一行看起来像空条目。
+            val preview = item.body.lineSequence().firstOrNull().orEmpty().ifBlank {
+                item.tools.joinToString("，") { it.name.ifBlank { fallbackName } }
+            }
+            if (!expanded && preview.isNotBlank()) {
                 Text(
-                    " · ${item.body.lineSequence().first()}",
+                    " · $preview",
                     modifier = Modifier.weight(1f),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -2301,6 +2577,15 @@ private fun ActivityRow(item: ChatDisplayItem) {
                     style = MaterialTheme.typography.bodySmall,
                 )
             } else Spacer(Modifier.weight(1f))
+            if (failed) {
+                Text(
+                    stringResource(R.string.tool_detail_failed),
+                    modifier = Modifier.padding(end = 4.dp),
+                    color = MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.Medium,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
             if (expandable) {
                 Icon(
                     if (expanded) Icons.Outlined.ExpandMore else Icons.AutoMirrored.Outlined.KeyboardArrowRight,
@@ -2311,11 +2596,175 @@ private fun ActivityRow(item: ChatDisplayItem) {
             }
         }
         AnimatedVisibility(expanded) {
-            Markdown(
-                content = item.body,
-                typography = compactMarkdownTypography(),
-                modifier = Modifier.padding(start = 27.dp, end = 6.dp, bottom = 8.dp),
+            // 有明细就渲染明细（合并组里**每条**一个块），否则退回原来的 Markdown 正文。
+            if (hasTools) {
+                Column(Modifier.padding(start = 27.dp, end = 6.dp, bottom = 8.dp)) {
+                    item.tools.forEachIndexed { index, tool ->
+                        if (index > 0) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 8.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                            )
+                        }
+                        ToolCallDetailBlock(tool)
+                    }
+                }
+            } else {
+                Markdown(
+                    content = item.body,
+                    typography = compactMarkdownTypography(),
+                    modifier = Modifier.padding(start = 27.dp, end = 6.dp, bottom = 8.dp),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 一条工具调用的详情块：工具名 + 状态 + 耗时，然后是完整输入与完整输出。
+ *
+ * 数据全部来自 [ChatDisplayItem.tools]（结构见 data/ChatPresentation.kt 的 [ToolCallDetail]）：
+ * 输入是内核原样的 `arguments` 字符串，缩进后显示；输出是 `tool/result` 的 content 里
+ * text 段拼起来的结果。两者都能一键复制 —— 手机上开不了终端，
+ * 把这段输出复制出来发给自己，是唯一能把现场带走的办法。
+ *
+ * 长文本必须能滚：实测单条结果最长 50000 字符（p50 277、p90 2809），
+ * 不设高度上限会把整屏撑爆，连「往上翻」都做不到。
+ */
+@Composable
+private fun ToolCallDetailBlock(tool: ToolCallDetail) {
+    // 状态只有三种：有结果且 isError、有结果没报错、还没有结果（仍在跑）。
+    // 注意 isError=false **不代表命令没报错** —— 实测 curl 超时那条也是 false，
+    // 所以这里只如实转述内核的标记，不做自己的判断。
+    val status = when {
+        tool.result == null -> stringResource(R.string.tool_detail_pending)
+        tool.failed -> stringResource(R.string.tool_detail_failed)
+        else -> stringResource(R.string.tool_detail_ok)
+    }
+    val statusColor = when {
+        tool.failed -> MaterialTheme.colorScheme.error
+        tool.result == null -> MaterialTheme.colorScheme.onSurfaceVariant
+        else -> MaterialTheme.colorScheme.primary
+    }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                tool.name.ifBlank { stringResource(R.string.tool_call) },
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelLarge.copy(fontFamily = FontFamily.Monospace),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
+            // 耗时：算不出来就没有这一行（不显示 0、也不显示负数）。
+            tool.durationMs?.let { duration ->
+                Text(
+                    formatToolDuration(duration),
+                    modifier = Modifier.padding(end = 8.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            Text(
+                status,
+                color = statusColor,
+                fontWeight = FontWeight.Medium,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+        val arguments = prettyToolArguments(tool.arguments)
+        if (arguments.isBlank()) {
+            Text(
+                stringResource(R.string.tool_detail_no_args),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        } else {
+            ToolTextBlock(
+                label = stringResource(R.string.tool_detail_input),
+                text = arguments,
+                isError = false,
+                maxHeightDp = 160,
+            )
+        }
+        when {
+            tool.result == null -> Text(
+                stringResource(R.string.tool_detail_no_result),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+            )
+
+            tool.result.isBlank() -> Text(
+                stringResource(R.string.tool_detail_empty_result),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+            )
+
+            else -> ToolTextBlock(
+                label = stringResource(if (tool.failed) R.string.tool_detail_error else R.string.tool_detail_output),
+                text = tool.result,
+                isError = tool.failed,
+                maxHeightDp = 260,
+            )
+        }
+    }
+}
+
+/**
+ * 一段可滚动、可复制、等宽显示的工具文本（输入或输出）。
+ *
+ * 两个轴都要能滚：终端输出经常是「很宽的一行 + 很多行」，
+ * 只给纵向滚动的话宽行会被硬折行，缩进层次就全乱了；所以 `softWrap = false` +
+ * 横向滚动，保持原始排版。
+ *
+ * 失败用 error 色描边 + error 色正文：这是用户来查这个视图时最想先看到的东西。
+ */
+@Composable
+private fun ToolTextBlock(label: String, text: String, isError: Boolean, maxHeightDp: Int) {
+    val context = LocalContext.current
+    val accent = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, accent),
+    ) {
+        Column(Modifier.padding(horizontal = 8.dp, vertical = 6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    label,
+                    modifier = Modifier.weight(1f),
+                    color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = if (isError) FontWeight.Medium else FontWeight.Normal,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                Text(
+                    stringResource(R.string.tool_detail_copy),
+                    modifier = Modifier
+                        .clip(MaterialTheme.shapes.small)
+                        .clickable {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("tool-detail", text))
+                            toast(context, context.getString(R.string.copied))
+                        }
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = maxHeightDp.dp)
+                    .verticalScroll(rememberScrollState())
+                    .horizontalScroll(rememberScrollState()),
+            ) {
+                Text(
+                    text,
+                    color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    softWrap = false,
+                )
+            }
         }
     }
 }

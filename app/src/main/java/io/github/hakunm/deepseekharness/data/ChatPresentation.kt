@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
+import java.util.Locale
 
 enum class ChatItemKind { USER, ASSISTANT, REASONING, CONTEXT, TOOL }
 
@@ -46,6 +47,43 @@ data class ChatDisplayItem(
      * 那是在用分隔符当数据结构。
      */
     val actions: List<String> = emptyList(),
+    /**
+     * 工具调用的**逐条明细**（输入 / 输出 / 成败 / 耗时）。
+     *
+     * 为什么是列表：连续的多次调用会被 [mergeToolRuns] 合并成一行，而详情视图要求
+     * **每条都能单独展开** —— 只留第一条就等于把其余调用的输出全丢了。
+     * 空列表 = 这一项不是工具调用，或者拿不到 tool/call 数据。
+     */
+    val tools: List<ToolCallDetail> = emptyList(),
+)
+
+/**
+ * 一次工具调用的完整明细 —— 详情视图要渲染的东西都在这儿。
+ *
+ * 字段全部对着**真实会话日志**（105 份 `session.v4.jsonl.zstd`，共 19050 条 tool/result）：
+ * - `tool/call` 的 data：`turn`/`step`/`callId`/`name`/`arguments`；`arguments` 是**字符串**
+ *   （12471/12471 都能 JSON.parse），所以要格式化后再显示。
+ * - `tool/result` 的 data.message：`role`/`source`/`toolCallId`/`content`/`isError`/`id`，
+ *   六个 key 19050/19050 全在；`content` **一定是数组**（19050/19050），元素只有
+ *   `text`（19050）与 `image`（73）两种；`isError` 为 true 的 689 条。
+ * - 关联字段用 `message.toolCallId`（与 `message.source.callId` 实测完全相等：8006/8006）。
+ */
+data class ToolCallDetail(
+    val callId: String = "",
+    val name: String = "",
+    /** 内核给的原始 arguments（JSON 字符串，未格式化）。空串 = 这个工具没有参数。 */
+    val arguments: String = "",
+    /** 结果正文；`null` = 还没有 `tool/result`（例如仍在运行）。空串是合法的「有结果但没文字」。 */
+    val result: String? = null,
+    /**
+     * 内核 `message.isError`。
+     *
+     * 注意它**不等于**「命令没报错」：实测样本里 `curl` 超时、输出全是 stderr 的那条
+     * `isError` 仍是 false。它只是内核自己标记的工具级失败。
+     */
+    val failed: Boolean = false,
+    /** `result.time - call.time`（毫秒）。配不上、或时钟倒退时是 `null`，UI 直接不显示这一行。 */
+    val durationMs: Long? = null,
 )
 
 data class ChatDelta(
@@ -126,7 +164,13 @@ fun WorkspaceEvent.chatDelta(): ChatDelta? {
     )
 }
 
-fun ChatHistory.displayItems(): List<ChatDisplayItem> = mergeToolRuns(events.flatMap(::displayItems))
+fun ChatHistory.displayItems(): List<ChatDisplayItem> {
+    // 先按 callId 把 tool/result 建成索引，再逐条渲染：
+    // 结果的 callId 藏在 `data.message.toolCallId` 里，配对要跨事件 ——
+    // 单看一条 entry 是配不上的（这正是以前 tool/result 整类被丢掉的原因）。
+    val results = toolResultsByCallId(events)
+    return mergeToolRuns(events.flatMap { displayItems(it, results) })
+}
 
 fun ChatHistory.todoItems(): List<TodoItem> {
     val values = (projections as? JsonObject)?.objectValue("values") ?: return emptyList()
@@ -192,10 +236,13 @@ fun ChatHistory.deliverables(): List<ChatDeliverable> {
     return out.values.toList()
 }
 
-private fun displayItems(entry: HistoryEntry): List<ChatDisplayItem> = when (entry.event.type) {
+private fun displayItems(
+    entry: HistoryEntry,
+    toolResults: Map<String, ToolResultInfo> = emptyMap(),
+): List<ChatDisplayItem> = when (entry.event.type) {
     "user/message" -> userItems(entry.event)
     "assistant/message" -> assistantItems(entry.event)
-    "tool/call" -> listOf(toolItem(entry))
+    "tool/call" -> listOf(toolItem(entry, toolResults))
     else -> emptyList()
 }
 
@@ -292,7 +339,7 @@ private fun assistantItems(event: SessionEvent): List<ChatDisplayItem> {
     return result
 }
 
-private fun toolItem(entry: HistoryEntry): ChatDisplayItem {
+private fun toolItem(entry: HistoryEntry, toolResults: Map<String, ToolResultInfo>): ChatDisplayItem {
     val event = entry.event
     val data = event.data as? JsonObject
     val name = data?.stringValue("name").orEmpty()
@@ -301,6 +348,8 @@ private fun toolItem(entry: HistoryEntry): ChatDisplayItem {
     val description = view?.stringValue("description")
     val arguments = data?.stringValue("arguments")
     val actions = toolActionsFor(name, arguments)
+    val callId = data?.stringValue("callId").orEmpty()
+    val result = toolResults[callId]
     return ChatDisplayItem(
         id = "${event.seq}-tool",
         seq = event.seq,
@@ -309,6 +358,16 @@ private fun toolItem(entry: HistoryEntry): ChatDisplayItem {
         title = actions.joinToString("，"),
         body = description ?: argumentsSummary(arguments) ?: viewTitle ?: name,
         actions = actions,
+        tools = listOf(
+            ToolCallDetail(
+                callId = callId,
+                name = name,
+                arguments = arguments.orEmpty(),
+                result = result?.text,
+                failed = result?.failed == true,
+                durationMs = toolDurationMs(event.time, result?.time),
+            ),
+        ),
     )
 }
 
@@ -339,6 +398,9 @@ private fun mergeToolRuns(items: List<ChatDisplayItem>): List<ChatDisplayItem> {
             title = title,
             body = run.joinToString("\n") { it.body },
             actions = actions,
+            // 合并的是**显示**，不是数据：每一调的明细都要留着，
+            // 详情视图才能逐条展开（只留第一条 = 其余调用的输出全丢）。
+            tools = run.flatMap { it.tools },
         )
         run = mutableListOf()
     }
@@ -430,11 +492,114 @@ private fun argumentsSummary(raw: String?): String? {
     return null
 }
 
+/**
+ * 一条 `tool/result` 的可用信息（内部结构，只在这个文件里流转）。
+ *
+ * `time` 留下来是为了算耗时：事件顶层的 `time` 与 `tool/call` 的相减就是墙钟耗时。
+ */
+private data class ToolResultInfo(val text: String, val failed: Boolean, val time: Long)
+
+/**
+ * 把 `tool/result` 按 callId 建索引。
+ *
+ * 关联字段优先用 `data.message.toolCallId`，退路是 `data.message.source.callId`：
+ * 实测两者在 8006/8006 条里完全相等，但只认一个的话，内核哪天只留另一个就全配不上了。
+ * 两个都拿不到的行直接跳过（宁可不显示，也不猜）。
+ */
+private fun toolResultsByCallId(events: List<HistoryEntry>): Map<String, ToolResultInfo> {
+    val out = HashMap<String, ToolResultInfo>()
+    events.forEach { entry ->
+        val event = entry.event
+        if (event.type != "tool/result") return@forEach
+        val data = event.data as? JsonObject ?: return@forEach
+        val message = data.objectValue("message") ?: return@forEach
+        val callId = message.stringValue("toolCallId")
+            ?: message.objectValue("source")?.stringValue("callId")
+            ?: return@forEach
+        out[callId] = ToolResultInfo(
+            text = toolResultText(message),
+            failed = message.booleanValue("isError") == true,
+            time = event.time,
+        )
+    }
+    return out
+}
+
+/**
+ * 一个工具结果的正文。
+ *
+ * 内核的 `message.content` 实测**一定是数组**（19050/19050），元素只有两种：
+ * `text`（取 text）与 `image`（只有附件引用，字节在服务端附件存储里）。
+ * 图片这里用一行占位写出来，而不是静默丢掉 —— 「这里本来有一张图」也是信息。
+ *
+ * 空段丢掉、段间空行，与网页版 `partsText(content, 'text')` 同一口径。
+ */
+private fun toolResultText(message: JsonObject): String {
+    val content = message["content"] ?: return ""
+    val parts = content as? JsonArray ?: return (content as? JsonPrimitive)?.contentOrNull.orEmpty()
+    return parts.mapNotNull { raw ->
+        val part = raw as? JsonObject ?: return@mapNotNull null
+        when (part.stringValue("type")) {
+            "text" -> part.stringValue("text")
+            "image" -> {
+                val attachment = part.objectValue("attachment")
+                val name = attachment?.stringValue("name")?.takeIf(String::isNotBlank) ?: "attachment"
+                val width = attachment?.intValue("width") ?: 0
+                val height = attachment?.intValue("height") ?: 0
+                if (width > 0 && height > 0) "[image $name ${width}×$height]" else "[image $name]"
+            }
+            else -> null
+        }
+    }.filter(String::isNotBlank).joinToString("\n\n")
+}
+
+/**
+ * 耗时 = `tool/result.time - tool/call.time`（都是 epoch 毫秒）。
+ *
+ * 结果为负说明时钟倒退（机器休眠恢复、NTP 校时——实测日志里有一条 bash 差 9821 秒，
+ * 那是挂起时间不是执行时间）。这种情况**不显示**，而不是显示一个负数或 0：
+ * 宁可少一行，也不要瞎编。
+ */
+internal fun toolDurationMs(callTime: Long, resultTime: Long?): Long? {
+    if (resultTime == null) return null
+    val delta = resultTime - callTime
+    return if (delta < 0) null else delta
+}
+
+/**
+ * 耗时的人类可读格式。
+ *
+ * 刻意**不进字符串资源**：ms / s / m / h 是通用单位，翻成「毫秒/秒/分」只会更长、
+ * 并不会更好读；而这一行本来就是元数据。边界都在单测里钉住。
+ */
+internal fun formatToolDuration(ms: Long): String = when {
+    ms < 1_000 -> "$ms ms"
+    ms < 60_000 -> "${"%.1f".format(Locale.US, ms / 1000.0)} s"
+    ms < 3_600_000 -> "${ms / 60_000}m ${(ms % 60_000) / 1_000}s"
+    else -> "${ms / 3_600_000}h ${(ms % 3_600_000) / 60_000}m"
+}
+
+/**
+ * 把内核给的 arguments 格式化成可读 JSON。
+ *
+ * `arguments` 是**字符串**（实测 12471/12471 可解析），塞进界面之前要缩进；
+ * 但解析失败就原样返回 —— 宁可给一坨原始文本，也不要把参数藏起来
+ * （真机上曾经因为「坏 JSON 一律丢弃」而让整条调用看起来没有输入）。
+ */
+internal fun prettyToolArguments(raw: String): String {
+    if (raw.isBlank()) return ""
+    val element = runCatching { json.parseToJsonElement(raw) }.getOrNull() ?: return raw
+    return runCatching { prettyJson.encodeToString(JsonElement.serializer(), element) }.getOrNull() ?: raw
+}
+
 private fun JsonObject.objectValue(key: String): JsonObject? = this[key] as? JsonObject
 
 private fun JsonObject.stringValue(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull
 
 private fun JsonObject.intValue(key: String): Int? = (this[key] as? JsonPrimitive)?.intOrNull
+
+private fun JsonObject.booleanValue(key: String): Boolean? =
+    (this[key] as? JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull()
 
 private fun JsonObject.arrayLabels(member: String, field: String): String {
     val values = (this[member] as? JsonArray).orEmpty().mapNotNull { entry ->
@@ -444,3 +609,6 @@ private fun JsonObject.arrayLabels(member: String, field: String): String {
 }
 
 private val json = Json { ignoreUnknownKeys = true }
+
+/** 只用于把 arguments 缩进显示；解析仍走 [json]。 */
+private val prettyJson = Json { prettyPrint = true }

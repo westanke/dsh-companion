@@ -91,6 +91,8 @@ import io.github.hakunm.deepseekharness.HarnessViewModel
 import io.github.hakunm.deepseekharness.OpenDocument
 import io.github.hakunm.deepseekharness.R
 import io.github.hakunm.deepseekharness.data.FileEntry
+import io.github.hakunm.deepseekharness.data.PreviewKind
+import io.github.hakunm.deepseekharness.data.previewKind
 
 @Composable
 fun FilesScreen(state: HarnessState, viewModel: HarnessViewModel, wide: Boolean) {
@@ -364,6 +366,10 @@ private fun EditorPane(
     }
     var actionsExpanded by remember(document.entry.path) { mutableStateOf(false) }
     val markdown = isMarkdown(document.entry.name)
+    // 图片 / PDF 走独立的预览分支（原先一律落到「二进制文件」那行字上）。
+    // previewKind 是纯函数，判据与「会话附件」面板完全相同 —— 两处必须同一套规则。
+    val kind = previewKind(document.entry.name, document.contentType)
+    val binaryPreview = kind == PreviewKind.IMAGE || kind == PreviewKind.PDF
     var markdownPreview by remember(document.entry.path) { mutableStateOf(markdown) }
     var textScale by remember(document.entry.path) { mutableStateOf(1f) }
     val applyZoom: (Float) -> Unit = { factor ->
@@ -486,12 +492,25 @@ private fun EditorPane(
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        if (document.text == null) {
+        if (document.entry.kind == "directory") {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                EmptyState(
-                    Icons.AutoMirrored.Outlined.InsertDriveFile,
-                    if (document.entry.kind == "directory") document.entry.kind else stringResource(R.string.binary_file),
-                )
+                EmptyState(Icons.AutoMirrored.Outlined.InsertDriveFile, document.entry.kind)
+            }
+        } else if (binaryPreview) {
+            // 与「会话附件」面板共用同一个组件：解码 / 翻页 / 缩放 / 失败提示只有一份实现。
+            BinaryFilePreview(
+                kind = kind,
+                bytes = document.bytes,
+                sizeBytes = document.entry.size,
+                skippedForSize = document.skippedForSize,
+                fallbackMessage = stringResource(R.string.binary_file),
+                skippedHint = stringResource(R.string.preview_skipped_hint_download),
+                onDownload = onDownload,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else if (document.text == null) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                EmptyState(Icons.AutoMirrored.Outlined.InsertDriveFile, stringResource(R.string.binary_file))
             }
         } else if (markdown && markdownPreview) {
             Column(

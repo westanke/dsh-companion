@@ -403,8 +403,35 @@ android {
         //   SessionFileRefs.refs() 嗅工具参数 —— 底部是 agent 交付的报告与安装包，
         //   弹层却是一堆嗅出来的路径（真机反馈：「标题栏的文件夹中的不合适」）。
         //   抽成共用的 sessionFileList()，两处同一个来源，不可能再走偏。
-        versionCode = 10045
-        versionName = "2.2.20"
+        // 2.2.21 = 补齐三项与「真机体感」直接相关的能力（本轮）。
+        //   ① **修 /技能名 调用**：此前只要输入以 `/` 开头就整条送去 executeCommand，
+        //      技能名不在宿主命令表里 → COMMAND_NOT_FOUND，**官方能用的技能一个都调不动**。
+        //      现按「是否命中已注册命令」判别（isHostCommandLine）；不是命令就当普通消息
+        //      原样发给模型，由 dsh-tool-skill 在 pre-step 注入技能正文 —— 与官方一致。
+        //      匹配规则照抄插件 chat-adapter.ts 的正则，两边必须相同。
+        //   ② **图片与 PDF 预览**：此前文件页只显示一行「二进制文件」，会话附件同理。
+        //      现加 PreviewKind.IMAGE / PDF，**零新依赖**（系统 BitmapFactory + PdfRenderer）。
+        //      文件页与会话附件两处共用同一组件与同一套判据，避免「一处能看一处不能」。
+        //      加上限：图片 24MiB/12MP，PDF 32MiB/100 页，超限给出路而不是白屏。
+        //   ③ **工具调用详情（trajectory）**：官方有、我们没有。手机上开不了终端，
+        //      工具的输入/输出/成败/耗时是唯一的事后排查手段。现在卡片可展开看全部，
+        //      失败的带标记；连续工具合并成一行后仍能逐条展开。
+        //   另含 ask_user_question 问答卡片（原生 + WebView 两套，见 CHANGELOG）。
+        // 2.2.22 = 修「问答卡片刷不出来」：改用事件驱动，**不用轮询**。
+        //   之前只在 chat.message.committed / turn.* / approval.* 这几类事件上刷新，
+        //   而提问超时的那一刻内核发的是 tool/result —— 它被插件降级成 chat.session.event，
+        //   不在集合里，于是**信号已经到了 App 却没被认领**。
+        //   现在：① 认领 tool/result 帧（isToolResultFrame，按 data.eventType 精确判）；
+        //     ② 兜底：chat.turn.end 且该会话已不在运行时补拉一次，覆盖「agent 很快收尾、
+        //        整轮都没接住」的情况。两条都是事件驱动，全程无定时器。
+        // 2.2.23 = App 认领插件新加的**问答专属帧**，两端都能答且答完自动收场。
+        //   · `chat.userQuestions/requested` → 立刻刷新（提问一落地就有通知，
+        //     不必再等 tool/result 帧或轮次结束这两个间接信号）。
+        //   · `chat.userQuestions/answered` / `dismissed` → **就地摘掉那张卡**，
+        //     电脑端答完后手机端不必等下一次 GET 才消失。
+        //   · `PendingQuestionSet` 新增 `viaBridge`（默认 false，兼容老服务端）。
+        versionCode = 10048
+        versionName = "2.2.23"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }

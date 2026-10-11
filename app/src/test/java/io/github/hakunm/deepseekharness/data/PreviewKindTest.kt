@@ -2,6 +2,7 @@ package io.github.hakunm.deepseekharness.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -35,10 +36,86 @@ class PreviewKindTest {
 
     @Test
     fun `二进制按扩展名优先 即便 MIME 说 text`() {
-        assertEquals(PreviewKind.BINARY, previewKind("a.png", "text/plain"))
         assertEquals(PreviewKind.BINARY, previewKind("archive.tar.gz", null))
         assertEquals(PreviewKind.BINARY, previewKind("app.apk", "application/octet-stream"))
-        assertEquals(PreviewKind.BINARY, previewKind("doc.pdf", ""))
+        assertEquals(PreviewKind.BINARY, previewKind("song.mp3", "text/plain"))
+        assertEquals(PreviewKind.BINARY, previewKind("font.woff2", null))
+    }
+
+    @Test
+    fun `图片与 PDF 从二进制里分出来 且扩展名优先于 MIME`() {
+        // 这条是新分流规则的核心：两者已经从 BINARY_EXTENSIONS 挪走。
+        // 留在原集合里的话，二进制判定在前，图片分支一行都跑不到。
+        assertEquals(PreviewKind.IMAGE, previewKind("shot.png", "text/plain"))
+        assertEquals(PreviewKind.IMAGE, previewKind("photo.JPEG", "application/octet-stream"))
+        assertEquals(PreviewKind.IMAGE, previewKind("anim.gif", null))
+        assertEquals(PreviewKind.IMAGE, previewKind("modern.webp", "text/plain"))
+        assertEquals(PreviewKind.IMAGE, previewKind("ios.heic", null))
+        assertEquals(PreviewKind.PDF, previewKind("doc.pdf", ""))
+        assertEquals(PreviewKind.PDF, previewKind("manual.PDF", "text/plain"))
+    }
+
+    @Test
+    fun `没有扩展名时图片与 PDF 由 MIME 兜底`() {
+        assertEquals(PreviewKind.IMAGE, previewKind("screenshot", "image/png"))
+        assertEquals(PreviewKind.PDF, previewKind("scan", "application/pdf"))
+        assertEquals(PreviewKind.BINARY, previewKind("clip", "video/mp4"))
+    }
+
+    @Test
+    fun `魔数能把无名文件升级成图片 但不推翻明确的文本类型`() {
+        // 服务端 MIME 不可靠（项目里为此吃过亏）：名字与 MIME 都认不出来时，头部字节说了算。
+        assertEquals(PreviewKind.IMAGE, previewKindOf("blob", null, PNG_HEADER))
+        assertEquals(PreviewKind.IMAGE, previewKindOf("blob.bin", "application/octet-stream", JPEG_HEADER))
+        // 名字已经明确说是 Markdown / HTML 的，尊重名字 —— 那是用户点开它的意图。
+        assertEquals(PreviewKind.MARKDOWN, previewKindOf("README.md", null, PNG_HEADER))
+        assertEquals(PreviewKind.HTML, previewKindOf("page.html", null, PNG_HEADER))
+        // 认不出来就维持原判
+        assertEquals(PreviewKind.BINARY, previewKindOf("blob.bin", null, byteArrayOf(1, 2, 3, 4)))
+        // 没有字节时等价于 previewKind
+        assertEquals(PreviewKind.IMAGE, previewKindOf("a.png", null, null))
+        assertEquals(PreviewKind.SOURCE, previewKindOf("notes.txt", null, null))
+    }
+
+    @Test
+    fun `魔数只认真的图片头 两个字母不算`() {
+        assertEquals(ImageFormat.PNG, sniffImageFormat(PNG_HEADER))
+        assertEquals(ImageFormat.JPEG, sniffImageFormat(JPEG_HEADER))
+        assertEquals(ImageFormat.GIF, sniffImageFormat("GIF89a".toByteArray() + ByteArray(8)))
+        assertEquals(
+            ImageFormat.WEBP,
+            sniffImageFormat("RIFF".toByteArray() + byteArrayOf(0, 0, 0, 0) + "WEBP".toByteArray()),
+        )
+        // 「BM…」开头的文本不是位图：BMP 还要看偏移 10 处的 DIB 头长度。
+        assertNull(sniffImageFormat("BMW 是一辆车，不是位图".toByteArray()))
+        // 半截文件不瞎猜
+        assertNull(sniffImageFormat(null))
+        assertNull(sniffImageFormat(byteArrayOf(1, 2, 3)))
+        assertNull(sniffImageFormat(byteArrayOf(0x89.toByte(), 0x50.toByte())))
+    }
+
+    @Test
+    fun `图片与 PDF 各有各的字节上限 别的类型没有`() {
+        assertEquals(PREVIEW_IMAGE_MAX_BYTES, binaryPreviewByteLimit(PreviewKind.IMAGE))
+        assertEquals(PREVIEW_PDF_MAX_BYTES, binaryPreviewByteLimit(PreviewKind.PDF))
+        // 文本走编辑器自己的 MAX_EDIT_BYTES，不在这里再定义一条
+        assertNull(binaryPreviewByteLimit(PreviewKind.SOURCE))
+        assertNull(binaryPreviewByteLimit(PreviewKind.BINARY))
+        // 两条闸必须不同：共用一个数字就退化回「所有二进制一个待遇」了
+        assertTrue(PREVIEW_PDF_MAX_BYTES > PREVIEW_IMAGE_MAX_BYTES)
+    }
+
+    @Test
+    fun `采样倍率是 2 的幂 且压在像素上限以内`() {
+        // 4000×3000 = 12 MP，刚好等于上限，不缩
+        assertEquals(1, sampleSizeFor(4000, 3000))
+        // 8000×6000 = 48 MP → 缩 2 倍
+        assertEquals(2, sampleSizeFor(8000, 6000))
+        // 20000×20000 = 400 MP → 缩 8 倍（400/64 = 6.25 MP）
+        assertEquals(8, sampleSizeFor(20_000, 20_000))
+        // 退化输入不炸：宁可原样解，也不要 inSampleSize = 0（库会抛）
+        assertEquals(1, sampleSizeFor(0, 0))
+        assertEquals(1, sampleSizeFor(-5, 100))
     }
 
     @Test
@@ -61,6 +138,17 @@ class PreviewKindTest {
         // 宁可让用户看到可复制的原文，也不要一片空白加一个「不可用」。
         assertEquals(PreviewKind.SOURCE, previewKind("LICENSE", null))
         assertEquals(PreviewKind.SOURCE, previewKind("/abs/path/Makefile", null))
+    }
+
+    private companion object {
+        /** 真头部：PNG 的 8 字节签名 + 两个占位字节。 */
+        val PNG_HEADER = byteArrayOf(
+            0x89.toByte(), 0x50.toByte(), 0x4E.toByte(), 0x47.toByte(),
+            0x0D.toByte(), 0x0A.toByte(), 0x1A.toByte(), 0x0A.toByte(), 0, 0,
+        )
+
+        /** 真头部：JPEG 的 SOI + 段起始标记。 */
+        val JPEG_HEADER = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(), 0, 0)
     }
 }
 

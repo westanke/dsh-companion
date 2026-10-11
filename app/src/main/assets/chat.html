@@ -138,6 +138,23 @@ pre:hover .copy{opacity:1}
 .approve button{flex:1;border:0;border-radius:9px;padding:10px;font-weight:600;font-size:14px;cursor:pointer}
 .approve .no{background:var(--card);color:var(--fg);border:1px solid var(--line)}
 .approve .yes{background:var(--ok);color:#fff}
+/* ── 问答卡（ask_user_question）──
+   外形**复用**审批卡那一套（.approve）：同一种「需要你出手」的卡片就该长得一样，
+   两处不一致这件事用户已经报过一次。只用主色把语义分开：
+   审批=危险，请核对命令；问答=等你回答，没有危险。 */
+.approve.ask{border-color:var(--accent)}
+.approve.ask .hd{color:var(--accent)}
+.approve.ask .hd.done{color:var(--ok)}
+.approve .q{margin-top:10px}
+.approve .qh{font-weight:700;font-size:13.5px;color:var(--accent)}
+.approve .qt{font-size:14px;line-height:1.5}
+.approve .qd{color:var(--muted);font-size:12.5px;margin-top:2px}
+.approve .opt{display:flex;gap:8px;align-items:flex-start;margin-top:7px;cursor:pointer}
+.approve .opt input{margin:3px 0 0;flex:0 0 auto}
+.approve .opt span{min-width:0}
+.approve .opt em{display:block;color:var(--muted);font-style:normal;font-size:12.5px}
+.approve textarea.custom{width:100%;margin-top:7px;border:1px solid var(--line);border-radius:8px;
+  padding:8px;background:var(--bg);color:var(--fg);font:inherit;font-size:14px;resize:vertical}
 #todos{margin:0 12px 10px;padding:10px 12px;background:var(--card);border:1px solid var(--line);
   border-radius:10px;font-size:13px;flex:0 0 auto;max-height:34vh;overflow:auto}
 /* details 默认没有 marker，用自己的箭头。展开时限制高度，折叠时只占一行。 */
@@ -1146,6 +1163,144 @@ function decide(id, allow, node) {
     .catch(function (e) { toast("审批失败：" + e.message); });
 }
 
+/* ── 问答卡（ask_user_question，方案 A：只认 continued）──
+ *
+ * 外形与审批卡共用 `.approve`（见上面的样式注释）。
+ *
+ * 数据**两条路**进来，与审批完全对称：
+ *   ① 原生 setQuestions 推（原生那份只含当前会话）；
+ *   ② 页面自己 GET（init 与几条 WS 事件之后，见 refreshQuestions）。
+ * 两条路都按 callId 去重（页面节点上的 data-question），先到先画，不会画两张。
+ *
+ * 选项的 label 一律**不进 DOM 属性**，只放数字下标（data-i / data-j）——
+ * 提交时再去 set.questions 里取原值。这样任何引号/尖括号都伤不到选择器，
+ * 也不必给选择器写 CSS 转义。
+ */
+function addQuestion(set) {
+  if (!set || !set.callId) return;
+  if (log.querySelector('[data-question="' + set.callId + '"]')) return;
+  dropEmpty();
+  var w = document.createElement("div");
+  w.className = "approve ask";
+  w.setAttribute("data-question", set.callId);
+  var qs = set.questions || [];
+  var html = '<div class="hd">❓ 需要你的回答</div>';
+  qs.forEach(function (q, i) {
+    html += '<div class="q">';
+    if (q.header) html += '<div class="qh">' + esc(q.header) + '</div>';
+    html += '<div class="qt">' + esc(q.question || '') + '</div>';
+    if (q.detail) html += '<div class="qd">' + esc(q.detail) + '</div>';
+    var opts = q.options || [];
+    if (opts.length) {
+      opts.forEach(function (o, j) {
+        html += '<label class="opt"><input type="' + (q.multiSelect ? 'checkbox' : 'radio') +
+          '" data-i="' + i + '" data-j="' + j + '"><span>' + esc(o.label) +
+          (o.description ? '<em>' + esc(o.description) + '</em>' : '') + '</span></label>';
+      });
+    } else {
+      /* 没有选项 = 这题要自由文本，正好对应协议里的 custom。 */
+      html += '<textarea class="custom" data-i="' + i + '" rows="2" placeholder="填写你的回答"></textarea>';
+    }
+    html += '</div>';
+  });
+  html += '<div class="btns"><button class="yes">提交回答</button></div>';
+  w.innerHTML = html;
+  if (set.answered) {
+    markQuestionAnswered(w);
+  } else {
+    var btn = w.querySelector('.yes');
+    btn.onclick = function () { submitQuestion(set, w, btn); };
+  }
+  sink().appendChild(w);
+  toBottom(true);
+  return w;
+}
+
+function markQuestionAnswered(node) {
+  node.setAttribute("data-answered", "1");
+  node.removeAttribute("data-busy");   /* 提交中flag不留：以后再推同一组也不该显示"提交中" */
+  var btns = node.querySelector(".btns");
+  if (btns && btns.parentNode) btns.parentNode.removeChild(btns);
+  var inputs = node.querySelectorAll("input,textarea");
+  for (var i = 0; i < inputs.length; i++) inputs[i].disabled = true;
+  var hd = node.querySelector(".hd");
+  if (hd) { hd.className = "hd done"; hd.textContent = "✓ 已回答"; }
+}
+
+function submitQuestion(set, node, btn) {
+  if (!canWrite) { toast("设备没有 chat.write 权限"); return; }
+  if (node.getAttribute("data-busy") === "1") return;   /* 防重复提交第一道闸（插件的 409 是第二道） */
+  var qs = set.questions || [];
+  var picked = {};
+  var inputs = node.querySelectorAll("input");
+  for (var k = 0; k < inputs.length; k++) {
+    if (!inputs[k].checked) continue;
+    var i0 = +inputs[k].getAttribute("data-i");
+    if (!picked[i0]) picked[i0] = [];
+    var opt = (qs[i0] && qs[i0].options && qs[i0].options[+inputs[k].getAttribute("data-j")]) || null;
+    if (opt) picked[i0].push(opt.label);
+  }
+  var answers = [];
+  var complete = true;
+  qs.forEach(function (q, i) {
+    var opts = q.options || [];
+    if (opts.length) {
+      var chosen = [];
+      opts.forEach(function (o) { if ((picked[i] || []).indexOf(o.label) >= 0) chosen.push(o.label); });
+      if (!chosen.length) complete = false;
+      answers.push({ id: q.id, selected: chosen });
+    } else {
+      var ta = node.querySelector('textarea[data-i="' + i + '"]');
+      var text = ta ? String(ta.value || "").replace(/^\s+|\s+$/g, "") : "";
+      if (!text) complete = false;
+      answers.push({ id: q.id, selected: [], custom: text });
+    }
+  });
+  if (!complete) { toast("请先回答每一题"); return; }
+  node.setAttribute("data-busy", "1");
+  btn.disabled = true;
+  btn.textContent = "提交中…";
+  api("/chat/sessions/" + encodeURIComponent(SID) + "/questions/" + encodeURIComponent(set.callId) + "/answer",
+      "POST", { answers: answers })
+    .then(function () {
+      markQuestionAnswered(node);
+      toast("已回答");
+    })
+    .catch(function (e) {
+      node.removeAttribute("data-busy");
+      btn.disabled = false;
+      btn.textContent = "提交回答";
+      toast(questionError(e));
+    });
+}
+
+/* 提交失败的文案：409 的两种 code 含义完全不同（答过了 / 这条作废了），
+   原样甩 code 用户既看不懂，也不知道该不该重试。 */
+function questionError(e) {
+  var code = (e && e.code) || "";
+  var msg = (e && e.message) || "";
+  if (code === "QUESTION_REPLY_QUEUED") return "这组问题你已经回答过了，答复正在排队";
+  if (code === "QUESTION_NOT_PENDING") return "这组问题已经不需要回答了";
+  if (code === "FORBIDDEN" || code === "SCOPE_MISSING" || msg.indexOf("chat.write") >= 0) {
+    return "这台设备没有 chat.write 权限";
+  }
+  return "提交失败：" + (msg || "未知错误");
+}
+
+/* 页面自己那一路：只对**当前会话** SID 发，绝不遍历会话列表 ——
+   插件的 resolveAgent 是 resolve-or-resume，对冷会话会把那边的 agent 拉活。 */
+function refreshQuestions() {
+  if (!SID) return Promise.resolve();
+  return api("/chat/sessions/" + encodeURIComponent(SID) + "/questions")
+    .then(function (r) {
+      ((r && r.items) || []).forEach(function (s) {
+        if (!s || s.state !== "continued") return;
+        addQuestion(s);
+      });
+    })
+    .catch(function () {});
+}
+
 /* ── 历史归约 ──
    REST 历史是 DSH 原始事件流：user/message 与 assistant/message 已定稿，
    assistant/chunk 需按 (turn,step,index) 累积后再成段。 */
@@ -1434,10 +1589,18 @@ function connectWS() {
         break;
       case "chat.session.status":
         setRunning(d.running === true || d.status === "running");
+        refreshQuestions();
+        break;
+      /* 问题多半出现在一轮中间，这几类事件就是「这一轮结构变了」的信号 ——
+         与原生 refreshPendingQuestions 挂在同一批事件上，两处口径保持一致。 */
+      case "chat.turn.start":
+      case "chat.turn.end":
+        refreshQuestions();
         break;
       case "chat.approval.requested":
       case "chat.approval.resolved":
         refreshApprovals();
+        refreshQuestions();
         break;
       default:
         break;
@@ -2138,6 +2301,7 @@ window.dshChat = {
         .then(function () { return refreshHistory(); })
         .then(function () { note("历史已载入"); })
         .then(function () { return refreshApprovals(); })
+        .then(function () { return refreshQuestions(); })
         .then(connectWS)
         .catch(function (e) {
           /* 到这一步说明连 loadCommands 都挂了（多半是没连上电脑），
@@ -2178,6 +2342,16 @@ window.dshChat = {
       if (!a.id) return;
       if (log.querySelector('[data-approval="' + a.id + '"]')) return;
       addApproval(a);
+    });
+  },
+
+  /* 原生推过来的待答问题（只含当前会话）。与 setApprovals 同款：
+     已经画过的 callId 不再动它 —— 用户可能正在这道题上勾选。 */
+  setQuestions: function (items) {
+    (items || []).forEach(function (s) {
+      if (!s || !s.callId) return;
+      if (s.state && s.state !== "continued") return;
+      addQuestion(s);
     });
   },
 
@@ -2243,6 +2417,7 @@ window.appendMessage = function (j) {
 };
 window.appendAssistant = window.dshChat.appendAssistant;
 window.showApproval = function (j) { addApproval(typeof j === "string" ? JSON.parse(j) : j); };
+window.showQuestion = function (j) { addQuestion(typeof j === "string" ? JSON.parse(j) : j); };
 window.setTodos = setTodos;
 window.setRunning = setRunning;
 window.setConnectionStatus = function (on) { $("dot").className = on ? "on" : "off"; };

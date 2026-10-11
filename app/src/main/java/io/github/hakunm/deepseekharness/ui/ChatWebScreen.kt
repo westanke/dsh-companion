@@ -29,6 +29,7 @@ import io.github.hakunm.deepseekharness.HarnessViewModel
 import io.github.hakunm.deepseekharness.data.ChatHistory
 import io.github.hakunm.deepseekharness.data.ChatItemKind
 import io.github.hakunm.deepseekharness.data.MessageSegment
+import io.github.hakunm.deepseekharness.data.PendingQuestionSet
 import io.github.hakunm.deepseekharness.data.SessionFileRefs
 import io.github.hakunm.deepseekharness.data.displayItems
 import io.github.hakunm.deepseekharness.data.parseGenUi
@@ -525,6 +526,61 @@ fun ChatWebScreen(
         }
         view.evaluateJavascript("window.dshChat.setApprovals(" + payload.toString() + ")", null)
     }
+
+    // 待回答问题：与审批同款，状态一变就整份推过去，页面按 callId 增量插入。
+    //
+    // 只推**当前会话**的问题：[HarnessState.questions] 本身就是按 selectedSessionId 取的
+    // （见 HarnessViewModel.refreshPendingQuestions —— 插件的 resolveAgent 会把冷会话拉活，
+    // 所以那条路永远只看当前会话）。页面也自己有一路 GET（chat.html 的 refreshQuestions），
+    // 与审批的双路完全对称：原生推一份、页面自己补一份，哪条先到都不会重复。
+    val questionSets = state.questions
+    LaunchedEffect(questionSets, state.answeredCallIds) {
+        val view = web ?: return@LaunchedEffect
+        if (!pageReady) return@LaunchedEffect
+        if (questionSets.isEmpty()) return@LaunchedEffect
+        val payload = org.json.JSONArray()
+        questionSets.forEach { set ->
+            payload.put(questionJson(set, set.callId in state.answeredCallIds))
+        }
+        view.evaluateJavascript("window.dshChat.setQuestions(" + payload.toString() + ")", null)
+    }
+}
+
+/**
+ * 一组待答问题 → 页面能直接吃的 JSON。
+ *
+ * 与 [historyJson] 同样的理由手写：页面只关心这几个字段，给它补 @Serializable 反而
+ * 会把「协议里还有哪些字段」这件事绑死在 Kotlin 的模型上。
+ *
+ * `answered` 是**原生这边的记忆**（用户可能是切过来之前在原生化答的），
+ * 带上它页面就能直接画成「已回答」，不必等下一次 GET 才纠正。
+ */
+private fun questionJson(set: PendingQuestionSet, answered: Boolean): JSONObject {
+    val questions = org.json.JSONArray()
+    set.questions.forEach { question ->
+        val options = org.json.JSONArray()
+        question.options.forEach { option ->
+            options.put(
+                JSONObject()
+                    .put("label", option.label)
+                    .put("description", option.description ?: ""),
+            )
+        }
+        questions.put(
+            JSONObject()
+                .put("id", question.id)
+                .put("question", question.question)
+                .put("header", question.header ?: "")
+                .put("detail", question.detail ?: "")
+                .put("options", options)
+                .put("multiSelect", question.multiSelect),
+        )
+    }
+    return JSONObject()
+        .put("callId", set.callId)
+        .put("state", set.state)
+        .put("answered", answered)
+        .put("questions", questions)
 }
 
 

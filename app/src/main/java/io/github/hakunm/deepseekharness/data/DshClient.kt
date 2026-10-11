@@ -264,6 +264,30 @@ class DshClient(
         )
     }
 
+    /**
+     * 当前会话里待回答的问题（`ask_user_question`）。
+     *
+     * ⚠️ 服务端在这条路上会走 `resolveAgent(..., resume)` —— 对**冷**会话调它会把那边的
+     * Agent 拉活。所以调用方**只能**传当前打开的那个会话，绝不能拿它去遍历会话列表
+     * （见 [io.github.hakunm.deepseekharness.HarnessViewModel.refreshPendingQuestions]）。
+     */
+    fun pendingQuestions(sessionId: String): List<PendingQuestionSet> =
+        get(pathUrl("chat", "sessions", sessionId, "questions"), QuestionSetList.serializer()).items
+
+    /**
+     * 回答一组问题。
+     *
+     * 插件在「答复已经在队列里」（`QUESTION_REPLY_QUEUED`）与「这个问题已经不作答」
+     * （`QUESTION_NOT_PENDING`）两种情况下回 409；调用方要把这两个 code 翻成人话。
+     */
+    fun answerQuestions(sessionId: String, callId: String, answers: List<QuestionAnswer>) {
+        postUnit(
+            pathUrl("chat", "sessions", sessionId, "questions", callId, "answer"),
+            QuestionAnswerRequest(answers),
+            QuestionAnswerRequest.serializer(),
+        )
+    }
+
     fun sessionCommands(sessionId: String): List<CommandDescriptor> =
         get(pathUrl("chat", "sessions", sessionId, "commands"), CommandDescriptorList.serializer()).items
 
@@ -518,6 +542,7 @@ private class ReconnectingEvents(
 @Serializable private data class TrashList(val items: List<TrashEntry>)
 @Serializable private data class SessionList(val items: List<ChatSession>)
 @Serializable private data class PendingApprovalList(val items: List<PendingApproval>)
+@Serializable private data class QuestionSetList(val items: List<PendingQuestionSet>)
 @Serializable private data class ApprovalDecision(val outcome: String)
 @Serializable private data class CommandDescriptorList(val items: List<CommandDescriptor>)
 @Serializable private data class CommandRequest(val line: String)
