@@ -258,7 +258,7 @@ scripts/build.sh :app:testDebugUnitTest   # 单元测试
 - Gitee（国内访问更快）：<https://gitee.com/westanke/dsh-companion/releases/latest>
 
 ```text
-DeepSeek-Harness-companion-v2.2.23.apk
+DeepSeek-Harness-companion-v2.2.26.apk
 ```
 
 安装要求：
@@ -270,12 +270,13 @@ DeepSeek-Harness-companion-v2.2.23.apk
 - 插件中至少添加了一个授权根，并已启用远程访问
 - 手机可以访问插件配置的 IP、域名和端口
 
-**签名现状（重要）：当前 APK 用 Android 调试密钥签名（`CN=DSH Debug`）。** 项目原有的发布证书
-（`CN=DSH Pocket Client`，v1.9.0 及更早的包用它签）**已经丢失**，因此现在的包不能用于正式分发，
-只能自用 / 内部分发。两个直接后果：
+**签名现状（重要）：`v2.2.25` 起使用重新生成的正式证书（`CN=DSH Pocket Client`，主题与旧证书一致）。**
+项目原来那把发布证书的**密码已丢失**（本机 / 仓库 / CI / 记忆库全查过），所以现在这把是重新生成的：
+主题刻意保持一致，但它**不是旧钥匙**。几个直接后果：
 
-- **覆盖升级会失败**：`v1.9.0` 与 `v2.2.23` 签名不同，必须先卸载再装（卸载会清除已保存的连接，
+- **`v1.9.0` 及更早的包盖不上**：签名不同，必须先卸载再装（卸载会清除已保存的连接，
   装好后重新配对，或直接粘贴一份配置文本）。
+- **`v2.2.25` 及以后可以互相覆盖升级**（同一把证书）。
 - 与上游原版（`CN=Hakunm`）的证书同样不同，从上游版本切过来也要先卸载。
 
 `applicationId` 与上游保持一致（`io.github.hakunm.deepseekharness`）。
@@ -497,13 +498,13 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.23`（`versionCode` 10048）
+- 当前版本：`v2.2.26`（`versionCode` 10051）
 - 包名：`io.github.hakunm.deepseekharness`
 - 单元测试：24 个测试类 / 242 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DeepSeek-Harness-companion-v2.2.23.apk`，2,825,262 字节，
-  SHA-256 `54105945fa5926dbbe37880553748f9867637ba09c8613c5a94874f84b8768cd`（`artifacts/SHA256SUMS.txt` 同步）
-- 签名：`CN=DSH Debug`（调试密钥；发布证书已丢失，见上文「下载与安装」）
+- 当前 APK：`DeepSeek-Harness-companion-v2.2.26.apk`，2,893,069 字节，
+  SHA-256 `c7d2910749830402919f62aca1d0ac8210978ca7c6726bcd4665c21fbb9cdede`（`artifacts/SHA256SUMS.txt` 同步）
+- 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用，v2.2.25 → v2.2.26 可直接覆盖升级）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)
 - 许可证：[GNU Affero General Public License v3.0](./LICENSE)
 - 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.0.4**

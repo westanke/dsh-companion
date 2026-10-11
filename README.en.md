@@ -287,7 +287,7 @@ Download from this repository's Releases (both hosts carry the same file — pic
 - Gitee (faster from mainland China): <https://gitee.com/westanke/dsh-companion/releases/latest>
 
 ```text
-DeepSeek-Harness-companion-v2.2.23.apk
+DeepSeek-Harness-companion-v2.2.26.apk
 ```
 
 Requirements:
@@ -299,12 +299,14 @@ Requirements:
 - At least one authorized root added in the plugin, with remote access enabled
 - The phone can reach the IP, domain, and port configured in the plugin
 
-**Signing status (important): the current APK is signed with the Android debug key (`CN=DSH Debug`).**
-The project's original release certificate (`CN=DSH Pocket Client`, used for v1.9.0 and earlier) **has been
-lost**, so the current build is for self-use / internal distribution only. Two direct consequences:
+**Signing status (important): since `v2.2.25` the APK is signed with a regenerated release certificate
+(`CN=DSH Pocket Client`, same subject as the original).** The original certificate's **password has been
+lost** (checked on this machine, in the repo, in CI and in session memory), so the current key is newly
+generated: the subject was kept identical on purpose, but it is **not the old key**. A few consequences:
 
-- **Upgrading in place will fail**: `v1.9.0` and `v2.2.23` are signed differently, so you must uninstall
-  first (which clears saved connections) and then pair again or paste a configuration string.
+- **`v1.9.0` and earlier cannot be upgraded in place**: different signature, so uninstall first
+  (which clears saved connections) and then pair again or paste a configuration string.
+- **`v2.2.25` and later upgrade in place** (same certificate).
 - The certificate also differs from upstream's original APK (`CN=Hakunm`), so switching from an upstream
   build requires an uninstall too.
 
@@ -529,15 +531,15 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.23` (`versionCode` 10048)
+- Version: `v2.2.26` (`versionCode` 10051)
 - Package: `io.github.hakunm.deepseekharness`
 - Unit tests: 24 test classes / 242 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DeepSeek-Harness-companion-v2.2.23.apk`, 2,825,262 bytes,
-  SHA-256 `54105945fa5926dbbe37880553748f9867637ba09c8613c5a94874f84b8768cd` (kept in sync in
+- Current APK: `DeepSeek-Harness-companion-v2.2.26.apk`, 2,893,069 bytes,
+  SHA-256 `c7d2910749830402919f62aca1d0ac8210978ca7c6726bcd4665c21fbb9cdede` (kept in sync in
   `artifacts/SHA256SUMS.txt`)
-- Signing: `CN=DSH Debug` (debug key; the release certificate has been lost — see "Download and install" above)
+- Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25; v2.2.25 → v2.2.26 installs in place)
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)
 - License: [GNU Affero General Public License v3.0](./LICENSE)
 - Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.0.4**
