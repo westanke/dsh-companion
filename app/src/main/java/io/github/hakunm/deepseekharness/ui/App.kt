@@ -25,12 +25,12 @@ import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Menu
+import androidx.compose.material.icons.outlined.ModelTraining
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -67,12 +67,16 @@ import io.github.hakunm.deepseekharness.R
 import kotlinx.coroutines.launch
 
 private enum class MainSection(val label: Int) {
-    Chat(R.string.chat), Files(R.string.files), Plugins(R.string.plugins), Settings(R.string.settings),
+    Chat(R.string.chat), Files(R.string.files), Plugins(R.string.plugins),
+    Models(R.string.models), Settings(R.string.settings),
 }
 
 @Composable
 fun DeepSeekHarnessApp(viewModel: HarnessViewModel) {
     val state by viewModel.state.collectAsState()
+    // 连接页门闩是**进程级**的（见 HarnessViewModel.connectGate）：这里只读，写入只发生在
+    // 用户主动发起连接的那一刻（ConnectScreen 的 onEnterApp）。
+    val connectGatePassed by viewModel.connectGate.collectAsState()
     val snackbar = remember { SnackbarHostState() }
     val errorMessage = state.error?.let { localError(it) }
     LaunchedEffect(errorMessage) {
@@ -82,12 +86,21 @@ fun DeepSeekHarnessApp(viewModel: HarnessViewModel) {
         }
     }
     when {
+        // 连接页优先于一切：冷启动第一屏永远是它 —— 哪怕主机已经记住、哪怕后台已经自动连上。
+        //
+        // 判据刻意**不是** state.connected：冷启动会自动重连最近用过的那台电脑，连上之后
+        // 它就是 true，拿它当条件会直接跳过连接页 —— 那正是这次要修的毛病。
+        //
+        // 也刻意排在 restoring 的转圈**之前**：冷启动的自动重连（restoring 为真）要依次探活
+        // 全部地址，可能持续好几秒；转圈排在前面，这几秒里用户看到的就是转圈而不是连接页了。
+        !connectGatePassed || !state.connected -> Box(Modifier.fillMaxSize()) {
+            ConnectScreen(state, viewModel, onEnterApp = viewModel::passConnectGate)
+            SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(16.dp))
+        }
+        // 已放行、但快照仍在恢复：留一个转圈兜底。当前路径下 connected 为真时 restoring 必已置 false，
+        // 所以正常看不到它；留着是为了不把「恢复中」误当成「已就绪」（ConnectedApp 需要 device 等一整套数据）。
         state.restoring -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(strokeWidth = 2.dp)
-        }
-        !state.connected -> Box(Modifier.fillMaxSize()) {
-            ConnectScreen(state, viewModel)
-            SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter).padding(16.dp))
         }
         else -> ConnectedApp(state, viewModel, snackbar)
     }
@@ -115,6 +128,18 @@ private fun ConnectedApp(
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= 840.dp
+
+        // WebView 聊天页开着时，**关掉抽屉的滑动手势**。
+        //
+        // Material3 的 ModalNavigationDrawer 默认允许从屏幕任意位置横向拖动打开，
+        // 它和 WebView 的滚动在同一个手势通道上抢触摸：用户在会话里上下滑动时
+        // 只要手指带一点横向分量，抽屉就被拉出来（会话/文件/插件/设置），
+        // 而且滚动会中途被打断——手感就是「不流畅」。这两个症状是同一个根因。
+        //
+        // 关掉手势不影响正常使用：左上角汉堡按钮照样能开抽屉（见 navigationIcon）。
+        // 注意这里必须放在 BoxWithConstraints 内部：wide 是在下一行才算出来的。
+        val webChatOpen = !wide && section == MainSection.Chat &&
+            state.selectedSessionId != null && state.useWebChat
         val content: @Composable () -> Unit = {
             Scaffold(
                 containerColor = MaterialTheme.colorScheme.background,
@@ -192,6 +217,7 @@ private fun ConnectedApp(
                             MainSection.Chat -> ChatScreen(state, viewModel, wide)
                             MainSection.Files -> FilesScreen(state, viewModel, wide)
                             MainSection.Plugins -> PluginsScreen(state, viewModel)
+                            MainSection.Models -> ModelsScreen(state, viewModel)
                             MainSection.Settings -> SettingsScreen(state, viewModel)
                         }
                     }
@@ -204,6 +230,7 @@ private fun ConnectedApp(
         } else {
             ModalNavigationDrawer(
                 drawerState = drawerState,
+                gesturesEnabled = !webChatOpen,
                 drawerContent = {
                     ModalDrawerSheet(
                         drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -303,6 +330,8 @@ private fun sectionIcon(section: MainSection): ImageVector = when (section) {
     MainSection.Chat -> Icons.Outlined.ChatBubbleOutline
     MainSection.Files -> Icons.Outlined.FolderOpen
     MainSection.Plugins -> Icons.Outlined.Extension
+    // 与 ChatScreen 里模型入口同一个图标，用户在会话里见过它，认得出这页是干什么的。
+    MainSection.Models -> Icons.Outlined.ModelTraining
     MainSection.Settings -> Icons.Outlined.Settings
 }
 
@@ -311,6 +340,13 @@ private fun sectionEnabled(section: MainSection, scopes: List<String>): Boolean 
     MainSection.Files -> "files.read" in scopes
     // 插件清单走 /settings/plugins，和模型供应商同一个 settings.read 权限。
     MainSection.Plugins -> "settings.read" in scopes
+    // 模型页：**永远可进**，与设置页同一取舍。
+    //
+    // 写成 `"settings.read" in scopes` 看着更「正确」，实际是错的：没权限时
+    // 抽屉里根本不显示这一项，用户只看到「没有模型页」，既不知道是权限问题、
+    // 更不知道该去哪儿开 —— 而 ModelsScreen 里那条「需要 settings.read」的提示
+    // 因此永远不可达。设置页之所以是 true，正是为了让这类「为什么不可用」看得见。
+    MainSection.Models -> true
     MainSection.Settings -> true
 }
 

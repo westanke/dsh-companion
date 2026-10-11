@@ -88,6 +88,8 @@ something the client could do; it simply had not been done.
 
 On launch the app probes **all** endpoints of that computer concurrently (each with its own 1.5s
 timeout), ranks them by latency with "LAN wins if close enough", and falls back automatically.
+Also, **the app always lands on the connect page first**: a successful automatic reconnect does not take
+you straight into the app; a user action (Enter app / import a configuration string / pair) lets you through.
 
 ### 2. Configuration import instead of QR scanning
 
@@ -222,6 +224,41 @@ stream explains the change.
 entirely**). WebView is deliberately **not** used — that would hand execution rights to any file that
 happens to appear in a session.
 
+### 14. The 2.0–2.2 line: the WebView chat page, and aligning the native one
+
+Since 2.0.0 the session detail page has a second implementation — a **WebView** one (`assets/chat.html`,
+letting the browser do Markdown and card rendering) — coexisting with the native Compose page and toggled
+in Settings under "Chat page implementation" (**native stays the default**; it is the real-device-verified asset).
+From 2.2.15 on, that web presentation was ported back into native. The main changes in this line up to 2.2.20:
+
+- **The connect page is the entrance, not a fallback**: the app always lands there first (a process-level
+  latch, `connectGate`, opened only by an explicit user action); even a successful cold-start
+  reconnect stays on that page. **Import configuration** and **manual pairing** are both **collapsed** by
+  default and open one at a time — you never get two forms at once.
+- **Composer rebuilt to match the web page**: a single-row pill (`+` · input · send), with model / agent /
+  permission mode / steer moved into a `⋯` menu in the top bar and attachments folded into `+`;
+  **the input grows with its content** (44–120dp; it used to be a fixed 34dp, so the second line was clipped).
+- **The thinking bar sits on one line above the composer**: during streaming it shows only the current
+  reasoning, tail-truncated with an ellipsis; with no reasoning the bar is not rendered at all (zero height).
+  Reasoning is no longer shown in history.
+- **Tool calls read as action phrases** ("Ran code, Modified file") and **consecutive calls collapse into
+  one row**; previously one call per row, so a busy turn filled the whole screen.
+- **Context injections are hidden by default**: the run context / time context / background-task notices the
+  system injects each turn are not displayed unless you turn them on in Settings.
+- **Model providers became their own "Models" page** instead of a block inside Settings, which shrank from
+  697 to 297 lines.
+- **The settings switches share one shape and take effect immediately**: the three switches (Use the web
+  chat page / Show context injections / dsh-ui card diagnostics) now use one `SwitchRow` and live in
+  `HarnessState`. They used to read `SharedPreferences` directly — not Compose state — so a tap
+  appeared to do nothing until you tapped something else.
+- **Session deliverables come straight from a kernel event**: the footer and the toolbar folder sheet both
+  read `deliverables/presented` (fired by the `present` tool, carrying an absolute path and a
+  human-written description). Only three event types used to be recognised, so anything an agent delivered
+  was invisible; both places now share one `sessionFileList()` and cannot drift apart.
+
+Per-release rationale and the bugs behind it live in the version comments in `app/build.gradle.kts` and in
+`docs/project/CHANGELOG-DEV.md`; the "not yet ported" list is in `docs/project/webview-port-todo.md`.
+
 ## Building
 
 ```bash
@@ -250,7 +287,7 @@ Download from this repository's Releases (both hosts carry the same file — pic
 - Gitee (faster from mainland China): <https://gitee.com/westanke/dsh-companion/releases/latest>
 
 ```text
-DeepSeek-Harness-companion-v1.9.0.apk
+DeepSeek-Harness-companion-v2.2.20.apk
 ```
 
 Requirements:
@@ -262,14 +299,20 @@ Requirements:
 - At least one authorized root added in the plugin, with remote access enabled
 - The phone can reach the IP, domain, and port configured in the plugin
 
-Release APKs are signed with a dedicated release certificate (`CN=DSH Pocket Client`), not the Android
-debug key; the `applicationId` matches upstream (`io.github.hakunm.deepseekharness`). Later releases from
-this fork use the same certificate, so they upgrade in place. **The certificate differs from upstream's
-original APK** (`CN=Hakunm`), so switching from an upstream build requires uninstalling first — that
-clears saved connections, so pair again under "Connect to DSH" or paste a configuration string.
+**Signing status (important): the current APK is signed with the Android debug key (`CN=DSH Debug`).**
+The project's original release certificate (`CN=DSH Pocket Client`, used for v1.9.0 and earlier) **has been
+lost**, so the current build is for self-use / internal distribution only. Two direct consequences:
+
+- **Upgrading in place will fail**: `v1.9.0` and `v2.2.20` are signed differently, so you must uninstall
+  first (which clears saved connections) and then pair again or paste a configuration string.
+- The certificate also differs from upstream's original APK (`CN=Hakunm`), so switching from an upstream
+  build requires an uninstall too.
+
+The `applicationId` still matches upstream (`io.github.hakunm.deepseekharness`).
 
 Release history: `v1.1.0` / `v1.2.0` / `v1.4.0` / `v1.9.0` are tagged; `v1.5.0`–`v1.8.0` are not tagged
-separately — their features shipped together in `v1.9.0`.
+separately — their features shipped together in `v1.9.0`. The `v2.0.0`–`v2.2.20` line **has no tags yet**
+(as of 2026-10-11); artifacts live in `artifacts/` and on the Releases page.
 
 ## Screenshots
 
@@ -299,9 +342,14 @@ separately — their features shipped together in `v1.9.0`.
 
 ### On the phone
 
-1. Enter the server address, such as `http://192.168.1.20:3090` or `https://dsh.example.com`.
-2. Enter the pairing code and a device name.
-3. Select **Pair and connect**.
+The app opens on the **connect page**, which lists saved computers plus two entries that are **collapsed**
+by default (tapping one opens it and closes the other, so both forms are never on screen at once):
+
+1. **Import configuration from the computer** (primary path): paste the configuration string — this is the
+   only route that works when you are already out and cannot see the computer's screen.
+2. **Manual pairing**: enter the server address (for example `http://192.168.1.20:3090` or
+   `https://dsh.example.com`), the pairing code and a device name, then select **Pair and connect**.
+   Faster when you are sitting at the computer.
 
 > **Never include a `/dsh-workspace-api` prefix in the address.** Port `3090` is the plugin's remote
 > listener and its routes sit at the root; `/dsh-workspace-api` is DSH Web's mount path on `3080`, which
@@ -321,19 +369,27 @@ restart. Revoking the device in DSH WebUI invalidates it immediately.
 ## Chat and task control
 
 - View authorized DSH sessions and live run state.
-- Stream assistant text and reasoning, then reconcile with server history on completion.
+- Stream assistant text; reasoning shows on the single line above the composer, and everything reconciles
+  with server history on completion.
 - Render Markdown headings, lists, quotes, code blocks, and tables.
+- Tool calls read as action phrases ("Ran code, Modified file"); a consecutive run collapses into one row
+  that you can expand to see each call.
 - Render the assistant's `dsh-ui` interactive cards natively (card / table / list / button / option /
   progress / timeline …); tapping a choice in a card is equivalent to sending it.
 - Send messages, steer a running task, or cancel it.
-- Send images and files; whether a send during a run queues or steers is chosen in Settings.
+- Send images and files (the `+` menu in the composer); whether a send during a run queues or steers is
+  chosen in the `⋯` menu or Settings.
 - Follow DSH TODO progress and the currently active item.
 - Type `/` to browse and run host-provided slash commands.
-- Switch between Read only, Workspace write, and Full access permission modes.
+- Switch between Read only, Workspace write, and Full access in the `⋯` menu. Full access asks for
+  confirmation again.
 - Review redacted approval details and choose Allow once or Deny.
-- Select a model and reasoning effort. Empty sessions can also select an Agent before the first message.
+- Select a model and reasoning effort in the `⋯` menu. Empty sessions can also select an Agent before
+  the first message.
+- The input grows with its content (44–120dp, roughly one to six lines).
 - Double-tap to copy a whole message, long-press to select a fragment, and tap links.
-- Files produced by the turn are listed at the end of the message stream; tap one to read it.
+- Files an agent delivered (via the `present` tool) are listed at the end of the message stream; tap one
+  to read it. The toolbar folder button lists the same set.
 
 ## Workspaces and sessions
 
@@ -427,18 +483,19 @@ Another process changed the server file. Reload, merge the desired content, and 
 
 ## Known limitations
 
-**No on-device UI verification has been done: this environment has no usable Android device.** Behaviour
-is confirmed only at the unit-test level (169 cases / 0 failures) and in the build artifacts; the on-device
-rendering and gestures are unverified. Specifically unverified:
+**A systematic on-device UI pass has not been done yet.** Unit tests and the build artifacts are green, but
+these have not been verified item by item on real hardware:
 
 - the boundary between long-press selection and double-tap copy — the conflict with scrolling
   (a double-tap misfire while scrolling) needs a real device to judge;
-- layout quality and button hit areas for the 22 `dsh-ui` component types;
-- layout quality of the structured HTML preview (styling is discarded; only structure is kept).
+- layout quality and button hit areas for the `dsh-ui` cards;
+- layout quality of the structured HTML preview (styling is discarded; only structure is kept);
+- where the composer's `⋯` menu lands on narrow screens and across input methods.
 
-The interface layer (pairing, connection, sessions, files, plugin inventory) was exercised end to end
-against a local DSH WebUI during development; what is listed above is the **UI and gesture** side that has
-not been confirmed on real hardware.
+To be clear: the many fixes after 2.0 **were driven by real-device reports and screenshots** (see the
+per-release comments in `app/build.gradle.kts`), but that is "fix what someone hit", not a systematic
+on-device pass. The interface layer (pairing, connection, sessions, files, plugin inventory, session
+deliverables) was exercised end to end against a local DSH WebUI during development.
 
 ## Build from source
 
@@ -461,11 +518,15 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v1.9.0` (`versionCode` 10009)
+- Version: `v2.2.20` (`versionCode` 10045)
 - Package: `io.github.hakunm.deepseekharness`
-- Unit tests: 169 cases / 0 failures
-- Release APK: `DeepSeek-Harness-companion-v1.9.0.apk`, 2,714,772 bytes,
-  SHA-256 `03007f1cbffb037a51e5e9b87ea0dce76c47dd8a700434fa1abb311544ec3942`
+- Unit tests: 18 test classes / 199 cases at the last run (0 failures). The counts move with the code, so
+  for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
+  `app/src/test/` and the `@Test` annotations
+- Current APK: `DeepSeek-Harness-companion-v2.2.20.apk`, 2,792,754 bytes,
+  SHA-256 `a139f025be72f23fdd07bcb1d1dec97985c3f8a6df135d312fa06f2b44ea8fd4` (kept in sync in
+  `artifacts/SHA256SUMS.txt`)
+- Signing: `CN=DSH Debug` (debug key; the release certificate has been lost — see "Download and install" above)
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)
 - License: [GNU Affero General Public License v3.0](./LICENSE)
 - Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.0.4**

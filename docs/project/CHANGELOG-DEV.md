@@ -5,6 +5,83 @@
 
 ---
 
+## 2026-10-11 · 连接页门闩、偏好入状态、模型页拆分、输入区自适应（v2.2.20）
+
+> 版本归属：下面这些改动分布在 **v2.2.15 → v2.2.20** 之间（逐版注释在 `app/build.gradle.kts`，以它为准）；本文件此前只记到 v1.9.0，这一条把本轮一次性补齐。**出包版本 2.2.20 / versionCode 10045。**
+
+### 为什么
+
+这一轮的问题看着分散，但大半是**同一个病根的三副面孔**：状态没有放在 Compose 能看见的地方。
+
+1. **冷启动直接跳进上次的会话**，用户想换一台电脑得先找到「断开」——连接页成了藏起来的入口。
+2. **「进入应用」按钮灰着点不动**（真机截图：已连接 + 按钮禁用 = 死路）。
+3. **设置页的开关点了不变化**，得再点别的控件才跳一下。
+4. **输入框写死 34dp**，敲到第二行文字就被裁。
+5. 设置页三个开关的 padding 各写各的，中间那个上下多出一截。
+6. 模型供应商配置全挤在设置页里，一处 697 行的巨型页面。
+7. **同一个会话的文件清单，底部与标题栏弹层显示的还不一样。**
+
+### 根因与改法
+
+**① 启动永远先落连接页 —— 进程级门闩 `connectGate`。**
+根因：进不进应用早期由连接状态（`state.connected` 之类）推断，而连接状态会被后台请求与自动重连反复改写，落点跟着请求抖动。
+改法：`HarnessViewModel.connectGate`（`MutableStateFlow<Boolean>`）做成**进程级**门闩，只由用户的三个主动动作放行（`passConnectGate()`，即连接页上三次 `onEnterApp`）；冷启动自动重连成功**仍然停在连接页**。`ui/App.kt` 只读不写。
+要点：**刻意不进 `HarnessState`** —— 它在初始 / `disconnect` / `loadSnapshot` 三处会被整份重建（见 ⑤），门闩放进去会被直接冲掉。
+
+**② 连接页两种方式默认收起、互斥展开（`ConnectionEntryRow`）。**
+「导入配置文本」与「手动配对」都改成默认收起的一行入口，点哪行展开哪行、另一行自动收起；两处调用同一 composable（`ui/ConnectScreen.kt`），样式与行为不可能走偏。
+
+**③ 修「进入应用」按钮灰着点不动。**
+根因：按钮的启用条件是 `!busy && !connecting` —— 那是给「连接这台电脑」准备的（要并发探活、自动选路，忙时确实该禁）。但「进入应用」是**纯本地跳转**，不碰网络；自动重连成功后只要后台还有一次请求在跑（`loadSnapshot`、会话刷新都算 `busy`），按钮就灰着，用户既进不去、也没有第二个入口。
+改法：`ConnectScreen` 里按 `isActive` 分开判 —— 已连上那台只看「有没有地址」（`host.endpoints.isNotEmpty()`），其余仍走原来的 `enabled`。
+
+**④ 修自动重连失败时 `restoring` 永远停在 true。**
+根因：`coordinator.connect(host)` 返回 `Result`，失败时是**正常返回**（不抛异常），所以 `restoreConnection` 的 `onFailure` 兜不住；没有别的分支复位 `restoring`，「恢复中」就变成一句永久的谎话。
+改法：`HarnessViewModel.connectHostInternal()` 的 `getOrElse` 失败分支里补 `restoring = false`。
+
+**⑤ 修「点开关不变化」+ 状态重建丢偏好。**
+根因有两层：
+- `useWebChat` / `showContext` 由 UI **直接读 `SharedPreferences`** —— 那不是 Compose 状态，读不建立订阅、写不触发重组；于是「点了不动，再点别的才跳」。
+- `HarnessState` 在**初始 / `disconnect` / `loadSnapshot`** 三处被整份重建，全都没带偏好字段 —— `genUiDebug` 从来没被恢复过、`busySendMode` 每次断开都被打回默认。
+改法：两个开关进 `HarnessState`，setter 走 `update { copy(...) }` 并落盘，UI 读 `state`（`SettingsScreen` 的 `SwitchRow(checked = state.useWebChat, ...)`）；新增 `HarnessState.withPreferences()` 统一盖上四个偏好（`busySendMode` / `genUiDebug` / `useWebChat` / `showContext`），三处重建一并接上。
+
+**⑥ 输入框高度随内容自适应（44~120dp）。**
+根因：写死 34dp，第二行就被裁（真机反馈）。
+改法：对齐网页版 `#ta` 的 `min-height:36px / max-height:120px`，`Modifier.heightIn(min = 44.dp, max = 120.dp)`，行内对齐改 `Alignment.Bottom`（网页版是 `align-items:flex-end`）。
+要点：`BasicTextField` 的容器用 `fillMaxWidth` 而不是 `fillMaxSize` —— 后者会撑满 `heightIn` 的上限，变成「永远 120dp 高」。
+
+**⑦ 设置页三个开关统一为 `SwitchRow`。**
+根因：三处各写各的 `Row` —— 一个 `padding(bottom = 4dp)`、一个 `padding(vertical = 8dp)`，页面上就是「中间那个开关上下多出一截」；其中一处还多带一句没作用的 `Arrangement.SpaceBetween`。
+改法：抽 `SwitchRow(title, description, checked, onCheckedChange)`，三处统一。
+
+**⑧ 模型供应商配置拆成独立的「模型」导航页（`ui/ModelsScreen.kt`）。**
+从设置页拆出，插在 Plugins 与 Settings 之间；设置页 697 → 297 行（本轮实测 `wc -l` = 299），删净 30 个死 import。模型页**永远可进** —— 与设置页同一取舍：看不到入口就不知道是权限问题、也不知道去哪儿开。
+
+**⑨ 会话文件清单两处统一，改读内核交付物。**
+根因：会话底部那块已改成读内核的 `deliverables/presented` 事件（`present` 工具触发，带绝对路径 + agent 写的说明），而标题栏文件夹弹层（`SessionFileList`）还在按 `SessionFileRefs.refs()` 嗅工具参数 —— 底部是 agent 真正交付的报告与安装包，弹层却是一堆嗅出来的路径（真机反馈：「标题栏的文件夹中的不合适」）。
+改法：抽公用 `sessionFileList(history)`（`ui/ChatScreen.kt`），两处同一来源；优先交付物、旧嗅参数保留为兜底。
+
+**⑩ 工具显示改官方口径动作短语 + 连续工具调用合并成一行。**
+根因：原生原来报英文类别词（Bash / Read / Code…），与官方口径对不上；且一次调用一行，跑几十次就是一屏。
+改法：`ChatPresentation.toolActionsFor()` 照页面同源判据拼中文动作短语（`run_code` 扫 `arguments` 里的内层工具）；`mergeToolRuns()` 只合并**相邻** TOOL，中间夹正文即断开（对齐网页版 `toolGroupSummary`）。
+
+**⑪ 历史不再显示「思考过程」；上下文注入默认隐藏。**
+历史里的 REASONING 整类过滤（实时那条思考行保留 —— 那是运行状态，不是会话内容）；上下文注入默认隐藏，与设置页的 `showContext` 开关联动。
+
+### 测了什么
+
+- 新增/在用的单测：`data/SessionFileRefsTest.kt`（交付物来源）、`ui/ComposerPillTest.kt`（药丸占位符三态：空闲 / 运行中排队 / 运行中插话）、`ui/ChatThinkBarTest.kt`、`data/ConnectionCoordinatorTest.kt`、`ui/GenUiTableLayoutTest.kt` 等，共 **17 个测试类**。
+- 页面侧静态体检：`tools/chat-html-check.mjs`（引用的 id 是否都存在、顶层绑定是否都用 `bind()`、接口是否齐全）。
+- **全量用例数与构建结果未在本条核实**（写这条时不跑 gradle，构建由发布流程统一跑）。
+
+### 未做真机验证
+
+- 输入框 44~120dp 的实际长高过程与软键盘联动；
+- 连接页两个入口互斥展开的可发现性；
+- 「进入应用」在弱网/后台请求密集时是否仍可点。
+
+---
+
 ## 2026-10-09 · 长按让位选择、文件按类型预览（v1.9.0）
 
 ### 为什么：两个「功能有但用不了」和一个「偷懒」

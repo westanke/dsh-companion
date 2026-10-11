@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,7 +40,6 @@ import androidx.compose.material.icons.outlined.WifiFind
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -56,6 +56,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -79,13 +80,30 @@ import io.github.hakunm.deepseekharness.data.Host
  *    电脑留在家里，扫码和念配对码都必须要求电脑在旁，因此不能作为主路径。
  * 3. **手动配对降为可折叠的次要入口。** 它仍有用（你正坐在电脑前时最省事），
  *    但不再占据首屏最重要的位置，并且明确标注了它的前置条件。
+ *
+ * ## 后来补的两条（用户原话驱动）
+ *
+ * 4. **启动无论怎样，第一屏都是这里。** 此前「记住过主机」的冷启动会被自动重连直接送进聊天页，
+ *    用户要改地址就得先找到断开的入口。现在放行只认用户的主动动作（[onEnterApp]），
+ *    自动重连成功也仍然停在本页 —— 判据不能是「连没连上」。
+ * 5. **两种连接方式默认都收起**，只留一行入口（标题 + 一句话说明 + 箭头），点哪个展开哪个，
+ *    且互斥。它们是**并列的两条路**，不是「一个表单 + 一个按钮」；形态一致才不会让人以为
+ *    只有一个入口。已保存的电脑列表不在此列 —— 那不是「连接方式」，是「连过的机器」。
  */
 @Composable
-fun ConnectScreen(state: HarnessState, viewModel: HarnessViewModel) {
+fun ConnectScreen(
+    state: HarnessState,
+    viewModel: HarnessViewModel,
+    onEnterApp: () -> Unit,
+) {
     var endpoint by remember { mutableStateOf(state.endpointDraft) }
     var code by remember { mutableStateOf("") }
     var deviceName by remember { mutableStateOf(Build.MODEL.ifBlank { "Android" }) }
     var configText by remember { mutableStateOf("") }
+    // 两种连接方式默认都**收起**。用户的原话是「默认显示两个不同的连接方式，不要展开，
+    // 我需要那个，我自己点击」。互斥：展开一个就把另一个收起来 —— 一次只开一个，
+    // 屏幕上不会同时铺两份表单。
+    var importExpanded by remember { mutableStateOf(false) }
     var manualExpanded by remember { mutableStateOf(false) }
     var hostPendingRemoval by remember { mutableStateOf<Host?>(null) }
     LaunchedEffect(state.endpointDraft) { endpoint = state.endpointDraft }
@@ -124,20 +142,40 @@ fun ConnectScreen(state: HarnessState, viewModel: HarnessViewModel) {
             ) {
                 SavedComputersPanel(
                     state = state,
-                    onConnect = viewModel::connectHost,
+                    onConnect = { hostId ->
+                        // 用户主动的一个动作 —— 放行连接页（失败时 connected 仍为 false，
+                        // 界面自然还停在这里，见 App.kt 的判据）。
+                        onEnterApp()
+                        // 这台已经连上了（冷启动自动重连成功就会停在这个状态）：直接进去，
+                        // 不必再探活一遍。没连上的才走 connectHost（并发探活 + 自动选路）。
+                        if (!(state.connected && hostId == state.activeHostId)) viewModel.connectHost(hostId)
+                    },
                     onRemoveRequest = { hostPendingRemoval = it },
                 )
 
+                // 顺序：导入配置在前（主路径 —— 人已经出门时配对码无处可取），手动配对在后。
+                // 理由原本就写在 ManualPairingPanel 的 KDoc 里，保留。
                 ImportConfigPanel(
+                    expanded = importExpanded,
+                    onToggle = {
+                        importExpanded = !importExpanded
+                        if (importExpanded) manualExpanded = false
+                    },
                     text = configText,
                     onTextChange = { configText = it },
                     enabled = !state.busy && !state.connecting,
-                    onImport = { viewModel.importConfiguration(configText) },
+                    onImport = {
+                        onEnterApp()
+                        viewModel.importConfiguration(configText)
+                    },
                 )
 
                 ManualPairingPanel(
                     expanded = manualExpanded,
-                    onToggle = { manualExpanded = !manualExpanded },
+                    onToggle = {
+                        manualExpanded = !manualExpanded
+                        if (manualExpanded) importExpanded = false
+                    },
                     endpoint = endpoint,
                     onEndpointChange = { endpoint = it; viewModel.setEndpointDraft(it) },
                     code = code,
@@ -146,8 +184,12 @@ fun ConnectScreen(state: HarnessState, viewModel: HarnessViewModel) {
                     onDeviceNameChange = { deviceName = it },
                     busy = state.busy,
                     healthOk = state.healthOk,
+                    // 测试连通性只是探活，不建立连接 —— 刻意**不**放行连接页。
                     onTest = { viewModel.testConnection(endpoint) },
-                    onPair = { viewModel.pair(endpoint, code, deviceName) },
+                    onPair = {
+                        onEnterApp()
+                        viewModel.pair(endpoint, code, deviceName)
+                    },
                 )
             }
             Spacer(Modifier.height(28.dp))
@@ -193,12 +235,30 @@ private fun SavedComputersPanel(
                 shape = MaterialTheme.shapes.medium,
                 color = MaterialTheme.colorScheme.surface,
             ) {
-                Text(
-                    stringResource(R.string.no_hosts_yet),
-                    modifier = Modifier.padding(16.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                // 冷启动时主机列表是**异步**读出来的（restoreConnection 要过磁盘与密钥库）。
+                // 那段窗口里 hosts 是空的，直接渲染「还没有保存的电脑」等于在首屏闪一句假话 ——
+                // 连接页现在是每一台设备的必经入口，第一眼就自相矛盾尤其难看。
+                if (state.restoring) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Text(
+                            stringResource(R.string.loading_saved_computers),
+                            modifier = Modifier.padding(start = 10.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                } else {
+                    Text(
+                        stringResource(R.string.no_hosts_yet),
+                        modifier = Modifier.padding(16.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
             }
         }
         state.hosts.forEach { host ->
@@ -314,15 +374,27 @@ private fun HostCard(
                 DiagnosticPanel(probes = probes, endpoints = host.endpoints)
             }
 
+            /*
+             * 启用条件分两种，**不能混用同一个**。
+             *
+             * 「连接这台电脑」要做网络动作（并发探活 + 自动选路），忙的时候确实该禁掉。
+             * 但「进入应用」是**纯本地跳转** —— 不碰网络、不建连接。
+             * 此前两者共用 `enabled`，于是自动重连成功后只要后台还有一次请求在跑
+             * （loadSnapshot、会话刷新都算 `busy`），按钮就是灰的：
+             * 连接页进不去、也没有第二个入口 —— 真机截图里那个灰掉的「进入应用」就是这个。
+             */
             Button(
                 onClick = onConnect,
-                enabled = enabled && host.endpoints.isNotEmpty(),
+                enabled = if (isActive) host.endpoints.isNotEmpty() else enabled && host.endpoints.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth().height(46.dp),
                 shape = CircleShape,
             ) {
                 Icon(Icons.Outlined.Link, null)
+                // 已经连上的那台，按钮必须是「进入应用」而不是「刷新」：
+                // 连接页现在是**每一台**设备的必经入口（连上以后也停在这里等用户点头），
+                // 写「刷新」的话，用户找不到「进去」这件事该点哪里。
                 Text(
-                    if (isActive) stringResource(R.string.refresh) else stringResource(R.string.connect_this_computer),
+                    if (isActive) stringResource(R.string.enter_app) else stringResource(R.string.connect_this_computer),
                     modifier = Modifier.padding(start = 8.dp),
                 )
             }
@@ -402,64 +474,117 @@ private fun DiagnosticPanel(probes: List<EndpointProbe>, endpoints: List<Endpoin
 }
 
 /**
+ * 两条连接方式共用的入口行。
+ *
+ * 刻意做成**同一个组件**：此前导入配置是直接铺开的表单、手动配对是一个底部小字按钮，
+ * 两者长得完全不像同类东西，用户根本认不出「这里其实有两条路」。
+ * 现在统一为「图标 + 标题 + 一句说明 + 箭头」，收起/展开只是箭头反过来。
+ *
+ * 行本身**始终**渲染（展开时也不消失），所以说明文字放这里就够了，
+ * 展开区里不必再重复一遍。
+ */
+@Composable
+private fun ConnectionEntryRow(
+    expanded: Boolean,
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    onToggle: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    subtitle,
+                    modifier = Modifier.padding(top = 2.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Icon(
+                if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/**
  * 配置导入面板 —— 取代扫码的主路径。
  *
- * 文案刻意把「为什么要有这个」说清楚：用户看到「粘贴一段文本」时第一反应是
+ * 与手动配对同款：平时只显示一行入口，点开才铺表单（默认收起，用户要那个才点）。
+ *
+ * 展开区里的文案刻意把「为什么要有这个」说清楚：用户看到「粘贴一段文本」时第一反应是
  * 「为什么不扫码更简单」，必须当场回答这个疑问，否则他还是会觉得别扭。
  */
 @Composable
 private fun ImportConfigPanel(
+    expanded: Boolean,
+    onToggle: () -> Unit,
     text: String,
     onTextChange: (String) -> Unit,
     enabled: Boolean,
     onImport: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.Outlined.CloudDownload,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Text(
-                stringResource(R.string.import_from_computer),
-                modifier = Modifier.padding(start = 8.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelLarge,
-            )
-        }
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium),
-            shape = MaterialTheme.shapes.medium,
-            color = MaterialTheme.colorScheme.surface,
-        ) {
-            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    stringResource(R.string.import_explanation),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = onTextChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.import_hint)) },
-                    minLines = 2,
-                    maxLines = 5,
-                    shape = MaterialTheme.shapes.medium,
-                )
-                WarningBanner(stringResource(R.string.import_security_note))
-                Button(
-                    onClick = onImport,
-                    enabled = enabled && text.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = CircleShape,
-                ) {
-                    Icon(Icons.Outlined.Link, null)
-                    Text(stringResource(R.string.import_and_connect), modifier = Modifier.padding(start = 8.dp))
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        ConnectionEntryRow(
+            expanded = expanded,
+            icon = Icons.Outlined.CloudDownload,
+            title = stringResource(R.string.import_from_computer),
+            subtitle = stringResource(R.string.import_entry_hint),
+            onToggle = onToggle,
+        )
+        AnimatedVisibility(visible = expanded, enter = fadeIn() + slideInVertically { it / 3 }) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium),
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surface,
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        stringResource(R.string.import_explanation),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    OutlinedTextField(
+                        value = text,
+                        onValueChange = onTextChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.import_hint)) },
+                        minLines = 2,
+                        maxLines = 5,
+                        shape = MaterialTheme.shapes.medium,
+                    )
+                    WarningBanner(stringResource(R.string.import_security_note))
+                    Button(
+                        onClick = onImport,
+                        enabled = enabled && text.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth().height(48.dp),
+                        shape = CircleShape,
+                    ) {
+                        Icon(Icons.Outlined.Link, null)
+                        Text(stringResource(R.string.import_and_connect), modifier = Modifier.padding(start = 8.dp))
+                    }
                 }
             }
         }
@@ -488,24 +613,16 @@ private fun ManualPairingPanel(
     onPair: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        TextButton(onClick = onToggle, modifier = Modifier.fillMaxWidth()) {
-            Icon(
-                if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                contentDescription = null,
-            )
-            Text(
-                stringResource(R.string.manual_pairing),
-                modifier = Modifier.padding(start = 8.dp),
-            )
-        }
+        ConnectionEntryRow(
+            expanded = expanded,
+            icon = Icons.Outlined.Key,
+            title = stringResource(R.string.manual_pairing),
+            subtitle = stringResource(R.string.manual_pairing_hint),
+            onToggle = onToggle,
+        )
         AnimatedVisibility(visible = expanded, enter = fadeIn() + slideInVertically { it / 3 }) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    stringResource(R.string.manual_pairing_hint),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                // 说明文字已经常驻在入口行上（入口行不随展开消失），这里不再重复一遍。
                 OutlinedTextField(
                     value = endpoint,
                     onValueChange = onEndpointChange,

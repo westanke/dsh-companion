@@ -16,10 +16,15 @@
     <string name="chat">会话</string>
     <string name="files">文件</string>
     <string name="settings">设置</string>
+    <!-- 导航项：模型配置从设置页拆成独立一页 -->
+    <string name="models">模型</string>
     <string name="new_session">新建会话</string>
     <string name="no_sessions">暂无可见会话</string>
     <string name="select_session">选择一个会话</string>
     <string name="message_hint">描述你想要构建的内容</string>
+    <!-- 运行中把提示并进占位符（照网页版 #ta 的 placeholder），不再单独占一行 -->
+    <string name="message_hint_running_steer">运行中… 发送即插话</string>
+    <string name="message_hint_running_queue">运行中… 发送即排队</string>
     <string name="older_messages">加载更早消息</string>
     <string name="no_readable_messages">暂无可显示的正文</string>
     <string name="context_injection">上下文注入</string>
@@ -54,6 +59,7 @@
     <string name="busy_send_mode_steer">插话发送</string>
     <string name="busy_send_mode_steer_desc">作为追加引导送进正在运行的那一轮</string>
     <string name="cancel_run">取消运行</string>
+    <string name="more_actions">更多操作</string>
     <string name="create">创建</string>
     <string name="close">关闭</string>
     <string name="refresh">刷新</string>
@@ -164,8 +170,9 @@
     <string name="settings_subtitle">管理连接、模型供应商、设备权限和语言</string>
     <string name="about">关于</string>
     <string name="author">作者</string>
-    <string name="author_value">Github@Hakunm</string>
+    <string name="author_value">原作者 Github@Hakunm&#10;本仓库维护 Github@westanke</string>
     <string name="model_providers">模型供应商</string>
+    <string name="models_subtitle">配置模型供应商、API 密钥与可用模型</string>
     <string name="settings_permission_required">当前设备没有 settings.read 权限。请在 DSH WebUI 的工作区设置中为此设备启用设置读取权限；修改供应商还需要 settings.write。</string>
     <string name="provider_secret_note">API 密钥只写入服务器凭据库，App 不会读取或显示已保存的密钥。</string>
     <string name="active">使用中</string>
@@ -215,6 +222,9 @@
     <!-- 多主机 / 多地址连接层 -->
     <string name="saved_computers">已保存的电脑</string>
     <string name="no_hosts_yet">还没有保存的电脑。用下面的方式添加一台。</string>
+    <string name="loading_saved_computers">正在读取已保存的电脑…</string>
+    <!-- 已保存电脑的按钮（已连上时）：进入 App -->
+    <string name="enter_app">进入应用</string>
     <string name="connect_this_computer">连接</string>
     <string name="remove_computer">删除这台电脑</string>
     <string name="remove_computer_title">删除「%1$s」？</string>
@@ -225,6 +235,8 @@
     <string name="no_credentials">未保存凭据</string>
 
     <string name="import_from_computer">从电脑导入配置</string>
+    <!-- 入口行的一句话说明（面板默认收起，收起时只看得到标题 + 这句） -->
+    <string name="import_entry_hint">在电脑上生成配置文本，发给自己后在这里粘贴</string>
     <string name="import_explanation">适合人已经出门在外、看不到电脑屏幕的情况：在电脑上生成一段配置文本（微信发给自己或存进私密笔记），到了外面粘贴到这里即可，不需要扫码，也不需要摄像头。</string>
     <string name="import_hint">粘贴以 DSH1: 开头的配置文本</string>
     <string name="import_and_connect">导入并连接</string>
@@ -283,6 +295,12 @@
     <string name="send_failed_body">服务端不认这条消息的内容格式，通常是插件版本太旧</string>
 
     <!-- dsh-ui 诊断：卡片没渲染出来时，用户自己就能拿到证据 -->
+    <string name="web_chat_heading">聊天页实现</string>
+    <string name="web_chat_title">用网页版聊天页</string>
+    <string name="web_chat_desc">关闭时用原生界面；打开后聊天页改由 App 内置的网页渲染，Markdown、代码块与卡片显示更接近电脑端。</string>
+    <string name="web_chat_footnote">网页版尚在试用：流式输出刚接上，可能仍有细节与原生版不同。遇到问题随时可以关回原生。</string>
+    <string name="show_context_title">显示上下文注入</string>
+    <string name="show_context_desc">运行上下文、时间上下文、后台任务通知等系统每轮塞进来的块。默认不显示——它们会在每条消息之间插一排折叠块。排查问题时再打开。</string>
     <string name="gen_ui_debug_heading">调试</string>
     <string name="gen_ui_debug_title">dsh-ui 卡片诊断</string>
     <string name="gen_ui_debug_desc">打开后，每条助手消息下方会多一行小灰字，说明卡片为什么没渲染成组件。</string>
@@ -304,6 +322,10 @@
     <!-- 发送图片 / 文件 -->
     <string name="attach_image">发送图片</string>
     <string name="attach_file">发送文件</string>
+    <!-- 药丸里「+」点开的两项（网页版 #attachBtn 的弹层） -->
+    <string name="add_attachment">添加图片或文件</string>
+    <string name="attachment_pick_image">从相册选图片</string>
+    <string name="attachment_pick_file">选择文件</string>
     <string name="attachment_uploading">正在上传…</string>
     <string name="attachment_remove">移除这个附件</string>
     <string name="attachment_image_too_large">图片超过 %1$s，没法内联发送。请先压缩或裁剪，或改用「发送文件」。</string>

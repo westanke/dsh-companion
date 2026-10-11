@@ -181,6 +181,17 @@ data class HarnessState(
     /** dsh-ui 诊断行开关，默认关；见 [AppPreferences.genUiDebug]。 */
     val genUiDebug: Boolean = false,
     /**
+     * 会话详情页走 WebView 版还是原生；见 [AppPreferences.useWebChat]。
+     *
+     * 这几个偏好项**必须放在状态里**，不能由 UI 直接去读 SharedPreferences：
+     * 那样读出来的不是 Compose 状态，改了不触发重组 —— 用户点了开关没反应，
+     * 得等别的原因引起重组时它才「跳」过去（真机反馈：
+     * 「你开关他不变化，必须开关一次别的按钮他才变化」）。
+     */
+    val useWebChat: Boolean = false,
+    /** 是否显示上下文注入块；见 [AppPreferences.showContext]。 */
+    val showContext: Boolean = false,
+    /**
      * 发送中的输入框原文；发送成功后清空，失败时保留以便还回输入框。
      *
      * 为什么需要它：输入框是本地 UI 状态，发请求在协程里，两者对不上时
@@ -234,8 +245,49 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
      * 而塞进 map 的 value 里又要靠字符串嗅探，迟早出错。这里显式分一份集合。
      */
     private val retryableAttachmentFailures = mutableSetOf<String>()
-    private val mutableState = MutableStateFlow(HarnessState(busySendMode = preferences.busySendMode))
+    private val mutableState = MutableStateFlow(HarnessState().withPreferences())
     val state: StateFlow<HarnessState> = mutableState.asStateFlow()
+
+    /**
+     * 连接页门闩：**进程级**，刻意不放进 [HarnessState]。
+     *
+     * [HarnessState] 在三个地方被整份重建：初始、[disconnect]、[loadSnapshot]（见 [withPreferences]）。
+     * 把门闩塞进那份状态，连上之后就会被重建冲掉 —— 用户看到的是「刚进聊天页又被弹回连接页」。
+     * 放这里则只有一个来源能改变它：[passConnectGate]。
+     *
+     * 判据刻意**不是** [HarnessState.connected]。冷启动会先自动重连最近用过的那台电脑，
+     * 连上之后 connected 就是 true；拿它当放行条件，等于又跳过了连接页 ——
+     * 而「启动无论怎样，第一屏都必须是连接页」正是这次要修的毛病。
+     */
+    private val connectGatePassed = MutableStateFlow(false)
+    val connectGate: StateFlow<Boolean> = connectGatePassed.asStateFlow()
+
+    /**
+     * 放行连接页，进入 App。
+     *
+     * 只由**用户的主动动作**调用：连接已保存的电脑、导入配置文本、手动配对，
+     * 三处都在**发起时**调用（见 ConnectScreen 的 `onEnterApp`）。
+     * 失败时 connected 仍为 false，界面自然还停在连接页，语义自洽。
+     * 重复调用无害（幂等）。
+     */
+    fun passConnectGate() { connectGatePassed.value = true }
+
+    /**
+     * 把偏好里存着的设置盖到状态上。
+     *
+     * [HarnessState] 在三个地方被整个重建：初始、[disconnect]、[loadSnapshot]。
+     * 每一处都必须带上这些字段 —— 漏一处，用户就会发现「我的设置又变回去了」。
+     * 实际上此前三处全都没带，于是 `genUiDebug` 从来没被恢复过、
+     * 而 `busySendMode` 每次断开连接都会被打回默认。
+     *
+     * 与其在三个构造点各抄一遍（加字段时必然漏），不如统一走这里。
+     */
+    private fun HarnessState.withPreferences(): HarnessState = copy(
+        busySendMode = preferences.busySendMode,
+        genUiDebug = preferences.genUiDebug,
+        useWebChat = preferences.useWebChat,
+        showContext = preferences.showContext,
+    )
 
     /**
      * 当前活跃连接。null 表示未连接。
@@ -246,6 +298,18 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
      */
     private var active: ActiveConnection? = null
     private val client: DshClient? get() = active?.client
+
+    /**
+     * 当前活跃连接；null 表示未连接。
+     *
+     * 暴露它是为了让 WebView 版聊天页复用同一条链路：页面里的 REST 调用
+     * 交给 [io.github.hakunm.deepseekharness.web.ChatWebBridge] 转发到
+     * `DshClient`，于是多地址选路、令牌注入、超时与重试都白拿，
+     * 不必在 JS 里另开一条会把令牌写进页面的 fetch。
+     *
+     * 只读：拿到的人可以调接口，但改不了选路结果——选路仍由本类决定。
+     */
+    fun activeConnection(): ActiveConnection? = active
     private var eventSubscription: Closeable? = null
     private var chatRefreshJob: Job? = null
     @Volatile private var chatRefreshPending = false
@@ -364,6 +428,10 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
             update {
                 copy(
                     connecting = false,
+                    // 冷启动的自动重连失败走的正是这条路，而它是**正常返回**（不抛异常），
+                    // 所以 restoreConnection 的 onFailure 兜不住 —— 不在这里复位，
+                    // restoring 会一直停在 true，「恢复中」从此变成一句永久的谎话。
+                    restoring = false,
                     hosts = hostStore.loadHosts(),
                     endpointProbes = probes,
                     error = messageOf(failure),
@@ -436,7 +504,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         eventSubscription?.close()
         eventSubscription = null
         active = null
-        mutableState.value = HarnessState(restoring = false, hosts = hostStore.loadHosts())
+        mutableState.value = HarnessState(restoring = false, hosts = hostStore.loadHosts()).withPreferences()
     }
 
     fun clearError() = update { copy(error = null) }
@@ -930,6 +998,22 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         update { copy(busySendMode = mode) }
     }
 
+    /** 会话详情页是否走 WebView 版（assets/chat.html）。立刻生效，不需要重启。 */
+    fun setUseWebChat(enabled: Boolean) {
+        preferences.useWebChat = enabled
+        update { copy(useWebChat = enabled) }
+    }
+
+    /**
+     * 聊天页是否显示「上下文注入」块。默认关 —— 那些是系统每轮塞进来的东西，
+     * 手机端没人看，却会在每条消息之间插一排折叠块。
+     * 改了立刻生效：ChatWebScreen 有一个 effect 专门把它推给页面。
+     */
+    fun setShowContext(enabled: Boolean) {
+        preferences.showContext = enabled
+        update { copy(showContext = enabled) }
+    }
+
     /** 开关 dsh-ui 诊断行；立刻生效，不需要重启。 */
     fun setGenUiDebug(enabled: Boolean) {
         preferences.genUiDebug = enabled
@@ -1304,6 +1388,14 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
                 if (delta != null) {
                     if (mutableState.value.selectedSessionId == delta.sessionId) {
                         update { copy(liveChat = (liveChat ?: LiveChatState(delta.sessionId, delta.turn, delta.step)).append(delta)) }
+
+                        // 正文一律走历史那条路（页面只从历史渲染），所以每来一段增量
+                        // 都要让历史跟上，否则流式文字要等消息落盘才出现。
+                        //
+                        // 以前这里**不**刷新：正文只能靠页面里那个独立的实时区显示，
+                        // 而实时区换 step 就重置 —— 真机表现是「这一段说完，上一段没了」。
+                        // scheduleChatRefresh 自带 250ms 去抖 + 单飞，token 再密也只捞一次。
+                        scheduleChatRefresh()
                     }
                 } else if (event.type.startsWith("chat.")) {
                     val sessionId = event.dataString("sessionId")
@@ -1373,7 +1465,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
             selectedRootId = selectedRoot,
             directory = directory,
             trash = if ("files.read" in device.scopes) api.trash() else emptyList(),
-        )
+        ).withPreferences()   // 快照是整份重建的，偏好字段必须重新盖回去
     }
 
     private fun scheduleChatRefresh() {

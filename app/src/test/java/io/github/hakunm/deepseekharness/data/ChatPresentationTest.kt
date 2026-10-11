@@ -3,6 +3,7 @@ package io.github.hakunm.deepseekharness.data
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ChatPresentationTest {
@@ -42,6 +43,7 @@ class ChatPresentationTest {
 
         val items = history.displayItems()
 
+        // 连续两次工具调用现在**合并成一行**（与 WebView 页同口径），TOOL 由两项变一项。
         assertEquals(
             listOf(
                 ChatItemKind.USER,
@@ -49,16 +51,23 @@ class ChatPresentationTest {
                 ChatItemKind.REASONING,
                 ChatItemKind.ASSISTANT,
                 ChatItemKind.TOOL,
-                ChatItemKind.TOOL,
             ),
             items.map { it.kind },
         )
         assertEquals("AGENTS.md", items[1].title)
         assertEquals("The implementation is ready.", items[3].body)
-        assertEquals("Bash", items[4].title)
-        assertEquals("Run tests", items[4].body)
-        assertEquals("Safe host title", items[5].body)
-        assertFalse(items[5].body.contains("raw protocol payload"))
+
+        // 标题不再是 "Bash" 这种英文类别词，而是官方口径的动作短语；
+        // 认不出的工具（mystery）按自己的名字列出，不静默吞掉。
+        assertEquals(listOf("执行了命令", "mystery"), items[4].actions)
+        assertEquals("执行了命令，mystery", items[4].title)
+        // 合并后正文把每条都带上，展开时才看得到细节。
+        assertTrue(items[4].body.contains("Run tests"))
+        assertTrue(items[4].body.contains("Safe host title"))
+
+        // 下面两条是**安全断言**，与呈现方式无关，必须继续成立：
+        // 坏掉的 arguments 原文（"{raw protocol payload"）不得进入界面。
+        assertFalse(items.any { it.body.contains("raw protocol payload") })
         assertFalse(items.any { it.body.contains("turn/end") || it.body.contains("sourceEventSeqs") })
     }
 

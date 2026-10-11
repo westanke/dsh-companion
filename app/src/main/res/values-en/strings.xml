@@ -16,10 +16,15 @@
     <string name="chat">Chat</string>
     <string name="files">Files</string>
     <string name="settings">Settings</string>
+    <!-- Nav item: model configuration lives on its own page now -->
+    <string name="models">Models</string>
     <string name="new_session">New session</string>
     <string name="no_sessions">No visible sessions</string>
     <string name="select_session">Select a session</string>
     <string name="message_hint">Describe what you want to build</string>
+    <!-- While running, the hint moves into the placeholder (mirrors the web chat's #ta) -->
+    <string name="message_hint_running_steer">Running… sends as steer</string>
+    <string name="message_hint_running_queue">Running… sends as queue</string>
     <string name="older_messages">Load earlier messages</string>
     <string name="no_readable_messages">No readable message content</string>
     <string name="context_injection">Context injection</string>
@@ -54,6 +59,7 @@
     <string name="busy_send_mode_steer">Steer</string>
     <string name="busy_send_mode_steer_desc">Send it as additional guidance into the running turn</string>
     <string name="cancel_run">Cancel run</string>
+    <string name="more_actions">More actions</string>
     <string name="create">Create</string>
     <string name="close">Close</string>
     <string name="refresh">Refresh</string>
@@ -164,8 +170,9 @@
     <string name="settings_subtitle">Manage connection, model providers, device permissions, and language</string>
     <string name="about">About</string>
     <string name="author">Author</string>
-    <string name="author_value">Github@Hakunm</string>
+    <string name="author_value">Original author Github@Hakunm&#10;Maintained here by Github@westanke</string>
     <string name="model_providers">Model providers</string>
+    <string name="models_subtitle">Configure model providers, credentials, and available models</string>
     <string name="settings_permission_required">This device does not have settings.read. Enable settings access for it in the DSH WebUI workspace settings; editing also requires settings.write.</string>
     <string name="provider_secret_note">API keys are written only to the server credential store. The app cannot read or display saved keys.</string>
     <string name="active">Active</string>
@@ -215,6 +222,9 @@
     <!-- Multi-host / multi-endpoint connection layer -->
     <string name="saved_computers">Saved computers</string>
     <string name="no_hosts_yet">No computer saved yet. Add one below.</string>
+    <string name="loading_saved_computers">Loading saved computers…</string>
+    <!-- Saved-computer button when already connected: enter the app -->
+    <string name="enter_app">Enter app</string>
     <string name="connect_this_computer">Connect</string>
     <string name="remove_computer">Remove this computer</string>
     <string name="remove_computer_title">Remove “%1$s”?</string>
@@ -225,6 +235,8 @@
     <string name="no_credentials">No credential saved</string>
 
     <string name="import_from_computer">Import configuration from computer</string>
+    <!-- One-line hint for the collapsed entry row -->
+    <string name="import_entry_hint">Generate the text on your computer, send it to yourself, then paste it here</string>
     <string name="import_explanation">Built for when you are already away and cannot see the computer screen: generate a short configuration text on the computer (send it to yourself or keep it in a private note), then paste it here. No QR code and no camera needed.</string>
     <string name="import_hint">Paste the configuration text starting with DSH1:</string>
     <string name="import_and_connect">Import and connect</string>
@@ -283,6 +295,15 @@
     <string name="send_failed_body">The server rejected this message format; the plugin is usually too old</string>
 
     <!-- dsh-ui diagnostics: lets the user produce evidence when a card fails to render -->
+    <string name="web_chat_heading">Chat implementation</string>
+    <string name="web_chat_title">Use the web chat page</string>
+    <string name="web_chat_desc">Off uses the native screen. On renders the chat page with the built-in web view, so Markdown, code blocks and cards look closer to the desktop.</string>
+    <string name="web_chat_footnote">Still a trial: streaming was wired up recently, and small differences from the native version remain. Switch it off any time.</string>
+    <!-- Mirrors show_context_* in values/strings.xml.
+         The Chinese pair was added first and the English side was missed;
+         caught by the composer-pill review. -->
+    <string name="show_context_title">Show context injections</string>
+    <string name="show_context_desc">Blocks the system pushes in every turn: runtime context, time context, background job notices. Hidden by default — they put a row of collapsed blocks between every message. Turn on when debugging.</string>
     <string name="gen_ui_debug_heading">Debug</string>
     <string name="gen_ui_debug_title">dsh-ui card diagnostics</string>
     <string name="gen_ui_debug_desc">When on, each assistant message gets a small grey line explaining why a card did not render as a component.</string>
@@ -304,6 +325,10 @@
     <!-- Sending images / files -->
     <string name="attach_image">Send image</string>
     <string name="attach_file">Send file</string>
+    <!-- The two choices behind the pill’s “+” button (web chat #attachBtn) -->
+    <string name="add_attachment">Add image or file</string>
+    <string name="attachment_pick_image">Choose image from gallery</string>
+    <string name="attachment_pick_file">Choose file</string>
     <string name="attachment_uploading">Uploading…</string>
     <string name="attachment_remove">Remove this attachment</string>
     <string name="attachment_image_too_large">The image is larger than %1$s and cannot be inlined. Compress or crop it first, or send it with “Send file”.</string>

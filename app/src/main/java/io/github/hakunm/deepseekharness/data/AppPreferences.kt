@@ -35,9 +35,33 @@ class AppPreferences(context: Context) {
         get() = preferences.getBoolean(KEY_GEN_UI_DEBUG, false)
         set(value) = preferences.edit { putBoolean(KEY_GEN_UI_DEBUG, value) }
 
+    /**
+     * 会话详情页用 WebView 版（assets/chat.html）还是原生 Compose。
+     *
+     * 两条路并存，不是替换：原生版经过真机验证，WebView 版把 Markdown、
+     * 代码块与卡片渲染交给浏览器。默认 false —— 未验证的实现不该抢走既有体验，
+     * 要换在设置里显式打开，出问题随时能改回来。
+     */
+    var useWebChat: Boolean
+        get() = preferences.getBoolean(KEY_USE_WEB_CHAT, false)
+        set(value) = preferences.edit { putBoolean(KEY_USE_WEB_CHAT, value) }
+
+    /**
+     * 聊天页里是否显示「上下文注入」块（运行上下文 / 时间上下文 / 后台任务通知…）。
+     *
+     * 默认 **false**：那些是系统每轮塞进来的东西，手机端没人看，
+     * 却会在每条消息之间插一排折叠块，把正文挤得七零八落。
+     * 需要排查时再打开。
+     */
+    var showContext: Boolean
+        get() = preferences.getBoolean(KEY_SHOW_CONTEXT, false)
+        set(value) = preferences.edit { putBoolean(KEY_SHOW_CONTEXT, value) }
+
     private companion object {
         const val PREFERENCES_NAME = "dsh_settings"
         const val KEY_BUSY_SEND_MODE = "busy_send_mode"
         const val KEY_GEN_UI_DEBUG = "gen_ui_debug"
+        const val KEY_USE_WEB_CHAT = "use_web_chat"
+        const val KEY_SHOW_CONTEXT = "show_context"
     }
 }

@@ -38,6 +38,14 @@ data class ChatDisplayItem(
     val streaming: Boolean = false,
     /** 这条消息附带的图片；只发图不发字的消息正是靠它才不会被丢掉。 */
     val attachments: List<ChatAttachment> = emptyList(),
+    /**
+     * 工具调用的动作短语，如 ["运行了代码", "修改了文件"]。
+     *
+     * 单独放一个字段而不是揉进 [title]：连续的多个工具调用要**合并成一行**，
+     * 合并就是把各条的短语按首次出现顺序去重求并集。揉成字符串就得再拆开，
+     * 那是在用分隔符当数据结构。
+     */
+    val actions: List<String> = emptyList(),
 )
 
 data class ChatDelta(
@@ -51,6 +59,17 @@ data class ChatDelta(
 
 data class LiveChatBlock(val index: Int, val kind: ChatItemKind, val text: String)
 
+/**
+ * 流式状态：**只装当前这一段（turn+step）**。
+ *
+ * 「turn/step 一变就整个换掉 base」是刻意的 —— 上一轮/上一段的内容由 REST 历史补回来，
+ * 两边都留着就成了重复显示（见 LiveChatGroupingTest）。
+ *
+ * 但这条约定有个前提：**历史真的会被推回页面**。
+ * 那个前提长期不成立（ChatWebScreen 里一处早退判据写反了，逢「liveChat 刚被置空」
+ * 就 return），于是重置清掉的那部分没有任何东西补回来 —— 真机上就是
+ * 「一直在同一个位置说这一段，就把上一段没了」。修的是那处推送，不是这里。
+ */
 data class LiveChatState(
     val sessionId: String,
     val turn: Int,
@@ -107,7 +126,7 @@ fun WorkspaceEvent.chatDelta(): ChatDelta? {
     )
 }
 
-fun ChatHistory.displayItems(): List<ChatDisplayItem> = events.flatMap(::displayItems)
+fun ChatHistory.displayItems(): List<ChatDisplayItem> = mergeToolRuns(events.flatMap(::displayItems))
 
 fun ChatHistory.todoItems(): List<TodoItem> {
     val values = (projections as? JsonObject)?.objectValue("values") ?: return emptyList()
@@ -130,6 +149,47 @@ fun ChatHistory.permissionSelect(): PermissionSelect? {
         PermissionOption(value, name, option.stringValue("description"))
     }
     return PermissionSelect(options, currentValue)
+}
+
+/**
+ * 会话里 agent **显式交付**给用户的一个文件。
+ *
+ * 来源是内核的结构化事件 `deliverables/presented`（`present` 工具触发）：
+ * `data.files[] = { path, description }` —— 绝对路径 + 人写的说明，
+ * **不是**从工具参数里猜出来的。
+ */
+data class ChatDeliverable(
+    val path: String,
+    val description: String? = null,
+    val seq: Int = 0,
+)
+
+/**
+ * 取出会话里被显式交付的文件。
+ *
+ * 与 [io.github.hakunm.deepseekharness.data.SessionFileRefs] 是**两回事**：
+ * 那个是从工具参数里嗅「提到过哪些路径」（带一堆刻意的取舍与白名单），
+ * 这个读的是内核明说的「这是我给你的东西」，可靠度高得多、还带说明。
+ *
+ * 为什么以前 App 里看不到交付物：[displayItems] 只认 user/message、assistant/message、
+ * tool/call 三类，`deliverables/presented` 落到 `else -> emptyList()` 被整类丢掉。
+ * 于是用户问「我要你写的报告呢、你打好的包呢」—— 数据一直在日志里，就是没人读。
+ *
+ * 同一个路径出现多次时保留**最后一次**的说明（后写的更新）。
+ */
+fun ChatHistory.deliverables(): List<ChatDeliverable> {
+    val out = LinkedHashMap<String, ChatDeliverable>()
+    events.forEach { entry ->
+        if (entry.event.type != "deliverables/presented") return@forEach
+        val data = entry.event.data as? JsonObject ?: return@forEach
+        val files = data["files"] as? JsonArray ?: return@forEach
+        files.forEach { raw ->
+            val file = raw as? JsonObject ?: return@forEach
+            val path = file.stringValue("path")?.takeIf { it.isNotBlank() } ?: return@forEach
+            out[path] = ChatDeliverable(path, file.stringValue("description"), entry.event.seq)
+        }
+    }
+    return out.values.toList()
 }
 
 private fun displayItems(entry: HistoryEntry): List<ChatDisplayItem> = when (entry.event.type) {
@@ -240,13 +300,53 @@ private fun toolItem(entry: HistoryEntry): ChatDisplayItem {
     val viewTitle = view?.stringValue("title")
     val description = view?.stringValue("description")
     val arguments = data?.stringValue("arguments")
+    val actions = toolActionsFor(name, arguments)
     return ChatDisplayItem(
         id = "${event.seq}-tool",
         seq = event.seq,
         kind = ChatItemKind.TOOL,
-        title = toolTitle(name),
+        // 标题就是动作短语（官方口径），不再是 "Code" / "Read" 这种英文类别词。
+        title = actions.joinToString("，"),
         body = description ?: argumentsSummary(arguments) ?: viewTitle ?: name,
+        actions = actions,
     )
+}
+
+/**
+ * 把**连续**的工具调用合并成一项，标题报动作摘要。
+ *
+ * 与 WebView 页的 `toolGroupSummary` 同一口径：各条短语按首次出现顺序去重求并集，
+ * 超过 4 条收尾加「等」。原生原先是一次调用一行，一跑几十次就是一屏行；
+ * 网页版是一组一行。
+ *
+ * 只合并**相邻**的 TOOL —— 中间夹了正文就断开，那说明确实是两段工作。
+ */
+private fun mergeToolRuns(items: List<ChatDisplayItem>): List<ChatDisplayItem> {
+    val out = mutableListOf<ChatDisplayItem>()
+    var run = mutableListOf<ChatDisplayItem>()
+    fun flush() {
+        if (run.isEmpty()) return
+        if (run.size == 1) { out += run[0]; run = mutableListOf(); return }
+        val actions = mutableListOf<String>()
+        run.forEach { item -> item.actions.forEach { if (it !in actions) actions += it } }
+        val title = when {
+            actions.isEmpty() -> run.size.toString() + " 次工具调用"
+            actions.size > 4 -> actions.take(4).joinToString("，") + "等"
+            else -> actions.joinToString("，")
+        }
+        out += run[0].copy(
+            id = "tools-${run.first().seq}-${run.last().seq}",
+            title = title,
+            body = run.joinToString("\n") { it.body },
+            actions = actions,
+        )
+        run = mutableListOf()
+    }
+    items.forEach { item ->
+        if (item.kind == ChatItemKind.TOOL) run += item else { flush(); out += item }
+    }
+    flush()
+    return out
 }
 
 private fun contentText(content: JsonElement?): String = when (content) {
@@ -272,16 +372,53 @@ private fun contextLabel(source: JsonObject?): String? {
     }
 }
 
-private fun toolTitle(name: String): String = when {
-    name == "bash" -> "Bash"
-    name == "pwsh" -> "Pwsh"
-    "skill" in name.lowercase() -> "Skill"
-    name == "read" || name == "web_fetch" -> "Read"
-    name == "grep" || name == "glob" || name == "web_search" -> "Search"
-    name == "write" -> "Write"
-    name == "edit" -> "Edit"
-    name == "run_code" -> "Code"
-    else -> "Tool call"
+/**
+ * 一个工具调用的**动作短语**，如 ["运行了代码", "已写入文件", "执行了命令"]。
+ *
+ * 措辞与判定方式都照官方 Web 界面还原（`@deepseek-ai/dsh-client-ui-chat`）：
+ * 那边是内核给一个 `summary.counts[{kind}]`，按 kind 取 i18n 文案再拼；
+ * 我们的会话事件里**没有**这个结构化字段（`tool/call` 无 view/description、
+ * `tool/result` 无 meta，已逐条核实），所以只能按工具名与参数近似还原。
+ *
+ * `run_code` 的处理来自真实数据统计：1129 次调用的 arguments 里，
+ * `tools.bash` 748 次、`tools.edit` 158、`tools.read` 116、`tools.write` 53；
+ * 其中 `bash` + `write` 这一组合 42 例，对应的正是官方那句
+ * 「运行了代码，已写入文件，执行了命令」——所以扫参数是**结论**，不是猜测。
+ *
+ * 顺序按官方措辞对齐：edit 先于 write（官方是「修改了文件，已写入文件」）。
+ */
+private val INNER_ACTIONS = listOf(
+    "tools.edit" to "修改了文件",
+    "tools.write" to "已写入文件",
+    "tools.read" to "读取了文件",
+    "tools.bash" to "执行了命令",
+    "tools.grep" to "搜索了内容",
+    "tools.glob" to "搜索了文件",
+)
+
+internal fun toolActionsFor(name: String, arguments: String?): List<String> {
+    val raw = arguments.orEmpty()
+    if (name == "run_code") {
+        val out = mutableListOf("运行了代码")
+        INNER_ACTIONS.forEach { (needle, phrase) ->
+            if (needle in raw && phrase !in out) out += phrase
+        }
+        return out
+    }
+    val byName = mapOf(
+        "bash" to "执行了命令",
+        "pwsh" to "执行了命令",
+        "read" to "读取了文件",
+        "write" to "已写入文件",
+        "edit" to "修改了文件",
+        "grep" to "搜索了内容",
+        "glob" to "搜索了文件",
+        "web_fetch" to "已访问网页",
+        "web_search" to "已搜索网页",
+    )
+    byName[name]?.let { return listOf(it) }
+    if (name.startsWith("mcp__")) return listOf("调用了 " + name.removePrefix("mcp__").replace("__", " · "))
+    return listOf(name.ifBlank { "工具" })
 }
 
 private fun argumentsSummary(raw: String?): String? {

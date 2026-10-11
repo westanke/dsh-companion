@@ -19,6 +19,13 @@ data class SessionFileRef(
     val count: Int,
     /** 最后一次出现的事件序号（[SessionEvent.seq]）。 */
     val lastSeq: Int,
+    /**
+     * agent 为这个交付物写的说明（只有来自 `deliverables/presented` 的才有）。
+     *
+     * 从工具参数里嗅出来的路径没有说明 —— 那时 agent 并没有「交付」的意思，
+     * 只是顺手读写过这个文件。所以这个字段同时也是「它是正式交付物」的标记。
+     */
+    val description: String? = null,
 )
 
 /**

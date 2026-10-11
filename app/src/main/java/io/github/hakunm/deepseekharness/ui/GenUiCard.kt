@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -229,6 +230,27 @@ private fun GenUiKeyValue(node: GenUiNode) {
     }
 }
 
+/**
+ * 表格列宽的兜底下限（dp）。
+ *
+ * 判据与网页版一致（chat.html 的 `.card .tw` + `.card table{min-width:100%}`）：
+ * 内容装得下就铺满卡片宽度，装不下就退回这个下限、由外层横向滚。
+ * 96dp ≈ 两三个汉字加内边距 —— 再窄一列就只剩省略号，滚反而更好读。
+ */
+internal const val GENUI_TABLE_MIN_COLUMN_WIDTH_DP = 96f
+
+/**
+ * 一列该占多宽（dp）。纯函数，单测覆盖（GenUiTableLayoutTest）。
+ *
+ * [availableDp] 是卡片可用宽度；无界或非法时退回 [GENUI_TABLE_MIN_COLUMN_WIDTH_DP] ——
+ * 宁可横向滚，也不要把列宽算成 0 或 NaN，让整张表消失。
+ */
+internal fun genUiTableColumnWidthDp(availableDp: Float, columnCount: Int): Float {
+    if (columnCount <= 0) return GENUI_TABLE_MIN_COLUMN_WIDTH_DP
+    if (!availableDp.isFinite() || availableDp <= 0f) return GENUI_TABLE_MIN_COLUMN_WIDTH_DP
+    return maxOf(GENUI_TABLE_MIN_COLUMN_WIDTH_DP, availableDp / columnCount)
+}
+
 @Composable
 private fun GenUiTable(node: GenUiNode) {
     val columns = (node.value["columns"] as? kotlinx.serialization.json.JsonArray)
@@ -239,28 +261,39 @@ private fun GenUiTable(node: GenUiNode) {
     node.title()?.let {
         Text(it, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(bottom = 4.dp))
     }
-    // 横向滚动是刻意的：手机屏宽放不下宽表，压缩列宽只会让每格都读不了。
-    Column(Modifier.horizontalScroll(rememberScrollState())) {
-        Row(Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))) {
-            columns.forEach {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.width(140.dp).padding(8.dp),
-                )
-            }
-        }
-        Divider(color = MaterialTheme.colorScheme.outlineVariant)
-        rows.forEach { row ->
-            val cells = (row as? kotlinx.serialization.json.JsonArray).orEmpty()
-                .mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
-            Row {
-                columns.indices.forEach { index ->
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val columnWidth = genUiTableColumnWidthDp(maxWidth.value, columns.size).dp
+        val tableWidth = columnWidth * columns.size
+        // 横向滚动是刻意的：手机屏宽放不下宽表，压缩列宽只会让每格都读不了。
+        // 但滚动容器必须**套在表格外面**（与网页版 `.card .tw` 同构）：
+        // 网页版 2.2.4 曾把 overflow-x 写在 table 自己身上（display:block），
+        // 表格一脱离表格布局算法，列宽就算不出来、几列叠成一团。
+        // 这里同理，horizontalScroll 只加在最外层；列宽由 columnWidth 定死，
+        // 表头与正文每个格子拿同一个宽度，行与行才对得齐。
+        Column(Modifier.horizontalScroll(rememberScrollState())) {
+            Row(Modifier.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))) {
+                columns.forEach {
                     Text(
-                        cells.getOrElse(index) { "" },
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.width(140.dp).padding(8.dp),
+                        it,
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.width(columnWidth).padding(8.dp),
                     )
+                }
+            }
+            // 宽度必须显式给：横向滚动的子级拿到的是**无界**宽度约束，
+            // 而 Divider 默认用 fillMaxWidth —— 无界约束下它会塌成 0 宽，这条分割线整个不见。
+            Divider(Modifier.width(tableWidth), color = MaterialTheme.colorScheme.outlineVariant)
+            rows.forEach { row ->
+                val cells = (row as? kotlinx.serialization.json.JsonArray).orEmpty()
+                    .mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+                Row {
+                    columns.indices.forEach { index ->
+                        Text(
+                            cells.getOrElse(index) { "" },
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.width(columnWidth).padding(8.dp),
+                        )
+                    }
                 }
             }
         }

@@ -46,6 +46,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -95,18 +96,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TooltipBox
-import androidx.compose.material3.TooltipAnchorPosition
-import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.VerticalDivider
-import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -152,6 +148,7 @@ import io.github.hakunm.deepseekharness.data.ChatContentParts
 import io.github.hakunm.deepseekharness.data.ChatAttachment
 import io.github.hakunm.deepseekharness.data.ChatDisplayItem
 import io.github.hakunm.deepseekharness.data.ChatItemKind
+import io.github.hakunm.deepseekharness.data.LiveChatBlock
 import io.github.hakunm.deepseekharness.data.ChatLinkTarget
 import io.github.hakunm.deepseekharness.data.ChatSession
 import io.github.hakunm.deepseekharness.data.ChatWorkspace
@@ -174,7 +171,9 @@ import io.github.hakunm.deepseekharness.data.HtmlBlock
 import io.github.hakunm.deepseekharness.data.extractHtmlBlocks
 import io.github.hakunm.deepseekharness.data.ResolvedPath
 import io.github.hakunm.deepseekharness.data.SessionFileRef
+import io.github.hakunm.deepseekharness.data.ChatHistory
 import io.github.hakunm.deepseekharness.data.SessionFileRefs
+import io.github.hakunm.deepseekharness.data.deliverables
 import io.github.hakunm.deepseekharness.data.TodoItem
 import io.github.hakunm.deepseekharness.data.displayItems
 import io.github.hakunm.deepseekharness.data.permissionSelect
@@ -197,16 +196,27 @@ fun ChatScreen(state: HarnessState, viewModel: HarnessViewModel, wide: Boolean) 
     var createSheet by remember { mutableStateOf(false) }
     var workspaceSheet by remember { mutableStateOf(false) }
     val selected = state.selectedSessionId
+
+    // 会话**列表**两条路共用（它是原生资产，换掉没有收益）；只有详情页有两个实现。
+    // WebView 版尚未过真机验证，所以由 AppPreferences.useWebChat 决定，默认走原生。
+    val detail: @Composable (() -> Unit) -> Unit = { onBack ->
+        if (state.useWebChat) {
+            ChatWebScreen(state, viewModel, onBack, Modifier.fillMaxSize())
+        } else {
+            ChatDetail(state, viewModel, onBack, Modifier.fillMaxSize())
+        }
+    }
+
     if (wide) {
         Row(Modifier.fillMaxSize()) {
             SessionPane(state, viewModel, { createSheet = true }, { workspaceSheet = true }, Modifier.width(304.dp).fillMaxHeight())
             VerticalDivider(Modifier.fillMaxHeight(), color = MaterialTheme.colorScheme.outlineVariant)
-            ChatDetail(state, viewModel, null, Modifier.weight(1f).fillMaxHeight())
+            detail({})
         }
     } else if (selected == null) {
         SessionPane(state, viewModel, { createSheet = true }, { workspaceSheet = true }, Modifier.fillMaxSize())
     } else {
-        ChatDetail(state, viewModel, { viewModel.selectSession(null) }, Modifier.fillMaxSize())
+        detail { viewModel.selectSession(null) }
     }
     if (createSheet) NewSessionSheet(state, viewModel) { createSheet = false }
     if (workspaceSheet) WorkspaceManagementSheet(state, viewModel) { workspaceSheet = false }
@@ -442,14 +452,33 @@ private fun ChatDetail(
             }
         }
     }
-    val liveItems = state.liveChat?.takeIf { it.sessionId == selected.id }?.displayItems().orEmpty()
-    val displayItems = state.history?.displayItems().orEmpty() + liveItems
+    // 流式这一段也按同一个口径拆开：思考不进消息流，交给底部那条固定的思考条
+    // （[ChatThinkBar]）—— 它是「运行状态」而不是「会话内容」。
+    val liveChat = state.liveChat?.takeIf { it.sessionId == selected.id }
+    val liveItems = liveChat?.displayItems().orEmpty().filter { it.kind != ChatItemKind.REASONING }
+    // 思考条只承载**流式这一段**：历史里的 REASONING 在下面已经被过滤掉了，
+    // 于是翻历史时 liveChat 为 null，这一条自然整条不显示。
+    val liveThinking = liveChat?.let { liveThinkingText(it.blocks) }.orEmpty()
+
+    // 历史里的两类块按 WebView 页的口径过滤（对齐两个模式的观感）：
+    //
+    // ① 思考过程不再显示 —— 它是给我自己看的，翻历史的人不读。
+    //    流式期间那一段也不再进列表：改由底部思考条承载（见 [ChatThinkBar]）。
+    //    也就是说，思考在任何时候都不是「会话内容」。
+    // ② 上下文注入默认隐藏 —— 系统每轮塞进来的运行上下文/时间上下文/后台任务通知，
+    //    会在每条消息之间插一排折叠块，把正文挤得七零八落。
+    //    开关在设置页（AppPreferences.showContext），默认关。
+    val showContext = state.showContext
+    val historyItems = state.history?.displayItems().orEmpty()
+        .filter { it.kind != ChatItemKind.REASONING }
+        .filter { showContext || it.kind != ChatItemKind.CONTEXT }
+    val displayItems = historyItems + liveItems
     val todos = state.history?.todoItems().orEmpty()
     // 只取**最后一次运行之后**的文件：新回复还在流式输出时（liveChat != null）不显示，
     // 否则文件列表会随着每个工具调用闪一下 —— 那正是网页版「会话结束后才出现」的由来。
+    // 与标题栏文件夹弹层共用同一个来源（见 sessionFileList 的 KDoc）。
     val sessionFiles = remember(state.history, state.liveChat) {
-        if (state.liveChat != null) emptyList()
-        else SessionFileRefs.refs(state.history?.events.orEmpty())
+        if (state.liveChat != null) emptyList() else sessionFileList(state.history)
     }
     val listState = rememberLazyListState()
     // 复制手势提示只需出现一次：记住它被关掉，而不是每次进会话都啰嗦一遍。
@@ -461,9 +490,31 @@ private fun ChatDetail(
         }
     }
 
+    // ⋯ 菜单里的「插话」与药丸上的发送键共用同一套可提交判据（内容非空或有待发附件 + 有写权限）。
+    // 审批面板顶掉输入区时（ApprovalUiState 非 None）插话一并不可用 —— 与改版前
+    // 「Composer 不渲染、插话键跟着消失」的行为保持一致，不新开一条并发提交的口子。
+    val canWrite = "chat.write" in state.device?.scopes.orEmpty()
+    val canSteer = state.approvalState == ApprovalUiState.None && canWrite &&
+        (ComposerSendPolicy.canSubmit(message, canWrite) || state.pendingAttachments.isNotEmpty())
+
     CompositionLocalProvider(LocalUriHandler provides linkHandler) {
         Column(modifier.imePadding()) {
-            ConversationHeader(selected, state, viewModel, onBack, onOpenFiles = { filesSheet = true })
+            ConversationHeader(
+                session = selected,
+                state = state,
+                viewModel = viewModel,
+                onBack = onBack,
+                onOpenFiles = { filesSheet = true },
+                onModelClick = { modelSheet = true },
+                permission = state.history?.permissionSelect(),
+                permissionEnabled = canWrite && !state.busy,
+                onPermissionSelect = viewModel::selectPermissionPreset,
+                canSteer = canSteer,
+                onSteer = {
+                    viewModel.sendMessage(message, true)
+                    message = ""
+                },
+            )
             if (todos.isNotEmpty()) {
                 TodoPanel(todos, tasksExpanded, onToggle = { tasksExpanded = !tasksExpanded })
             }
@@ -541,6 +592,10 @@ private fun ChatDetail(
                 }
             }
         }
+        // 思考条：消息区**下方**、输入区**上方**的那一条固定位置（网页版 #thinkbar 的位置）。
+        // 有思考才渲染，没有时整条不存在 —— 不用 AnimatedVisibility 收起，
+        // 那会留下一条带边框的空缝，在输入区上方永久挡着一行。
+        ChatThinkBar(liveThinking)
         when (val approvals = state.approvalState) {
             ApprovalUiState.None -> Composer(
                 value = message,
@@ -554,8 +609,6 @@ private fun ChatDetail(
                 onAttachImage = viewModel::attachImage,
                 onAttachFile = viewModel::attachFile,
                 onRemoveAttachment = viewModel::removePendingAttachment,
-                onModelClick = { modelSheet = true },
-                onPermissionSelect = viewModel::selectPermissionPreset,
                 onSubmit = { steer -> viewModel.sendMessage(message, steer); message = "" },
             )
             ApprovalUiState.Loading -> ApprovalLoading()
@@ -596,6 +649,12 @@ private fun ConversationHeader(
     viewModel: HarnessViewModel,
     onBack: (() -> Unit)?,
     onOpenFiles: () -> Unit,
+    onModelClick: () -> Unit,
+    permission: PermissionSelect?,
+    permissionEnabled: Boolean,
+    onPermissionSelect: (String) -> Unit,
+    canSteer: Boolean,
+    onSteer: () -> Unit,
 ) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
@@ -631,6 +690,95 @@ private fun ConversationHeader(
                 Icon(Icons.Outlined.Cancel, stringResource(R.string.cancel_run), tint = MaterialTheme.colorScheme.error)
             }
         }
+        // ⋯ 菜单（网页版 chat.html:283 的 #more，位置一样：标题右边、停止键旁边）。
+        //
+        // 输入区压成**一行药丸**后，模型 / 权限 / 插话这些入口在输入区里没有位置了，
+        // 所以整体搬到这里。它们只是**换了容器，不是换了语义** ——
+        // 模型仍走既有的 ModelSheet（智能体切换本来就在那个面板里，不重复做），
+        // 权限仍是只读 / 工作区写入 / 完整访问三档 + 完整访问二次确认，
+        // 插话仍是固定的 steer 提交（不受设置里「繁忙时默认行为」影响）。
+        var moreOpen by remember { mutableStateOf(false) }
+        var confirmFullAccess by remember { mutableStateOf(false) }
+        val currentModel = state.sessionModels?.current
+        val agentName = state.agentPresets.find { it.id == session.agentPreset }?.name ?: session.agentPreset
+        val modelSummary = listOfNotNull(agentName, currentModel?.provider, currentModel?.model)
+            .joinToString(" · ")
+        Box {
+            IconButton(onClick = { moreOpen = true }) {
+                Icon(Icons.Outlined.MoreVert, stringResource(R.string.more_actions))
+            }
+            DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(stringResource(R.string.model))
+                            if (modelSummary.isNotBlank()) {
+                                Text(
+                                    modelSummary,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                    },
+                    onClick = {
+                        moreOpen = false
+                        onModelClick()
+                    },
+                    enabled = state.sessionModels != null && state.sessionModels.routable,
+                    leadingIcon = { Icon(Icons.Outlined.ModelTraining, null) },
+                )
+                permission?.takeIf { it.options.isNotEmpty() }?.let { permissionValue ->
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    PermissionMenuItems(
+                        value = permissionValue,
+                        enabled = permissionEnabled,
+                        onSelect = { selected ->
+                            moreOpen = false
+                            onPermissionSelect(selected)
+                        },
+                        onRequestFullAccess = {
+                            moreOpen = false
+                            confirmFullAccess = true
+                        },
+                    )
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(stringResource(R.string.steer))
+                            Text(
+                                stringResource(R.string.busy_send_mode_steer_desc),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    },
+                    onClick = {
+                        moreOpen = false
+                        onSteer()
+                    },
+                    enabled = canSteer,
+                    leadingIcon = { Icon(Icons.Outlined.SubdirectoryArrowRight, null) },
+                )
+            }
+        }
+        // 完整访问的二次确认：与原来挂在输入区那个按钮上的对话框是同一套要求 ——
+        // 必须勾选 acknowledged，确认键才会亮。
+        if (confirmFullAccess) {
+            FullAccessConfirmDialog(
+                onDismiss = { confirmFullAccess = false },
+                onConfirm = {
+                    confirmFullAccess = false
+                    onPermissionSelect("danger-full-access")
+                },
+            )
+        }
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
@@ -664,11 +812,37 @@ private fun SessionFilesSheet(state: HarnessState, viewModel: HarnessViewModel, 
     }
 }
 
+/**
+ * 一个会话的「文件清单」——**两处共用同一个来源**。
+ *
+ * 优先级：内核明说的**交付物**（`deliverables/presented`，present 工具触发，
+ * 带绝对路径 + 人写的说明）→ 没有才回退到「从工具参数里嗅提到过哪些路径」。
+ *
+ * 为什么必须抽出来共用：这两处（会话底部的「本次产生的文件」与标题栏文件夹弹层）
+ * 曾经各写各的 —— 底部先改成了交付物，弹层还在嗅参数，于是**同一个会话两处显示的
+ * 东西不一样**：底部是 agent 交付的报告与安装包，弹层却是一堆嗅出来的路径
+ * （真机反馈：「会话标题栏的文件夹中的不合适」）。共用之后不可能再走偏。
+ *
+ * 为什么优先交付物：嗅参数那条路有一堆刻意的取舍 —— bash / pwsh / run_code 整体跳过、
+ * 只认绝对路径。实测某个会话 1400+ 次工具调用里 run_code 占 1347 次全被跳过、
+ * meta.diffs 一次都没出现、read 只有 1 次 —— 列表基本是空的；而 agent 真正交付的东西
+ * 走的是另一条从来没被读过的事件。
+ */
+private fun sessionFileList(history: ChatHistory?): List<SessionFileRef> {
+    val delivered = history?.deliverables().orEmpty()
+    return if (delivered.isNotEmpty()) {
+        delivered.map { SessionFileRef(it.path, count = 1, lastSeq = it.seq, description = it.description) }
+    } else {
+        SessionFileRefs.refs(history?.events.orEmpty())
+    }
+}
+
 @Composable
 private fun SessionFileList(state: HarnessState, onOpen: (String) -> Unit) {
     val history = state.history
     // 解析整段历史是有成本的；只在历史对象变化时重算，而不是每次重组都跑一遍。
-    val refs = remember(history) { SessionFileRefs.refs(history?.events.orEmpty()) }
+    // 与底部「本次产生的文件」共用同一个来源，避免两处显示不一致。
+    val refs = remember(history) { sessionFileList(history) }
     Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(bottom = 28.dp)) {
         Text(stringResource(R.string.session_files), style = MaterialTheme.typography.headlineSmall)
         Text(
@@ -788,6 +962,17 @@ private fun SessionFileRow(ref: SessionFileRef, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodyMedium,
             )
+            // agent 为交付物写的说明（「本轮排障报告」「v2.2.18 安装包」这种）。
+            // 只有显式交付的才有，嗅出来的路径没有 —— 那时 agent 并没有交付的意图。
+            ref.description?.takeIf { it.isNotBlank() }?.let { desc ->
+                Text(
+                    desc,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
             // 完整路径要能看全：同名文件在不同目录里，只显示文件名是分不出来的。
             Text(
                 ref.path,
@@ -1208,8 +1393,6 @@ private fun Composer(
     onAttachImage: (name: String, sizeBytes: Long, mediaType: String, openInput: () -> InputStream) -> Unit,
     onAttachFile: (name: String, sizeBytes: Long, openInput: () -> InputStream) -> Unit,
     onRemoveAttachment: (String) -> Unit,
-    onModelClick: () -> Unit,
-    onPermissionSelect: (String) -> Unit,
     onSubmit: (steer: Boolean) -> Unit,
 ) {
     val canWrite = "chat.write" in state.device?.scopes.orEmpty()
@@ -1236,19 +1419,30 @@ private fun Composer(
     }
     val defaultMode = ComposerSendPolicy.resolve(sessionRunning, state.busySendMode)
     val defaultIsSteer = defaultMode == BusySendMode.STEER
-    val current = state.sessionModels?.current
-    val session = state.sessions.find { it.id == state.selectedSessionId }
-    val agentName = state.agentPresets.find { it.id == session?.agentPreset }?.name ?: session?.agentPreset
+    // 「+」（网页版 #attachBtn）点开才选图片还是文件。默认收起：药丸里只有 + / 输入框 / 发送三样。
+    var attachMenu by remember { mutableStateOf(false) }
+    // 运行中提示不再单独占一行，而是并进占位符 —— 照网页版 chat.html:1399
+    // 直接改 textarea 的 placeholder 的做法，省掉输入区上方那一行高度。
+    // 占位符必须一行放得下（下面 maxLines = 1 + Ellipsis），所以只留「运行中 + 发送去哪」。
+    val placeholder = stringResource(
+        when (composerHint(sessionRunning, defaultIsSteer)) {
+            ComposerHint.IDLE -> R.string.message_hint
+            ComposerHint.RUNNING_QUEUE -> R.string.message_hint_running_queue
+            ComposerHint.RUNNING_STEER -> R.string.message_hint_running_steer
+        },
+    )
     Column(Modifier.fillMaxWidth()) {
         CommandSuggestions(value, state.commands, onValueChange)
+        // 一整条药丸（网页版 #row）：边框 + 圆角 22dp 由它统一画，
+        // + / 输入框 / 发送都在里面，输入框自己不再画边框和圆角。
         Surface(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
-            shape = MaterialTheme.shapes.medium,
+            shape = RoundedCornerShape(22.dp),
             color = MaterialTheme.colorScheme.surfaceContainerLow,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             shadowElevation = 3.dp,
         ) {
-            Column(Modifier.padding(horizontal = 8.dp, vertical = 3.dp)) {
+            Column(Modifier.padding(horizontal = 4.dp, vertical = 3.dp)) {
                 if (attachments.isNotEmpty() || attachmentUploading) {
                     Row(
                         modifier = Modifier.fillMaxWidth()
@@ -1276,114 +1470,200 @@ private fun Composer(
                         }
                     }
                 }
-                Box(Modifier.fillMaxWidth().height(34.dp).padding(horizontal = 3.dp, vertical = 2.dp)) {
-                    if (value.isEmpty()) {
-                        Text(
-                            stringResource(R.string.message_hint),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
-                    BasicTextField(
-                        value = value,
-                        onValueChange = onValueChange,
-                        modifier = Modifier.fillMaxSize().onKeyEvent { event ->
-                            // 物理键盘（外接键盘、桌面模式）的 Enter。
-                            // 软键盘的「发送」键走下面的 KeyboardActions.onSend。
-                            if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                            if (event.key != Key.Enter && event.key != Key.NumPadEnter) return@onKeyEvent false
-                            val alternate = event.isCtrlPressed || event.isMetaPressed
-                            // 空闲且没按修饰键时放行，让 Enter 保持换行（多行输入是正常需求）。
-                            if (!sessionRunning && !alternate) return@onKeyEvent false
-                            if (!canSubmit) return@onKeyEvent false
-                            val steer = ComposerSendPolicy
-                                .resolve(sessionRunning, state.busySendMode, alternate) == BusySendMode.STEER
-                            onSubmit(steer)
-                            true
-                        },
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
-                        cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.secondary),
-                        // 运行中才把软键盘的回车变成「发送」；空闲时保持默认换行。
-                        keyboardOptions = KeyboardOptions(
-                            imeAction = if (sessionRunning) ImeAction.Send else ImeAction.Default,
-                        ),
-                        keyboardActions = KeyboardActions(
-                            onSend = { if (canSubmit) onSubmit(defaultIsSteer) },
-                        ),
-                    )
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(
-                        onClick = onModelClick,
-                        enabled = state.sessionModels != null && state.sessionModels.routable,
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                    ) {
-                        Icon(Icons.Outlined.ModelTraining, null, Modifier.size(18.dp))
-                        Text(
-                            listOfNotNull(agentName, current?.let { "${it.provider} · ${it.model}" })
-                                .joinToString(" · ")
-                                .ifBlank { stringResource(R.string.model) },
-                            modifier = Modifier.weight(1f).padding(start = 6.dp),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Icon(Icons.Outlined.ExpandMore, null, Modifier.size(18.dp))
-                    }
-                    PermissionControl(
-                        value = state.history?.permissionSelect(),
-                        enabled = canWrite && !state.busy,
-                        onSelect = onPermissionSelect,
-                    )
-                    // 两个附件入口只在有 chat.write 时出现 —— 没有写权限时选了也发不出去。
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    // 底部对齐（网页版 #row 是 align-items:flex-end）：输入框长高时，
+                    // `+` 与发送键跟着落在底部，而不是垂直居中飘在半空。
+                    verticalAlignment = Alignment.Bottom,
+                ) {
+                    // 附件总入口：点开两项（图片 / 文件），分别走既有的两个 launcher。
+                    // launcher 仍在本 composable 作用域里创建（rememberLauncherForActivityResult
+                    // 不能搬出 Composer）—— 只是触发它的人从两个平铺按钮换成了这个 +。
                     if (canWrite) {
-                        IconButton(onClick = { imageLauncher.launch("image/*") }, modifier = Modifier.size(40.dp)) {
-                            Icon(Icons.Outlined.ImageIcon, stringResource(R.string.attach_image), Modifier.size(19.dp))
-                        }
-                        IconButton(onClick = { fileLauncher.launch(arrayOf("*/*")) }, modifier = Modifier.size(40.dp)) {
-                            Icon(Icons.Outlined.AttachFile, stringResource(R.string.attach_file), Modifier.size(19.dp))
+                        Box {
+                            IconButton(
+                                onClick = { attachMenu = true },
+                                modifier = Modifier.size(34.dp),
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Add,
+                                    stringResource(R.string.add_attachment),
+                                    Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            DropdownMenu(expanded = attachMenu, onDismissRequest = { attachMenu = false }) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.attachment_pick_image)) },
+                                    onClick = {
+                                        attachMenu = false
+                                        imageLauncher.launch("image/*")
+                                    },
+                                    leadingIcon = { Icon(Icons.Outlined.ImageIcon, null) },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.attachment_pick_file)) },
+                                    onClick = {
+                                        attachMenu = false
+                                        fileLauncher.launch(arrayOf("*/*"))
+                                    },
+                                    leadingIcon = { Icon(Icons.Outlined.AttachFile, null) },
+                                )
+                            }
                         }
                     }
-                    // 运行中，在发送键旁标出「回车会做什么」——否则用户只能靠试。
-                    if (sessionRunning) {
-                        Text(
-                            stringResource(
-                                if (defaultIsSteer) R.string.send_mode_steer else R.string.send_mode_queue,
+                    /* 输入区高度：**随内容长高**（网页版 #ta 是 min-height:36px / max-height:120px）。
+                     *
+                     * 早先写死 height(34.dp)：敲到第二行文字就被裁掉下半截，看着像控件坏了
+                     * （真机截图里第三行只剩个顶）。现在 44dp 起步、最多 120dp，
+                     * 一行时 44dp、两行 60dp 左右，到顶后不再长。
+                     * 注意：不能用 fillMaxSize —— 它会去撑满 heightIn 的上限（120dp），
+                     * 变成「永远很高」。用 fillMaxWidth，让它按自己的内容定高。 */
+                    Box(Modifier.weight(1f).heightIn(min = 44.dp, max = 120.dp).padding(horizontal = 4.dp)) {
+                        if (value.isEmpty()) {
+                            Text(
+                                placeholder,
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        BasicTextField(
+                            value = value,
+                            onValueChange = onValueChange,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp).onKeyEvent { event ->
+                                // 物理键盘（外接键盘、桌面模式）的 Enter。
+                                // 软键盘的「发送」键走下面的 KeyboardActions.onSend。
+                                if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
+                                if (event.key != Key.Enter && event.key != Key.NumPadEnter) return@onKeyEvent false
+                                val alternate = event.isCtrlPressed || event.isMetaPressed
+                                // 空闲且没按修饰键时放行，让 Enter 保持换行（多行输入是正常需求）。
+                                if (!sessionRunning && !alternate) return@onKeyEvent false
+                                if (!canSubmit) return@onKeyEvent false
+                                val steer = ComposerSendPolicy
+                                    .resolve(sessionRunning, state.busySendMode, alternate) == BusySendMode.STEER
+                                onSubmit(steer)
+                                true
+                            },
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+                            cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.secondary),
+                            // 运行中才把软键盘的回车变成「发送」；空闲时保持默认换行。
+                            keyboardOptions = KeyboardOptions(
+                                imeAction = if (sessionRunning) ImeAction.Send else ImeAction.Default,
                             ),
-                            modifier = Modifier.padding(end = 4.dp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.labelSmall,
+                            keyboardActions = KeyboardActions(
+                                onSend = { if (canSubmit) onSubmit(defaultIsSteer) },
+                            ),
                         )
                     }
-                    TooltipBox(
-                        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
-                        tooltip = { PlainTooltip { Text(stringResource(R.string.steer)) } },
-                        state = rememberTooltipState(),
-                    ) {
-                        // 插话按钮保留为**显式入口**，固定走 steer，不受设置项影响 ——
-                        // 设置项管的是「默认」，而它管的是「我要插话，就现在」。
-                        IconButton(onClick = { onSubmit(true) }, enabled = canSubmit) {
-                            Icon(Icons.Outlined.SubdirectoryArrowRight, stringResource(R.string.steer))
-                        }
-                    }
+                    // 发送键：34dp 圆形主色底白字；不可发送时改成**透明底 + 灰字**，
+                    // 而不是整体压透明度 —— 压透明度会连底色一起淡掉，看着像残废控件。
+                    // 提交模式仍按设置走（这里传 defaultIsSteer），插话另有 ⋯ 菜单里的固定入口。
                     Surface(
                         onClick = { onSubmit(defaultIsSteer) },
                         enabled = canSubmit,
-                        modifier = Modifier.size(44.dp),
+                        modifier = Modifier.size(34.dp),
                         shape = CircleShape,
-                        color = if (canSubmit) {
-                            MaterialTheme.colorScheme.primary
-                        } else MaterialTheme.colorScheme.surfaceContainerHighest,
+                        color = if (canSubmit) MaterialTheme.colorScheme.primary else Color.Transparent,
                         contentColor = if (canSubmit) {
                             MaterialTheme.colorScheme.onPrimary
-                        } else MaterialTheme.colorScheme.onSurfaceVariant,
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
                     ) {
-                        Icon(Icons.AutoMirrored.Outlined.Send, stringResource(R.string.send), Modifier.padding(11.dp))
+                        Icon(Icons.AutoMirrored.Outlined.Send, stringResource(R.string.send), Modifier.padding(8.dp))
                     }
                 }
             }
         }
     }
+}
+
+/**
+ * 输入框占位符该显示哪一段。
+ *
+ * 原来「运行中回车会排队还是插话」是输入框**下方**单独一行 Text；照网页版
+ * （chat.html:1399 直接改 textarea 的 placeholder）压进占位符之后，那一行就没了 ——
+ * 占位符成了唯一说明。所以把「选哪一段」抽成纯函数并单测（ComposerPillTest），
+ * 免得这种「只差一行字」的取舍在界面里悄悄错掉：选错资源在屏幕上只是一行小字。
+ */
+internal enum class ComposerHint { IDLE, RUNNING_QUEUE, RUNNING_STEER }
+
+internal fun composerHint(sessionRunning: Boolean, steerIsDefault: Boolean): ComposerHint = when {
+    // 空闲时没有可插话的轮次，设置里的「繁忙时默认行为」不该影响占位符。
+    !sessionRunning -> ComposerHint.IDLE
+    steerIsDefault -> ComposerHint.RUNNING_STEER
+    else -> ComposerHint.RUNNING_QUEUE
+}
+
+/**
+ * 流式思考条：消息区**下方**、输入区**上方**的一条固定位置。
+ *
+ * 口径全部对齐网页版 `#thinkbar`（chat.html:93-101 的样式、setThinking:909-919 的行为）：
+ * - 只显示**当前**思考的一行，过长取**尾部** —— 思考是往前推进的，最新那段才有信息量；
+ * - 一行放不下就右侧省略号截断，不换行、不把输入区顶下去；
+ * - 没有思考时整条**不渲染**（而不是渲染成零高度）—— 空 Surface 照样占掉边框和 padding，
+ *   输入区上方会永久多出一条缝。
+ *
+ * 为什么不放进消息流：它是「运行状态」而不是「会话内容」。插在列表里会随消息滚动、
+ * 把正文挤开，一屏行里也根本找不着（这条原来是列表里的一个 ActivityRow）。
+ */
+@Composable
+private fun ChatThinkBar(raw: String) {
+    val text = thinkBarText(raw)
+    if (text.isEmpty()) return
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(13.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    strokeWidth = 1.5.dp,
+                )
+                Text(
+                    text,
+                    modifier = Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 从流式这一段里取出「当前思考」的原文：只认 REASONING 块，按原顺序用空格接起来。
+ *
+ * 与网页版 `setLive`（chat.html:2170-2173）同一口径：`filter(kind === "reasoning")` 后
+ * `join(" ")`。**只取流式**是刻意的 —— 历史里的思考已在列表层被过滤掉，
+ * 翻历史时这条思考条必须消失，否则会拿一段旧思考冒充「正在想」。
+ */
+internal fun liveThinkingText(blocks: List<LiveChatBlock>): String =
+    blocks.filter { it.kind == ChatItemKind.REASONING }.joinToString(" ") { it.text }
+
+/**
+ * 思考条那一行的文字：空白折成单个空格、去掉首尾，超过 [maxChars] 只留**尾部**。
+ *
+ * 抽成纯函数就为了能测（见 `ChatThinkBarTest`）：这条「留尾巴」的规则本身与渲染无关，
+ * 但正是用户实际看到的行为，肉眼点界面覆盖不到边界（空串、恰好 140、含换行与缩进）。
+ * 数值与网页版一致：`t.length > 140` 时取 `"…" + t.slice(-140)`。
+ */
+internal fun thinkBarText(raw: String, maxChars: Int = 140): String {
+    val text = raw.replace(Regex("\\s+"), " ").trim()
+    if (text.length <= maxChars) return text
+    return "…" + text.takeLast(maxChars)
 }
 
 /**
@@ -1629,108 +1909,84 @@ private fun localizedCommandDescription(command: CommandDescriptor): String? = w
 }
 
 @Composable
-private fun PermissionControl(
-    value: PermissionSelect?,
+private fun PermissionMenuItems(
+    value: PermissionSelect,
     enabled: Boolean,
     onSelect: (String) -> Unit,
+    onRequestFullAccess: () -> Unit,
 ) {
-    if (value == null || value.options.isEmpty()) return
-    var menuOpen by remember { mutableStateOf(false) }
-    var confirmFullAccess by remember { mutableStateOf(false) }
-    var acknowledged by remember { mutableStateOf(false) }
+    if (value.options.isEmpty()) return
     val current = value.options.find { it.value == value.currentValue }
-    val currentLabel = permissionLabel(value.currentValue, current?.name)
-
-    Box {
-        TextButton(
-            onClick = { menuOpen = true },
-            enabled = enabled,
-            modifier = Modifier.widthIn(max = 124.dp).heightIn(min = 48.dp),
-            contentPadding = PaddingValues(horizontal = 7.dp, vertical = 0.dp),
-        ) {
-            Icon(permissionIcon(value.currentValue), null, Modifier.size(18.dp))
-            Text(
-                currentLabel,
-                modifier = Modifier.padding(start = 5.dp).weight(1f, fill = false),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.labelLarge,
-            )
-            Icon(Icons.Outlined.ExpandMore, null, Modifier.size(17.dp))
-        }
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            Text(
-                stringResource(R.string.access_mode),
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelMedium,
-            )
-            value.options.filterNot { it.value == "custom" }.forEach { option ->
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(permissionLabel(option.value, option.name))
-                            option.description?.takeIf(String::isNotBlank)?.let { description ->
-                                Text(
-                                    description,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                        }
-                    },
-                    onClick = {
-                        menuOpen = false
-                        if (option.value == "danger-full-access") {
-                            acknowledged = false
-                            confirmFullAccess = true
-                        } else onSelect(option.value)
-                    },
-                    leadingIcon = { Icon(permissionIcon(option.value), null) },
-                    trailingIcon = {
-                        if (option.value == value.currentValue) Icon(Icons.Outlined.Check, null)
-                    },
-                )
-            }
-        }
-    }
-
-    if (confirmFullAccess) {
-        AlertDialog(
-            onDismissRequest = { confirmFullAccess = false; acknowledged = false },
-            icon = { Icon(Icons.Outlined.WarningAmber, null, tint = MaterialTheme.colorScheme.tertiary) },
-            title = { Text(stringResource(R.string.permission_full_access_title)) },
+    Text(
+        stringResource(R.string.access_mode) + " · " + permissionLabel(value.currentValue, current?.name),
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        style = MaterialTheme.typography.labelMedium,
+    )
+    value.options.filterNot { it.value == "custom" }.forEach { option ->
+        DropdownMenuItem(
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(stringResource(R.string.permission_full_access_warning))
-                    Row(
-                        modifier = Modifier.fillMaxWidth().clickable { acknowledged = !acknowledged },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Checkbox(checked = acknowledged, onCheckedChange = { acknowledged = it })
-                        Text(stringResource(R.string.permission_full_access_ack), Modifier.padding(start = 4.dp))
+                Column {
+                    Text(permissionLabel(option.value, option.name))
+                    option.description?.takeIf(String::isNotBlank)?.let { description ->
+                        Text(
+                            description,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
                     }
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { confirmFullAccess = false; acknowledged = false }) {
-                    Text(stringResource(R.string.close))
-                }
+            onClick = {
+                if (option.value == "danger-full-access") onRequestFullAccess()
+                else onSelect(option.value)
             },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        confirmFullAccess = false
-                        acknowledged = false
-                        onSelect("danger-full-access")
-                    },
-                    enabled = acknowledged,
-                ) {
-                    Text(stringResource(R.string.enable_full_access))
-                }
+            enabled = enabled,
+            leadingIcon = { Icon(permissionIcon(option.value), null) },
+            trailingIcon = {
+                if (option.value == value.currentValue) Icon(Icons.Outlined.Check, null)
             },
         )
     }
+}
+
+/**
+ * 完整访问的二次确认。
+ *
+ * 从原 [PermissionControl] 原样搬出来，要求一个字没改：必须勾选 acknowledged，
+ * 确认键才可用。对话框自己持有 acknowledged，关掉再打开一定是未勾选状态
+ * （原来也是在打开之前把 acknowledged 重置为 false）。
+ */
+@Composable
+private fun FullAccessConfirmDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    var acknowledged by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Outlined.WarningAmber, null, tint = MaterialTheme.colorScheme.tertiary) },
+        title = { Text(stringResource(R.string.permission_full_access_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.permission_full_access_warning))
+                Row(
+                    modifier = Modifier.fillMaxWidth().clickable { acknowledged = !acknowledged },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(checked = acknowledged, onCheckedChange = { acknowledged = it })
+                    Text(stringResource(R.string.permission_full_access_ack), Modifier.padding(start = 4.dp))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.close))
+            }
+        },
+        confirmButton = {
+            Button(onClick = onConfirm, enabled = acknowledged) {
+                Text(stringResource(R.string.enable_full_access))
+            }
+        },
+    )
 }
 
 @Composable
@@ -1996,8 +2252,14 @@ private fun AttachmentNotice(message: String) {
 
 @Composable
 private fun ActivityRow(item: ChatDisplayItem) {
-    val expandable = item.kind != ChatItemKind.TOOL && item.body.isNotBlank()
+    // 工具行在合并成一组（多条调用）之后也要能展开看细节；
+    // 单次调用的那一行没什么可展的，展开反而是噪音。
+    val multiTool = item.kind == ChatItemKind.TOOL && item.body.contains('\n')
+    val expandable = item.body.isNotBlank() && (item.kind != ChatItemKind.TOOL || multiTool)
     var expanded by remember(item.id) { mutableStateOf(false) }
+    // REASONING 这条分支现在只是兜底：历史（historyItems）与流式（liveItems）两处
+    // 都已把思考挡在消息流之外，改由底部思考条 [ChatThinkBar] 承载。
+    // 万一哪天漏进来一条，至少还显示得出来，而不是变成一行空白。
     val label = when (item.kind) {
         ChatItemKind.CONTEXT -> stringResource(R.string.context_injection)
         ChatItemKind.REASONING -> stringResource(R.string.think)
