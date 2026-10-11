@@ -287,7 +287,7 @@ Download from this repository's Releases (both hosts carry the same file — pic
 - Gitee (faster from mainland China): <https://gitee.com/westanke/dsh-companion/releases/latest>
 
 ```text
-DeepSeek-Harness-companion-v2.2.20.apk
+DeepSeek-Harness-companion-v2.2.23.apk
 ```
 
 Requirements:
@@ -303,7 +303,7 @@ Requirements:
 The project's original release certificate (`CN=DSH Pocket Client`, used for v1.9.0 and earlier) **has been
 lost**, so the current build is for self-use / internal distribution only. Two direct consequences:
 
-- **Upgrading in place will fail**: `v1.9.0` and `v2.2.20` are signed differently, so you must uninstall
+- **Upgrading in place will fail**: `v1.9.0` and `v2.2.23` are signed differently, so you must uninstall
   first (which clears saved connections) and then pair again or paste a configuration string.
 - The certificate also differs from upstream's original APK (`CN=Hakunm`), so switching from an upstream
   build requires an uninstall too.
@@ -311,7 +311,7 @@ lost**, so the current build is for self-use / internal distribution only. Two d
 The `applicationId` still matches upstream (`io.github.hakunm.deepseekharness`).
 
 Release history: `v1.1.0` / `v1.2.0` / `v1.4.0` / `v1.9.0` are tagged; `v1.5.0`–`v1.8.0` are not tagged
-separately — their features shipped together in `v1.9.0`. The `v2.0.0`–`v2.2.20` line **has no tags yet**
+separately — their features shipped together in `v1.9.0`. The `v2.0.0`–`v2.2.19` line has no tags; `v2.2.20` and `v2.2.23` are tagged and released on both sites
 (as of 2026-10-11); artifacts live in `artifacts/` and on the Releases page.
 
 ## Screenshots
@@ -380,10 +380,21 @@ restart. Revoking the device in DSH WebUI invalidates it immediately.
 - Send images and files (the `+` menu in the composer); whether a send during a run queues or steers is
   chosen in the `⋯` menu or Settings.
 - Follow DSH TODO progress and the currently active item.
-- Type `/` to browse and run host-provided slash commands.
+- Type `/` to browse and run host-provided slash commands; a `/skill-name` that is **not** a command is
+  sent to the model verbatim, as the official UI does, and the host injects the skill body. Earlier
+  versions treated any leading `/` as a command, so skills could not be invoked at all.
+- **Answer the agent's questions**: when it asks mid-run the card appears right there — question,
+  supporting detail, and each option's own description rendered separately; `multiSelect` decides
+  single vs multiple choice, and a question with no options gets a free-text field. The card turns into
+  "answered" once submitted. The desktop UI can answer the same question at the same time; **whichever
+  answers first wins**. Requires `dsh-remote-bridge >= 2.2.2` on the computer.
 - Switch between Read only, Workspace write, and Full access in the `⋯` menu. Full access asks for
   confirmation again.
 - Review redacted approval details and choose Allow once or Deny.
+- **Expand a tool call to see the details**: full input, output, success or failure, and duration. There
+  is no terminal on a phone, so this is the only way to diagnose a run after the fact.
+- **Preview images and PDFs** (both in the file browser and in session attachments): pinch to zoom, drag
+  to pan, and page through a PDF.
 - Select a model and reasoning effort in the `⋯` menu. Empty sessions can also select an Agent before
   the first message.
 - The input grows with its content (44–120dp, roughly one to six lines).
@@ -518,13 +529,13 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.20` (`versionCode` 10045)
+- Version: `v2.2.23` (`versionCode` 10048)
 - Package: `io.github.hakunm.deepseekharness`
-- Unit tests: 18 test classes / 199 cases at the last run (0 failures). The counts move with the code, so
+- Unit tests: 24 test classes / 242 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DeepSeek-Harness-companion-v2.2.20.apk`, 2,792,754 bytes,
-  SHA-256 `a139f025be72f23fdd07bcb1d1dec97985c3f8a6df135d312fa06f2b44ea8fd4` (kept in sync in
+- Current APK: `DeepSeek-Harness-companion-v2.2.23.apk`, 2,825,262 bytes,
+  SHA-256 `54105945fa5926dbbe37880553748f9867637ba09c8613c5a94874f84b8768cd` (kept in sync in
   `artifacts/SHA256SUMS.txt`)
 - Signing: `CN=DSH Debug` (debug key; the release certificate has been lost — see "Download and install" above)
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)

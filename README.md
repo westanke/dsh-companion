@@ -258,7 +258,7 @@ scripts/build.sh :app:testDebugUnitTest   # 单元测试
 - Gitee（国内访问更快）：<https://gitee.com/westanke/dsh-companion/releases/latest>
 
 ```text
-DeepSeek-Harness-companion-v2.2.20.apk
+DeepSeek-Harness-companion-v2.2.23.apk
 ```
 
 安装要求：
@@ -274,14 +274,14 @@ DeepSeek-Harness-companion-v2.2.20.apk
 （`CN=DSH Pocket Client`，v1.9.0 及更早的包用它签）**已经丢失**，因此现在的包不能用于正式分发，
 只能自用 / 内部分发。两个直接后果：
 
-- **覆盖升级会失败**：`v1.9.0` 与 `v2.2.20` 签名不同，必须先卸载再装（卸载会清除已保存的连接，
+- **覆盖升级会失败**：`v1.9.0` 与 `v2.2.23` 签名不同，必须先卸载再装（卸载会清除已保存的连接，
   装好后重新配对，或直接粘贴一份配置文本）。
 - 与上游原版（`CN=Hakunm`）的证书同样不同，从上游版本切过来也要先卸载。
 
 `applicationId` 与上游保持一致（`io.github.hakunm.deepseekharness`）。
 
 发布历史：`v1.1.0` / `v1.2.0` / `v1.4.0` / `v1.9.0` 各有独立 tag；`v1.5.0`–`v1.8.0` 没有单独打 tag，
-这四个版本的功能随 `v1.9.0` 一并发布。`v2.0.0`–`v2.2.20` 这条线**尚未打 tag**（截至 2026-10-11），
+这四个版本的功能随 `v1.9.0` 一并发布。`v2.0.0`–`v2.2.19` 之间没有 tag；`v2.2.20` 与 `v2.2.23` 已打 tag 并双站发布，
 产物见仓库 `artifacts/` 与 Releases 页。
 
 ## 界面预览
@@ -352,9 +352,15 @@ DeepSeek-Harness-companion-v2.2.20.apk
 - 发送普通消息，在运行中追加引导（插话），或取消当前任务。
 - 发送图片和文件（输入区 `+` 菜单）；运行中的发送行为（排队 / 插话）在 `⋯` 菜单或设置页选。
 - 查看 DSH TODO 模块、完成进度和正在处理的事项。
-- 输入 `/` 浏览并执行服务器提供的 host 斜杠命令。
+- 输入 `/` 浏览并执行服务器提供的 host 斜杠命令；**不是命令的 `/技能名` 按官方语义原样发给模型**，
+  由 Host 注入技能正文（早先版本把任何 `/` 开头都当命令，技能因此一个都调不动）。
+- **回答 agent 的提问**：它中途问你时卡片直接出现 —— 题干、补充说明、每个选项的说明分开显示，
+  `multiSelect` 决定单选还是多选，没有选项时给自由文本输入。答完卡片转「已回答」。
+  电脑端官方界面同时也能答，**先答者胜**。需要电脑端插件 `dsh-remote-bridge ≥ 2.2.2`。
 - 在 `⋯` 菜单切换「只读」「工作区写入」「完整访问」。完整访问会再次提示风险。
 - 查看待审批工具调用的脱敏信息，选择「允许一次」或「拒绝」。
+- **展开工具调用看细节**：完整输入、输出、成败与耗时。手机上开不了终端，这是事后排查的唯一手段。
+- **预览图片与 PDF**（文件页与会话附件都支持）：双指缩放、拖动，PDF 可逐页翻。
 - 在 `⋯` 菜单切换模型和思考强度。空白会话还可以在首条消息前选择 Agent。
 - 输入框高度随内容自适应（44–120dp，一行到六行左右）。
 - 双击复制整条消息，长按选中片段，点开链接。
@@ -491,12 +497,12 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.20`（`versionCode` 10045）
+- 当前版本：`v2.2.23`（`versionCode` 10048）
 - 包名：`io.github.hakunm.deepseekharness`
-- 单元测试：18 个测试类 / 199 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
+- 单元测试：24 个测试类 / 242 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DeepSeek-Harness-companion-v2.2.20.apk`，2,792,754 字节，
-  SHA-256 `a139f025be72f23fdd07bcb1d1dec97985c3f8a6df135d312fa06f2b44ea8fd4`（`artifacts/SHA256SUMS.txt` 同步）
+- 当前 APK：`DeepSeek-Harness-companion-v2.2.23.apk`，2,825,262 字节，
+  SHA-256 `54105945fa5926dbbe37880553748f9867637ba09c8613c5a94874f84b8768cd`（`artifacts/SHA256SUMS.txt` 同步）
 - 签名：`CN=DSH Debug`（调试密钥；发布证书已丢失，见上文「下载与安装」）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)
 - 许可证：[GNU Affero General Public License v3.0](./LICENSE)

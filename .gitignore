@@ -27,3 +27,4 @@ signing.properties
 # 这一行只忽略根目录那份本机专用脚本（用前导斜杠锚定在仓库根，不波及 scripts/）。
 /init-mirrors.gradle
 .cm
+.c4

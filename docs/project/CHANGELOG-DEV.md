@@ -5,6 +5,90 @@
 
 ---
 
+## 2026-10-11 · 问答卡片、修 /技能名、图片 PDF 预览、工具调用详情（v2.2.21 → v2.2.23）
+
+> 版本归属：改动分布在 **v2.2.21 / 2.2.22 / 2.2.23**（逐版注释在 `app/build.gradle.kts`，以它为准）。
+> **出包版本 2.2.23 / versionCode 10048。**
+
+### 为什么
+
+这一轮全部由**用户真机反馈**驱动，五件事：
+
+1. **`ask_user_question` 的卡片在手机上看不到。** 这是个从来没实现过的功能，不是渲染 bug。
+2. **`/技能名` 调不动。** 用户打 `/技能名` 得到 `COMMAND_NOT_FOUND`——官方能用的技能一个都调不动。
+3. **图片 / PDF 打不开。** 文件页遇到它们只显示一行「二进制文件」。
+4. **工具调用看不到细节。** 只能看到一张静态卡片，查不到输入/输出/耗时。
+5. 卡片刷新的实时性。
+
+### 干了什么
+
+**① 问答卡片（原生 + WebView 两套）**
+
+- 原生 `QuestionCard` 落在输入区上方（不顶掉输入框）；WebView 页面复用审批卡的排版。
+  两套都做，是因为只做一边就会重演「同一个会话两处显示不一致」。
+- 认领插件推的三个专属帧：`chat.userQuestions/requested` → 刷新；`answered` / `dismissed`
+  → **就地摘卡**（等下一次 GET 只会让卡片多挂一个往返）。
+- `PendingQuestionSet` 新增 `viaBridge`（默认 false，兼容老服务端）：区分「正阻塞着 agent」
+  与「已超时、可迟到补交」。
+- 刷新走**事件驱动**，不引定时器：`isToolResultFrame()` 按 `data.eventType` 精确挑出工具结果帧
+  （一轮里这类帧很多，来一帧拉一次等于自己造轮询）；外加「轮次结束时补拉一次」覆盖 agent
+  很快收尾的情况。
+
+**② 修 `/技能名`**
+
+此前只要输入以 `/` 开头就整条送去 `executeCommand`，而技能名不在宿主命令表里。
+官方语义是「**先看是不是已注册命令，不是就当普通消息原样发给模型**」（`dsh-client-ui-skill/README.md:28`），
+由 Host 在 pre-step 注入技能正文。现按此实现 `isHostCommandLine()`，匹配规则**照抄插件**的
+`/^\/([a-z][a-z0-9_-]*)(?=$|[\t\n\r ])/u`。两边规则必须一致：放宽了客户端放行而服务端说不认识，
+收紧了命令永远发不出去。**刻意不做大小写不敏感**（官方与插件都是精确匹配）。
+
+**③ 图片与 PDF 预览**
+
+- `PreviewKind` 新增 `IMAGE` / `PDF`，**零新依赖**：图片走系统 `BitmapFactory`（两趟解码 +
+  2 的幂采样），PDF 走系统 `android.graphics.pdf.PdfRenderer`。
+- 上限：图片 24 MiB / 解码后 12 MP；PDF 32 MiB / 100 页。超限给出路而不是白屏。
+- `PdfHolder` 是唯一可变持有者，**登记发生在 `open()` 成功那一行**（不等协程回 UI 线程），
+  堵住「打开成功 → 登记」之间被取消而漏 fd 的窗口——真机上只表现为「用久了打不开文件」。
+  逐页用 `openPage(i).use{}`：Page 不关会让 `renderer.close()` 抛异常。
+- 文件页与会话附件**共用**同一个组件与同一套判据。
+
+**④ 工具调用详情**
+
+- `ChatDisplayItem` 新增 `tools: List<ToolCallDetail>`；`displayItems()` 改为**先建 callId→result
+  索引再渲染**——旧写法 `events.flatMap(::displayItems)` 单条事件看不出配对，于是 `tool/result`
+  整类被 `else -> emptyList()` 丢掉。
+- 耗时用两个事件的顶层 `time` 相减；算不出来就**不渲染那一行**，不瞎编。
+- 合并成一行之后仍能逐条展开。
+- **一个必须记住的坑**：`isError` **不等于**命令失败——实测那条 `curl` 超时、输出全是 stderr 的
+  样本 `isError=false`。所以输出块**无条件显示**，「失败」徽标只如实转述内核标记。
+
+### 测了什么
+
+- `:app:testDebugUnitTest`：**24 个测试类 / 242 用例 / 0 失败**（本轮新增 5 个测试类：
+  `HostCommandLineTest` / `ToolResultFrameTest` / `RemoveQuestionTest` / `PendingQuestionsTest` /
+  `QuestionAnswerTest`，另扩充 `PreviewKindTest`）。
+- **问答卡片经真机端到端验证通过**：
+  ```
+  提问到达: hasAgent=true sessionId=… questions=1 hasWait=false
+  已推帧 userQuestions/requested: callId=bridge-3af742ae-…
+  chat.question.answer | callId=bridge-3af742ae-… answers=1 questionIds=["target"]
+  ```
+  截图确认渲染正确（header / question / detail / options[].label 与 description / multiSelect 全到位）。
+- **未真机验收**：图片 PDF 预览的翻页与缩放手感、工具详情的展开观感。
+
+### 踩到的坑（值得单独读）
+
+插件仓库 `docs/project/RETRO-question-card.md` 记了一次**代价很大**的排查。要点：卡片代码从头到尾
+都是对的，错的是排查方法——我为一个**从未发生过的现象**（我的会话 agent 根本没有
+`ask_user_question` 工具）编了四个自洽的根因。
+
+**判据：如果某个环节的日志一条都没有，那不是「执行失败」，是「压根没执行」。**
+这两者的排查方向完全相反。
+
+另有一个真实技术坑同在那份文档里：`wait.callId` 判据过严导致 plan 模式被整条挡在门外。
+
+---
+
 ## 2026-10-11 · 连接页门闩、偏好入状态、模型页拆分、输入区自适应（v2.2.20）
 
 > 版本归属：下面这些改动分布在 **v2.2.15 → v2.2.20** 之间（逐版注释在 `app/build.gradle.kts`，以它为准）；本文件此前只记到 v1.9.0，这一条把本轮一次性补齐。**出包版本 2.2.20 / versionCode 10045。**
