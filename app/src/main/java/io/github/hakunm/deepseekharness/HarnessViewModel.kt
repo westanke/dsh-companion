@@ -10,12 +10,14 @@ import io.github.hakunm.deepseekharness.data.ChatSession
 import io.github.hakunm.deepseekharness.data.ChatWorkspace
 import io.github.hakunm.deepseekharness.data.CommandDescriptor
 import io.github.hakunm.deepseekharness.data.CustomProviderCreate
+import io.github.hakunm.deepseekharness.data.localizedErrorRes
 import io.github.hakunm.deepseekharness.data.DeviceView
 import io.github.hakunm.deepseekharness.data.DirectoryPage
 import io.github.hakunm.deepseekharness.data.DshApiException
 import io.github.hakunm.deepseekharness.data.DshClient
 import io.github.hakunm.deepseekharness.data.DshConnectionException
 import io.github.hakunm.deepseekharness.data.FileEntry
+import io.github.hakunm.deepseekharness.data.handoffPathOf
 import io.github.hakunm.deepseekharness.data.LiveChatState
 import io.github.hakunm.deepseekharness.data.RootView
 import io.github.hakunm.deepseekharness.data.AgentPreset
@@ -49,6 +51,7 @@ import io.github.hakunm.deepseekharness.data.SharedPreferencesKeyValueStore
 import io.github.hakunm.deepseekharness.data.TrashEntry
 import io.github.hakunm.deepseekharness.data.WorkspaceEvent
 import io.github.hakunm.deepseekharness.data.chatDelta
+import io.github.hakunm.deepseekharness.data.chatTurnFailure
 import io.github.hakunm.deepseekharness.data.PreviewKind
 import io.github.hakunm.deepseekharness.data.binaryPreviewByteLimit
 import io.github.hakunm.deepseekharness.data.previewKind
@@ -1140,6 +1143,13 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
     /**
      * 按需取回一张会话图片。
      *
+     * **两种来源、两条读法**，前缀就是判据：
+     * - 原生附件（模型支持图片输入）：字节在服务端附件存储里，走 `readAttachment`，
+     *   必须带当前会话 id（内核要读会话事件、拿真实 ref 做完整性校验）；
+     * - 交接图片（纯文本模型发图时插件落进工作区 `.dsh-images/` 的文件）：
+     *   字节根本不在附件存储里，走官方那条「绝对路径 → 授权根」的解析与读文件，
+     *   与会话无关，所以不需要 sessionId。
+     *
      * 幂等且可反复调用（界面在组合时直接调它）：已缓存的直接返回，正在取的会被
      * [pendingAttachments] 挡住，取失败的连同**原因**记进 [HarnessState.attachmentFailures]
      * 不再重试。前两条保证「一次会话里每张图最多下载一次」；记原因是因为「不再重试」
@@ -1149,13 +1159,27 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         if (attachmentId.isBlank()) return
         val api = client ?: return
         val current = mutableState.value
+        // 交接图的 id 本身就是一条服务器绝对路径；判据与 ChatPresentation 共用一份实现。
+        val handoffPath = handoffPathOf(attachmentId)
+        val sessionId = current.selectedSessionId
+        // 原生附件不在任何会话里就无从说明「这是哪个会话的图」：内核会拒绝，
+        // 早一点返回能避免发一个必然 400 的请求。交接图是工作区里的普通文件，与会话无关。
+        if (handoffPath == null && sessionId.isNullOrBlank()) return
         if (current.attachmentImages.containsKey(attachmentId)) return
         // 授权类失败**不永久记住**：用户重新配对之后图就该能显示，
         // 而记住失败会让它永远停在「不可用」，除非重启 App。附件真的没了（404）才记死。
         if (attachmentId in current.attachmentFailures && attachmentId !in retryableAttachmentFailures) return
         if (!pendingAttachments.add(attachmentId)) return
         viewModelScope.launch {
-            val outcome = runCatching { withContext(Dispatchers.IO) { api.readAttachment(attachmentId) } }
+            val outcome = runCatching {
+                withContext(Dispatchers.IO) {
+                    if (handoffPath != null) {
+                        readHandoffImage(api, handoffPath)
+                    } else {
+                        api.readAttachment(sessionId.orEmpty(), attachmentId)
+                    }
+                }
+            }
             pendingAttachments.remove(attachmentId)
             outcome
                 .onSuccess { bytes ->
@@ -1174,6 +1198,23 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
                     update { copy(attachmentFailures = attachmentFailures + (attachmentId to reason)) }
                 }
         }
+    }
+
+    /**
+     * 读一张**交接图片**（纯文本模型发图时落进会话工作区 `.dsh-images/` 的那份）。
+     *
+     * 用官方那条现成的路：`resolvePath` 把服务器绝对路径解析成「授权根 + 相对路径」，
+     * 再 `readFile` 取字节 —— 与文件页预览（[loadSessionFile]）同一个端点、同一份
+     * `files.read` 授权，没有为图片另开口子。
+     *
+     * 解析不出来（路径不在任何授权根内）就按失败上报，界面会给出原因；
+     * 错误文案里带上 `PATH_OUTSIDE_ROOTS` 这个码，好让 [describeAttachmentFailure]
+     * 能把它和其它失败区分开。
+     */
+    private fun readHandoffImage(api: DshClient, path: String): ByteArray {
+        val resolved = api.resolvePath(path)
+            ?: throw DshApiException(404, "PATH_OUTSIDE_ROOTS", "PATH_OUTSIDE_ROOTS: $path")
+        return api.readFile(resolved.rootId, resolved.path).bytes
     }
 
     /**
@@ -1199,6 +1240,9 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
     private fun describeAttachmentFailure(failure: Throwable): String {
         val raw = messageOf(failure)
         return when {
+            raw.contains("PATH_OUTSIDE_ROOTS") || raw.contains("PATH_NOT_FOUND") ||
+                raw.contains("PATH_NOT_ABSOLUTE") -> appString(R.string.attachment_fail_outside_roots)
+
             raw.contains("401") || raw.contains("TOKEN") -> appString(R.string.attachment_fail_auth)
             raw.contains("403") || raw.contains("SCOPE") || raw.contains("FORBIDDEN") ->
                 appString(R.string.attachment_fail_scope)
@@ -1652,6 +1696,59 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
                             scheduleChatRefresh()
                             if (sessionId == mutableState.value.selectedSessionId) refreshSessionModels()
                         }
+                        // 终局失败：限流 429、配额用尽、密钥无效、登出停止。
+                        //
+                        // 为什么必须在这里就地处理，而不是等 `chat.turn.end`：
+                        // 插件为失败发的**就是**这一帧，`chat.turn.end` 那一帧在失败时
+                        // 不再发（一个失败只有一帧）。而客户端原来只认 turn.end，
+                        // 于是「模型早就失败了」与「还在跑」在界面上完全一样 ——
+                        // 表现就是转圈等到天荒地老。
+                        //
+                        // 做三件事：
+                        // 1) 立即把会话标记为不在运行（本地置位，不等下一次 GET）；
+                        // 2) 走全局错误通道让用户看见那句话；
+                        // 3) 拉一次历史，把失败行写进对话流（历史里有 turn/end 帧）。
+                        //
+                        // 第 1 步为什么不能省：服务端把会话标成 not-running 与这帧到达
+                        // 之间有几百毫秒，而这段时间里「停止」按钮还是亮的、占位符还写
+                        // 「运行中…」—— 用户看着就以为还在跑。本地先置位，等 GET 回来再用
+                        // 权威数据盖一次，两头都对。
+                        "chat.turn.failed" -> {
+                            val failure = event.chatTurnFailure()
+                            if (failure != null) {
+                                if (sessionId != null) {
+                                    // 注意 update 的 receiver 就是 HarnessState，所以这里直接用
+                                    // 属性而不是 `it.` / `state.` —— 写成显式参数名会遮蔽 receiver，
+                                    // 编译直接报「Unresolved reference」。
+                                    update {
+                                        copy(
+                                            sessions = markSessionStopped(sessions, sessionId),
+                                            liveChat = if (selectedSessionId == sessionId) null else liveChat,
+                                            busySendMode = if (selectedSessionId == sessionId) BusySendMode.QUEUE else busySendMode,
+                                        )
+                                    }
+                                }
+                                if (sessionId == mutableState.value.selectedSessionId) {
+                                    // 流式缓冲清掉：失败之后留着半截文字，用户会以为
+                                    // 「它还在说，只是慢」。历史拉回来会带上完整失败行。
+                                    // 出错文案跟随界面语言：先按错误码本地化，命不中才用内核原文
+                                    //（多半是英文，但至少是信息，也方便贴给开发者）。
+                                    val localized = localizedErrorRes(failure.code)
+                                    notify(
+                                        when {
+                                            localized == null -> failure.message.ifBlank { appString(failure.titleRes) }
+                                            localized == R.string.err_request_generic -> appString(localized, failure.code.orEmpty())
+                                            else -> appString(localized)
+                                        },
+                                    )
+                                    // 挂起的提问卡片也要撤：这一轮已经结束了，
+                                    // 卡片继续挂着会让人以为问题还有效。与 WebView 页同口径。
+                                    refreshPendingQuestions()
+                                }
+                                chatSessionRefreshPending = true
+                                scheduleChatRefresh()
+                            }
+                        }
                         "chat.approval.requested", "chat.approval.resolved" -> {
                             chatSessionRefreshPending = true
                             scheduleChatRefresh()
@@ -1836,8 +1933,19 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         if (parent.isBlank()) name.trim('/') else "$parent/${name.trim('/')}"
 
     private fun messageOf(error: Throwable): String = when (error) {
-        is DshApiException -> "${error.code}: ${error.message}"
+        is DshApiException -> localizedError(error.code, error.message)
         else -> error.message ?: error::class.java.simpleName
+    }
+
+    /**
+     * 把服务端那句英文错误换成用户语言的句子（表在 `data/ErrorMessages.kt`）。
+     *
+     * 认不出的错误码**保留原文**：编一句像模像样的话只会把人带偏，而原文还能搜、能贴给开发者。
+     * 以前这里一律拼成 `CODE: English message.`，于是中文界面下也全是英文。
+     */
+    private fun localizedError(code: String?, raw: String): String {
+        val res = localizedErrorRes(code) ?: return raw
+        return if (res == R.string.err_request_generic) appString(res, code.orEmpty()) else appString(res)
     }
 
     private companion object {
@@ -1911,3 +2019,20 @@ internal fun isToolResultFrame(eventType: String?, eventData: Any?): Boolean {
     val obj = eventData as? kotlinx.serialization.json.JsonObject ?: return false
     return obj["eventType"]?.let { it.toString().trim('"') } == "tool/result"
 }
+
+/**
+ * 收到终局失败帧后，把那个会话在本地立刻标成「不在运行」。
+ *
+ * 为什么不能等下一次 `GET /sessions`：服务端把会话标成 not-running 与这帧到达
+ * 之间有几百毫秒，而这段时间里「停止」按钮还是亮的、输入框占位符还写着
+ * 「运行中…」—— 用户看着就以为还在跑，于是继续傻等。本地先置位，
+ * 等权威数据回来再用它盖一次，两头都对。
+ *
+ * 纯函数，便于单测：不改入参；sessionId 对不上时原样返回。
+ */
+internal fun markSessionStopped(
+    sessions: List<ChatSession>,
+    sessionId: String,
+): List<ChatSession> =
+    if (sessions.none { it.id == sessionId && it.running }) sessions
+    else sessions.map { if (it.id == sessionId) it.copy(running = false) else it }

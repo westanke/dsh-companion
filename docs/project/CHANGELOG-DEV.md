@@ -3,7 +3,354 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## 2026-10-11 · 出错文案跟随界面语言（不再把英文原文端给用户）
+
+> 未出包。`./gradlew :app:compileDebugKotlin` 通过。
+
+### 用户看到的是什么
+
+中文界面下发一次图失败，屏幕上写的是：
+
+```
+PATH_OUTSIDE_ROOT: The path is outside every authorized root.
+```
+
+—— 错误码 + 英文。`HarnessViewModel.messageOf` 以前就是 `"${error.code}: ${error.message}"`，
+而模型失败那条路 `notify(failure.message)` 更是内核原文直出；
+连失败行的标题都写死中文（`ChatTurnFailure.title` = 「本轮运行失败」），英文界面下照样弹中文。
+
+### 现在的规矩
+
+**语言是本地的事，服务端不需要知道**。按错误码查本地化文案：
+
+- 新增 `data/ErrorMessages.kt`：`localizedErrorRes(code)`。插件那 74 个错误码**按语义归并成
+  33 条**（`PATH_NOT_DIRECTORY` / `PATH_NOT_FILE` / `WORKSPACE_PATH_NOT_DIRECTORY` 都是
+  「路径类型不对」），内核码取 `substringAfterLast('/')` 后再比 —— 内核有时给
+  `DSH_SESSION/MODEL_UNAVAILABLE` 这种带前缀的形态。
+- `values/strings.xml` 与 `values-en/strings.xml` 各加 38 条：33 条错误 + 2 条失败标题
+  + 3 条 WebView 提示。
+- 接上的口子四处：`messageOf`（HTTP 错误）、`chat.turn.failed` 的全局提示、
+  失败行渲染（`TurnFailureRow`：标题走 `titleRes`，正文按码本地化）、
+  WebView 聊天页与桥的 `NO_CONNECTION` / `NO_TOKEN`。
+- **data 层不再写死任何语言**：`ChatTurnFailure.title` 改成 `@get:StringRes titleRes`，
+  登出消息留空由界面按 `ACCOUNT_SIGNED_OUT` 本地化。
+
+两条刻意的取舍：
+
+1. **认不出的错误码保留原文**（英文）。编一句像模像样的话比露原文更糟 —— 用户至少还能搜、
+   能贴给开发者；只有 `err_request_generic` 会附上错误码。
+2. `ConnectionCoordinator` 的 `All N endpoint(s) unreachable: …` 这类**技术诊断文本不翻译**：
+   它是给排查用的细节，翻了反而搜不到。
+
+### 踩的坑
+
+`ChatWebScreen` 里那两句提示在 `LaunchedEffect` 内（**不是** Composable 上下文），
+第一版写成 `stringResource(...)`，编译器直接报
+`@Composable invocations can only happen from the context of a @Composable function`。
+改用作用域里已有的 `context.getString(...)`。
+
+### 验证
+
+`./gradlew :app:compileDebugKotlin`（`JAVA_HOME=…/android-toolchain/jdk17`）`BUILD SUCCESSFUL`。
+**仍需出包 + 安装才生效**；服务端无需改动配合。
+
 ---
+
+## 2026-10-11 · v2.2.25 纯文本模型发的图，手机端也「看得见」
+
+> **出包**：v2.2.25 / versionCode 10050，正式证书 `CN=DSH Pocket Client`
+> （证书 SHA-256 `8b2ba797…`），APK SHA-256 `37a6d9a1a4817587d515e7d85f63781d8318890d0a69e455dfe44dfd89543b8b`。
+> **未推送、未打 tag、未发版。真机验证待做。**
+> 本仓库没动服务端一个字节，改动全在显示层与取字节那一步。
+
+### 诉求（用户原话）
+
+「看，人类如何看懂，把图片显示出来就好了，给一堆路径」，随后的指路是
+「你已接入了官方的图片显示方法，只需要把那个图片的路径读出来」。
+
+上一轮（插件侧的图片交接）解决的是「**机器**能不能读到图」：模型不支持图片输入时，
+插件把图落进会话工作区 `.dsh-images/<sha256>.<ext>`，消息里追加两行说明 ——
+一行人话、一行给机器读的 `[Image: source: /绝对路径]`。
+机器那条路通了，但**人**在手机上只看到一串路径。这一版补的就是人这一半。
+
+### 改了什么（全在客户端）
+
+- `data/ChatPresentation.kt`
+  - `ChatAttachment` 新增 `handoffPath`：交接图**不在附件存储里**（那只存会话里的原生
+    image 部件），它是工作区里的普通文件 —— 取字节的方法因此完全不同，得在类型上分开。
+  - `userItems()`：**只对用户消息**做交接解析。上下文注入的正文（记忆库、README 示例、
+    上一轮工具输出）经常就引用着 `.dsh-images/` 路径甚至 `[Image: source: …]` 字面量，
+    不设这道闸就会把那些正文切碎、还凭空多出几张读不到的假附件 ——
+    这条是拿真机会话跑出来的，不是猜的（见下面「验证」）。
+  - 摘说明时**按行摘**而不是整条 part 摘：实测插件把说明放在独立 part，但万一哪天
+    与用户正文同处一条，整条摘会把用户自己打的话一起吞掉。摘完正文可能为空，
+    判据仍是「有文字**或**有附件」，消息不会消失。
+  - 交接附件的 id 用 `handoff:<绝对路径>`（`HANDOFF_ATTACHMENT_PREFIX`）：
+    它同时是图片缓存的键、去重的键和「从哪读字节」的唯一依据，不必再引一张 id 表。
+  - `contentText` 拆出 `contentTextParts`：交接说明要能整条识别，
+    合并成字符串之后再按行切，就是拿分隔符当数据结构。
+- `HarnessViewModel.kt`
+  - `loadAttachmentImage` 变成**两条来源**：原生附件照旧 `readAttachment(sessionId, id)`；
+    交接图走 `readHandoffImage` = 官方那条 `resolvePath` → `readFile(rootId, path)`，
+    与文件页预览同一个端点、同一份 `files.read` 授权，**没有为图片另开口子**。
+  - 交接图与会话无关，因此不再要求 `selectedSessionId`（原生附件仍然要求）。
+  - 路径不在任何授权根内时按失败上报，新增文案 `attachment_fail_outside_roots`（中英各一条）。
+- 单测 6 条（`ChatPresentationTest`）：说明被摘成附件、只发图不留空正文、
+  同一 part 混排时只删那两行、同一条消息里的重复路径去重、**注入正文里的路径不被动**、
+  以及 id 判据 `handoffPathOf`（交接 id 解出路径 / 附件哈希一律 null）。
+- **未做**：WebView 页（`chat.html`）的历史消息本来就不渲染任何历史图片附件
+  （原生附件也不渲染），这是既有缺口，不在本次范围内。
+
+### 验证
+
+- 单测：**25 个测试类 / 256 用例 / 0 失败**（本版新增 6 条）。
+- 编译：`scripts/build.sh :app:testDebugUnitTest` 2m54s · `assembleRelease` 1m19s，
+  均 BUILD SUCCESSFUL；签名校验 `CN=DSH Pocket Client` 与既有正式证书一致。
+- 拿真实会话离线复跑解析：`session-b595c4ad` / `session-fae8a61d` 里 2 条真机图片消息
+  → 正文只剩用户原话、各解析出 1 个工作区路径；同为这些会话里的 3 条 `runtime-context`
+  注入消息**保持原样**（不解析、不摘行）。
+- **真机验证待做**：装 2.2.25 后，在纯文本模型会话里发一张图 —— 手机上应当直接出现缩略图，
+  而不是那行 `[Image: source: …]`。
+
+### 顺带修好一处会让构建「静默挂起」的路径问题
+
+`scripts/build.sh` 原先把 `GRADLE_USER_HOME` 写死成工具链内的 `gradle-home`，
+但那份缓存里 `wrapper/dists/gradle-9.5.0-bin/<hash>/` 只剩一个**空目录**（没有发行版），
+于是 wrapper 转去 `services.gradle.org` 下载 —— 国内网络下它**不报错、只是静默挂起**
+（实测 16 分钟零输出、CPU 0.3%）。改为按序挑「真的有发行版」的那份
+（工具链 → `$HOME/.gradle`），本次两条构建随即正常，用的是家目录那份带完整依赖缓存的。
+
+### 为什么没走插件新加的 `/api/v1/image-handoff`
+
+`dsh-remote-bridge` 源码里确实有一条专门的交接图读回端点，但它**没进构建产物、
+没同步实装**（`readHandoffImage` 在 `lib/index.js` 里 0 命中）。既然客户端本来就有
+「绝对路径 → 授权根 → 读文件」这条官方通路，就先用它：少一个端点、少一份权限面。
+那条读回链路**留作备胎**（未构建、不影响运行），等这条路真机验证通过后再决定删还是留。
+
+## 2026-10-11 · v2.2.24 修「历史图片永远显示不出来」+ 模型失败不再傻等
+
+> **出包**：v2.2.24 / versionCode 10049，**正式证书** `CN=DSH Pocket Client`
+> （SHA-256 `8b2ba797…`），SHA-256 `9f244eb3…`（图片修复后的第二版）。
+> **未推送、未打 tag、未发版。**
+
+### A. 修「历史图片永远显示不出来」
+
+**先说教训：这一条我误判了两次，都是没先看真进程的日志、光从源码推。**
+
+1. 第一次以为附件存储没数据 → 实测 35/35 个 id 全部命中磁盘，错。
+2. 第二次以为是「客户端没把四项元数据带上来，被内核完整性校验 `ATTACHMENT_CORRUPT`」→
+   从源码看成立，还真改了一版。
+3. **真因**（重启后读 `.attachment-diag.log`）：真进程里 **`ctx.attachments` 是 `MISSING`** ——
+   这条 profile 没把附件存储挂成可注入服务。vitest 里看到的 `OK` 全是测试桩噪音。
+
+**正路：让内核自己取，插件不碰 `ctx.attachments`。**
+
+内核主机端有 `SessionController.attachment({sessionId, attachmentId})`
+（客户端契约里叫 `readAttachment`）。它内部一次做完三件事：校验该会话确实引用了这张图、
+读出字节、用**会话事件里那条真实 ref** 做完整性校验，返回 base64。
+绕开它自己调 `ctx.attachments`，既拿不到注入属性、又要自己复刻这三件事 ——
+完整性校验正是先前 `ATTACHMENT_CORRUPT` 的来源。
+
+核实过的事实（不靠猜）：
+
+| 核实项 | 方法 | 结果 |
+|---|---|---|
+| 存储里有没有字节 | 从真实会话解出 35 个 attachmentId 逐个查磁盘 | **35/35 命中**，抽一个是 `PNG 768x512` |
+| 真进程能不能拿到服务 | 重启后读插件写的 `.attachment-diag.log` | **`ctx.attachments MISSING`** |
+| 内核正路 | 读 `dsh-api-session-controller` 源码 | `attachment({sessionId, attachmentId})` → base64 |
+
+**改了什么**：
+- `DshClient.readAttachment(sessionId, attachmentId)`：把 sessionId 拼进 query
+  （内核要靠它读会话事件、定位真实 ref）；`attachmentId` 里的冒号仍由 `addPathSegment` 编码。
+- `HarnessViewModel.loadAttachmentImage`：用当前 `selectedSessionId` 调用；
+  不在任何会话时直接返回，避免发必然 400 的请求。幂等/去重/失败可重试那套保留不动。
+- **撤掉了上一轮的弯路**：删掉 `HarnessState.referenceOf()` 与四项元数据透传
+  （mediaType/bytes/width/height）—— 真实 ref 内核手里本来就有，客户端不用带。
+  围绕它写的 `AttachmentReferenceTest.kt` 一并删除。
+- 其余（`contentAttachments` 解析四项、消息流里的 `ChatAttachment`）保留 ——
+  那些是**展示**用的（尺寸、类型），跟取字节无关。
+
+**插件侧配套**（详见 dsh-remote-bridge 的 CHANGELOG-DEV）：插件改调
+`sessionController.attachment()` 并解码 base64；附件端点改为收 query `sessionId`
+（缺失即 400），不再收四项元数据。
+
+**✅ 真机验证通过**（2026-10-11 18:51 / 18:57）：装好本版 + 重启 dsh 后，
+**历史图片与即时发送的图片都能正常显示**。用户原话「看到历史图片了」，
+并附了一张 App 截图确认刚发的图也完整渲染。
+
+插件侧诊断日志的铁证（两条路都成功、0 失败）：
+
+```
+sessionController.attachment ✓ 139215 bytes · image/jpeg   ← 历史图
+sessionController.attachment ✓ 211964 bytes · image/webp   ← 历史图
+sessionController.attachment ✓ 267688 bytes · image/jpeg   ← 即时发送的图
+```
+
+### B. 接住 `chat.turn.failed`：模型失败不再让客户端傻等
+
+模型限流（429）、配额用尽、密钥失效这些终局失败此前**完全到不了手机**：内核把失败写在
+`turn/end` 的 `reason`，插件整段丢弃，客户端只认 `chat.turn.end` ——
+于是「模型早就失败了」与「还在跑」在界面上一模一样。用户原话：
+「要不然客户端一直在傻傻的等」「类似的 模型出了问题 ，都要告诉客户端」。
+
+**改了什么**：
+- 数据层：新增 `ChatItemKind.FAILURE` + `ChatTurnFailure(message, code, stopped)`；
+  实时帧 `chatTurnFailure()` 与历史帧 `turnEndItem()` **两条路都渲染** ——
+  失败后用户往往先退出再进会话，实时帧只到一次，历史是唯一能留住它的地方。
+- 事件层：`chat.turn.failed` 分支做三件事 ——
+  ① `markSessionStopped()` **本地立即**把会话置为不在运行（服务端标记与帧到达之间
+  有几百毫秒空档，期间停止按钮还亮着）；② `notify()` 弹出服务端原话；
+  ③ 清流式缓冲、拉历史、撤挂起的提问卡。
+- 渲染层：原生 `TurnFailureRow`（红标题 + 错误码 + 原话，**不折叠**，长按复制整条
+  好把 request id 带去排查）；WebView 页同步做。
+
+**三个刻意取舍**：不翻译 message（本地化按官方 `failureMessage()` 划分）；
+`max-tokens` 不算失败（那是「回答被截断」，官方渲染成黄色警示 —— 误报比漏报更伤）；
+登出停止单独标 `stopped`、标题用「任务已停止」。429 的 `code` 是**空串**，
+客户端按空串保留而非当缺失。
+
+**已真机验证**：用户确认「修改成功」。
+
+### C. 修签名路径 + 重新生成正式密钥
+
+- `app/build.gradle.kts`：原先默认只找仓库**外**的 `../.secrets/...`，而实际配置在
+  仓库**内** → 每次出包都得记着传 `-PdshSigningProperties`，否则
+  `verifyDedicatedReleaseSigning` 直接拦。现改为三处候选按序取第一个存在的
+  （`-P` 参数 → 仓库内 → 仓库外）。
+- 原始 `dsh-release.jks`（`CN=DSH Pocket Client`）找回来了，但**密码彻底丢失**
+  （本机/仓库/CI/git 历史/记忆库全查过，60 多个候选密码也试过，无一命中）。
+  已归档到 `.secrets/deepseek-harness-android/archived-unknown-password/` 保留不删，
+  并重新生成新密钥（证书主题与旧的一致、别名 `dshrelease`、RSA 4096 / 30 年、密码 `dshlocal`）。
+  ⚠️ **新钥匙盖不上旧钥匙签的 v1.9.0 及更早的包**，这点已写进 signing.properties 注释。
+
+### 验证
+
+编译 0 警告（修掉了 3 个静态自查漏掉的编译错误，见任务 `fix()` 的坑）·
+**25 个测试类 / 250 用例 / 0 失败**（失败帧 7 个新用例在内；图片那条的核心断言在
+插件侧的桥层 + REST 层测试里，共 4 个用例）·
+签名确认为正式证书 · APK 内 chat.html 确认含失败帧逻辑。
+**✅ 图片已真机验证通过**（历史图 + 即时发送的图都正常显示）；
+出包版本 SHA-256 `9f244eb3…`（versionCode 10049 / 2.2.24）。
+
+## 2026-10-11 · 接住 `chat.turn.failed`：模型失败不再让客户端傻等
+
+> **未出包、未推送**：等用户真机测试通过。改动只做了静态自查（见下「验证」）。
+> 用户原话：「更改完不要急于发版，推送，先让我测试通过」。
+
+### 为什么
+
+用户真机报的 bug，附带原样报文：
+
+```
+本轮运行失败429: {"code":"","message":"您已达到免费用户的 API 速率限制。升级 Token Plan
+即可解锁更高限额，继续不间断使用 API。 (request id: 20261011054136674823028JzjiUYGm)","type":"AgnesAI_error"}
+```
+
+并追加了一句要求：**「类似的 模型出了问题 ，都要告诉客户端」**。
+
+### 根因：那句话从来没到过手机
+
+链路三处断点，缺一处就还是"傻等"：
+
+1. 内核把失败写在 `turn/end` 的 `data.reason`（`kind === 'error'` 时详情在 `reason.error`）；
+2. 插件 `normalizeDshEvent` 只转 `type`，把 `reason` 整段丢掉；
+3. 客户端只认 `chat.turn.end`，历史里 `turn/end` 落进 `else -> emptyList()`。
+
+### 干了什么
+
+**① 插件侧（配套改动，见 dsh-remote-bridge 的 CHANGELOG-DEV）**
+
+`normalizeDshEvent` 为失败多发一帧 `chat.turn.failed`，`data.failure = {message, code, stopped?}`；
+正常收尾仍只发 `chat.turn.end`（一个失败一帧，不会收到两个信号）。
+
+**② 客户端数据层（`data/ChatPresentation.kt`）**
+
+- `ChatItemKind` 新增 `FAILURE`；新增 `ChatTurnFailure(message, code, stopped)` ——
+  `code` 是 `String?` 而**不是可空 + 空串混用**，因为 429 那个 code 就是空串，
+  客户端要原样显示错误码那一格，当成缺失就少一列信息。
+- `chatTurnFailure()`：从实时帧解失败。判据是 **type 精确等于** `chat.turn.failed`，
+  老插件只发 `chat.turn.end` 时安静返回 null，客户端照旧走原收尾路径。
+- `turnEndItem()`：历史里的 `turn/end` 帧 → 失败行。**为什么历史里也要**：失败后用户往往
+  先退出再进会话，实时帧只到一次，历史是唯一能把"这轮失败了"长期留住的地方。
+- `mergeToolRuns` 只合并 TOOL，FAILURE 自然 `flush(); out += item`，顺序不受影响。
+
+**③ 客户端事件层（`HarnessViewModel.kt`）**
+
+新增 `chat.turn.failed` 分支，做三件事：
+
+1. **立即把会话本地标成不在运行**（`markSessionStopped()` 纯函数）。这一步不能省：
+   服务端把会话标成 not-running 与这帧到达之间有几百毫秒，这段空档里"停止"按钮还亮着、
+   占位符还写着「运行中…」，用户看着就以为还在跑。本地先置位，等 GET 回来用权威数据再盖一次。
+2. 走全局错误通道 `notify()` 让那句话以 snackbar 弹出；
+3. `liveChat = null` + 拉历史。流式缓冲必须清 —— 留着半截文字，用户会以为"它还在说，只是慢"。
+
+**④ 原生渲染（`ui/ChatScreen.kt`）**
+
+新增 `TurnFailureRow`：红标题 + 错误码 + 服务端原话，**不折叠**（用户要的就是那句为什么）。
+长按复制整条 —— 把 request id 带给电脑端排查是唯一有效的手段。
+分发里加 `ChatItemKind.FAILURE -> item.failure?.let { TurnFailureRow(it) }`；
+`REASONING` / `CONTEXT` 两个过滤器都不会挡到它。
+
+**⑤ WebView 版（`assets/chat.html`，两条路径都做）**
+
+- 历史：`ev.type === "turn/end"` → `turnFailureFrom(ev)` → `addTurnFailure(f)`；
+- 实时：`case "chat.turn.failed"` → `setRunning(false)` + `clearPend()` +
+  `addTurnFailure(d.failure)` + `refreshQuestions()` + `refreshHistory()`。
+- 新增 `.fail` 样式（红边、不折叠）与 `turnFailureFrom` / `addTurnFailure` 两个函数。
+
+**⑥ 新增两个测试文件**
+
+- `data/ChatPresentationTest.kt` +4 个用例：429 原样报文（含空 code）、登出停止、
+  **四种不该报失败的收尾**（`ok` / `completed` / `max-tokens` / 用户取消 / 老帧）、
+  实时帧解析、`error` 是字符串的兜底。
+- `MarkSessionStoppedTest.kt` +3 个用例：失败的会话停下来、不动其它会话、
+  没有可停的就原样返回（同一个实例，Compose 会跳过重组）。
+
+### 三个刻意的取舍
+
+1. **不翻译 message**：服务端那句话本身就是中文。本地化按官方 `failureMessage()` 的划分留给
+   客户端（`ACCOUNT_SIGNED_OUT` / `ACCOUNT_SIGN_IN_REQUIRED` / `QUOTA` / `AUTH` 这几个 code
+   在客户端换文案，其余透传）。
+2. **`max-tokens` 不算失败**：那是"回答被截断，已有输出保留"，官方渲染成黄色警示。
+   误报比漏报更伤 —— 用户没失败却看到红框，第一反应是客户端坏了，真失败时他反而不信了。
+3. **登出停止单独标 `stopped`**：它被内核与失败同级展示，但不是模型故障，标题用「任务已停止」。
+
+### 验证
+
+- **编译**：`assembleRelease` 通过（R8 + lintVital 全过，**0 编译警告**）；
+- **单测**：**26 个测试类 / 249 用例 / 0 失败**，其中本轮新增 7 个用例
+  （ChatPresentationTest +4、MarkSessionStoppedTest +3）已确认真实执行；
+- **签名**：与 v2.2.23 同一证书（SHA-256 `f0e6c701…` 一致），可覆盖安装；
+- **包内容核对**：APK 内 `assets/chat.html` 确认含新逻辑（6 处引用 + 1 个新样式块），
+  不是"打包漏掉"；
+- **✅ 真机验证通过**（2026-10-11）：用户重启 dsh + 装 v2.2.24 后，
+  429 限流被如实显示，**真机确认「不再傻等」**。
+
+### 编译时抓到的 3 个真错误（静态自查漏掉的，都已修）
+
+这一节留着当教训 —— 上一轮我做过括号配平、引用闭环、导入齐全的静态自查，
+**三处错误一处都没抓到**。编译器一上手就全出来了：
+
+1. **`ChatScreen.kt` 漏 import `ChatTurnFailure`** —— 连带 `title` / `message` /
+   `isNullOrEmpty` 一串全解析不了。（我查过 ChatScreen 的 import 清单，却没查
+   **新增类型**是否在清单里。）
+2. **`JsonPrimitive.booleanOrNull` 这个扩展不存在** —— 项目自有 `booleanValue()`
+   （`contentOrNull?.toBooleanStrictOrNull()`），没先看既有实现就动手了。
+3. **`update { state -> state.copy(...) }` 写错了** —— `update` 的 receiver 就是
+   `HarnessState`，显式参数名**把 receiver 遮蔽**了，报 `Unresolved reference`。
+   正确写法是项目既有的 `update { copy(...) }`（直接用 receiver 属性）。
+
+> 一句话：**没有编译器就不算数。** 静态自查只能抓低级错误，类型与作用域问题一律靠编译。
+
+### 发版前遗留（本轮没动，等发版时处理）
+
+- [ ] **签名配置路径对不上**：`app/build.gradle.kts:11` 默认找
+  `../.secrets/deepseek-harness-android/signing.properties`，但实际配置在仓库内
+  `.secrets/local-signing/signing.properties`。本轮靠显式传
+  `-PdshSigningProperties=...` 才出的包。要不要把默认路径指对，省得下次再踩。
+- [ ] **正式发布密钥丢失**：该文件注释写明「dsh-release.jks 连同密码在本机已丢失」，
+  当前用的是 `debug.jks`（`CN=DSH Debug`，仅供试装）。发 GitHub Release 前需找回。
+- [ ] 按用户规矩，**未推送、未打 tag、未发版**。
 
 ## 2026-10-11 · 问答卡片、修 /技能名、图片 PDF 预览、工具调用详情（v2.2.21 → v2.2.23）
 

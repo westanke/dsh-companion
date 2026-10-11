@@ -18,6 +18,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.DisposableEffect
+import io.github.hakunm.deepseekharness.R
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.Modifier
@@ -289,9 +290,12 @@ fun ChatWebScreen(
 
         // 用局部变量而不是把 when 写进 .put(...) 的实参里：
         // when 作为函数实参时解析器会把紧随其后的 "}," 吞进 when 体，直接编译不过。
+        //
+        // 取值走 `context.getString` 而不是 `stringResource`：这一段在 LaunchedEffect 里，
+        // **不是 Composable 上下文**，用后者会直接编译失败（已经踩过一次）。
         val warn = when {
-            conn == null -> "还没连上电脑 —— 请先在会话列表里选一台，选好本页会自动接着读"
-            "chat.write" !in scopes -> "这台设备没有 chat.write 权限，只能查看"
+            conn == null -> context.getString(R.string.web_no_connection)
+            "chat.write" !in scopes -> context.getString(R.string.web_read_only_scope)
             else -> ""
         }
 

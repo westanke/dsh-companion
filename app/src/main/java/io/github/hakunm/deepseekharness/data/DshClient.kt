@@ -8,6 +8,7 @@ import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import androidx.appcompat.app.AppCompatDelegate
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -347,9 +348,51 @@ class DshClient(
      *
      * `attachmentId` 形如 `sha256:<hex>`，**含冒号**；`addPathSegment` 会把它编码成
      * `sha256%3A…`，这正是服务端 `decodeURIComponent` 期待的形式。
+     *
+     * ### 为什么必须带上 [reference] 的四项元数据
+     *
+     * 服务端拿字节时，内核 `readImage` 会做一次**完整性校验**：把引用里的
+     * `mediaType` / `bytes` / `width` / `height` 与**实测元数据**逐项比对，
+     * 任何一项对不上就抛 `ATTACHMENT_CORRUPT`。
+     *
+     * 早先这里只传 `attachmentId`，那四项全缺 —— 结果是**每一张历史图都必然校验失败**：
+     * 字节读到了却被拒之门外。症状是「附件存储里明明有数据，代码看着全对，
+     * 图片就是永远显示不出来」。官方那条路（`SessionController.attachment()`）
+     * 同样是传完整引用。
+     *
+     * 四项缺失时按「不传」处理（而不是补 0 / 空串）：补出来的假值同样过不了校验，
+     * 还会让服务端的报错更难懂。
      */
-    fun readAttachment(attachmentId: String): ByteArray {
-        execute(Request.Builder().url(pathUrl("attachments", attachmentId)).get()).use { response ->
+    /**
+     * 取回会话历史里某个图片附件的字节。
+     *
+     * 为什么历史图片需要这一步：发送时图片是 **base64 内联**在消息里的，但存进历史后被
+     * 归一化成 `{type:'image', attachment:{attachmentId:'sha256:…'}}` —— 字节搬去了内核。
+     * 所以「显示一张历史图片」永远是两步：先读事件拿 id，再来这里取字节。
+     *
+     * `attachmentId` 形如 `sha256:<hex>`，**含冒号**；`addPathSegment` 会把它编码成
+     * `sha256%3A…`，这正是服务端 `decodeURIComponent` 期待的形式。
+     *
+     * ### 为什么必须带 [sessionId]
+     *
+     * 服务端走内核自己的 `sessionController.attachment({sessionId, attachmentId})`：
+     * 它先读这个会话的事件，确认该会话引用了这张图、并取出**真实的附件引用**
+     * （含 mediaType/bytes/width/height），再据此做完整性校验。
+     *
+     * 这是踩了两轮坑后的正路：
+     * - 第一轮只传 id、让插件自己调 `ctx.attachments` → 完整性校验缺四项元数据，
+     *   每张图都抛 `ATTACHMENT_CORRUPT`（「字节读到了，却被拒之门外」）；
+     * - 第二轮改成客户端把四项带上来 → 真机诊断发现这条 profile 里
+     *   `ctx.attachments` 注入属性**根本不存在**（MISSING），路走不通。
+     *
+     * 内核手里本来就有真实 ref，所以正确做法是**让内核自己取**，
+     * 客户端只需说明「我在看哪个会话里的哪张图」。
+     */
+    fun readAttachment(sessionId: String, attachmentId: String): ByteArray {
+        val url = pathUrl("attachments", attachmentId).newBuilder()
+            .addQueryParameter("sessionId", sessionId)
+            .build()
+        execute(Request.Builder().url(url).get()).use { response ->
             ensureSuccess(response)
             return response.body?.bytes() ?: ByteArray(0)
         }
@@ -434,7 +477,17 @@ class DshClient(
         http.newCall(if (authenticated) authenticated(builder).build() else builder.build()).execute()
 
     private fun authenticated(builder: Request.Builder): Request.Builder =
-        builder.header("Accept", "application/json").header("Authorization", "Bearer ${requireNotNull(token)}")
+        builder
+            .header("Accept", "application/json")
+            .header("Authorization", "Bearer ${requireNotNull(token)}")
+            // 界面语言随每个请求出海：服务端的图片交接说明要说**用户看得懂**的语言
+            // （拿不到就按中文，那是插件原本的口径）。App 的语言由设置页经
+            // AppCompatDelegate 管理，这里如实转达，不在客户端另做翻译。
+            .header("Accept-Language", interfaceLanguageTag())
+
+    /** 当前界面语言（BCP-47，如 `zh-CN` / `en`）；从未设置过时按 `zh-CN`。 */
+    private fun interfaceLanguageTag(): String =
+        AppCompatDelegate.getApplicationLocales().toLanguageTags().ifBlank { "zh-CN" }
 
     private fun ensureSuccess(response: Response) {
         if (response.isSuccessful) return

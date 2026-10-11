@@ -25,14 +25,18 @@ TOOLCHAIN="${DSH_ANDROID_TOOLCHAIN:-/media/wangke/OFFICE/workspace/android-toolc
 export JAVA_HOME="$TOOLCHAIN/jdk17"
 export ANDROID_HOME="$TOOLCHAIN/sdk"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
-export GRADLE_USER_HOME="$TOOLCHAIN/gradle-home"
 export PATH="$JAVA_HOME/bin:$PATH"
 
-# 在缓存目录里找出可用的 gradle 可执行文件。
-find_cached_gradle() {
-  local dist="$GRADLE_USER_HOME/wrapper/dists/gradle-9.5.0-bin"
-  local candidate
-  for candidate in "$dist"/*/gradle-9.5.0/bin/gradle; do
+# Gradle 用户目录（发行版 + 依赖缓存）取**真有发行版**的那份。
+#
+# 为什么不能写死工具链里那份：`$TOOLCHAIN/gradle-home` 的 wrapper/dists 下只留了一个
+# **空的**发行版目录（没有 gradle-9.5.0/bin/gradle），于是 wrapper 转去
+# services.gradle.org 下载 —— 国内网络下它不报错、只是**静默挂起**
+# （实测 16 分钟零输出、CPU 0.3%，正是本脚本开头注释描述的症状）。
+# 家目录那份带完整发行版与 2.7G 依赖缓存，优先用它；工具链那份真有货时才用它。
+find_gradle_bin_in() {
+  local home="$1" candidate
+  for candidate in "$home/wrapper/dists/gradle-9.5.0-bin"/*/gradle-9.5.0/bin/gradle; do
     if [ -x "$candidate" ]; then
       printf '%s\n' "$candidate"
       return 0
@@ -41,8 +45,22 @@ find_cached_gradle() {
   return 1
 }
 
-if GRADLE_BIN="$(find_cached_gradle)"; then
-  echo "[build] 使用缓存 Gradle：$GRADLE_BIN"
+pick_gradle_home() {
+  local home
+  for home in "$TOOLCHAIN/gradle-home" "$HOME/.gradle"; do
+    if find_gradle_bin_in "$home" >/dev/null 2>&1; then
+      printf '%s\n' "$home"
+      return 0
+    fi
+  done
+  printf '%s\n' "$TOOLCHAIN/gradle-home"
+}
+
+GRADLE_USER_HOME="$(pick_gradle_home)"
+export GRADLE_USER_HOME
+
+if GRADLE_BIN="$(find_gradle_bin_in "$GRADLE_USER_HOME")"; then
+  echo "[build] 使用缓存 Gradle：$GRADLE_BIN（GRADLE_USER_HOME=$GRADLE_USER_HOME）"
 else
   echo "[build] 未找到缓存 Gradle，回退 gradlew（可能触发网络下载）" >&2
   GRADLE_BIN="$REPO_ROOT/gradlew"
