@@ -31,7 +31,6 @@ import io.github.hakunm.deepseekharness.data.ChatHistory
 import io.github.hakunm.deepseekharness.data.ChatItemKind
 import io.github.hakunm.deepseekharness.data.MessageSegment
 import io.github.hakunm.deepseekharness.data.PendingQuestionSet
-import io.github.hakunm.deepseekharness.data.SessionFileRefs
 import io.github.hakunm.deepseekharness.data.displayItems
 import io.github.hakunm.deepseekharness.data.parseGenUi
 import io.github.hakunm.deepseekharness.data.splitMessageBody
@@ -392,30 +391,6 @@ fun ChatWebScreen(
     // 卡片出现在它本来该出现的位置，也不再残留 JSON 代码块。
     // 判据两边都存一份是有意的：页面要能在「自己拉 REST」的预览路径下单独工作，
     // 而那条路径上原生插不上手。两处注释互相指向，改动时一起改。
-
-    // ── 会话产生的文件 ──
-    //
-    // 复用原生那套 [SessionFileRefs] 提取逻辑：它对「哪些路径算文件」有一套刻意的
-    // 取舍（不解析 bash/grep 的 path，因为那是搜索范围不是文件），重写一遍必然得出
-    // 另一批路径，两边对不上就成了一致性问题。
-    val fileSignature = remember(state.history, state.liveChat) {
-        if (state.liveChat != null) emptyList()
-        else SessionFileRefs.refs(state.history?.events.orEmpty())
-    }
-    LaunchedEffect(fileSignature) {
-        val view = web ?: return@LaunchedEffect
-        if (!pageReady) return@LaunchedEffect
-        val payload = org.json.JSONArray()
-        fileSignature.forEach { ref ->
-            payload.put(
-                JSONObject()
-                    .put("path", ref.path)
-                    .put("count", ref.count)
-                    .put("lastSeq", ref.lastSeq)
-            )
-        }
-        view.evaluateJavascript("window.dshChat.setFiles(" + payload.toString() + ")", null)
-    }
 
     // ── 把原生已归约好的流式状态推进页面 ──
     //

@@ -39,8 +39,6 @@
     <!-- 消息复制：长按留给「选择片段」，整条复制改用双击 -->
     <string name="copy_message">复制全文</string>
     <string name="copied">已复制</string>
-    <string name="copy_hint">长按可选中复制片段，双击复制整条</string>
-    <string name="copy_hint_dismiss">知道了</string>
     <!-- 会话里的图片附件 -->
     <string name="attachment_unavailable">图片已不可用（可能已被清理）</string>
     <!-- 取图失败必须说清是哪一类：授权过期、缺 files.read、附件真的没了，各要用户做不同的事 -->
@@ -335,8 +333,6 @@
     <!-- 会话里提到的文件 -->
     <string name="session_files">本会话的文件</string>
     <string name="session_files_subtitle">会话里出现过、又能定位到的文件。只列服务器绝对路径；命令里的路径与相对路径不参与解析，宁可少列也不猜错。</string>
-    <string name="session_files_footer">本次产生的文件</string>
-    <string name="session_files_footer_hint">点一条即可查看内容</string>
 
     <!-- 发送失败：必须说人话，并把原文还给用户 -->
     <string name="send_failed_restore">消息没发出去，内容已放回输入框。原因：%1$s</string>

@@ -138,6 +138,10 @@ private fun ConnectedApp(
         //
         // 关掉手势不影响正常使用：左上角汉堡按钮照样能开抽屉（见 navigationIcon）。
         // 注意这里必须放在 BoxWithConstraints 内部：wide 是在下一行才算出来的。
+        //
+        // `state.composerOverlay` 是同一类问题的另一半：输入框上方的 `@`/`/` 补全面板
+        // 也是又长又宽的浮层，横划一下就误触抽屉（用户实测反馈）。面板开着时同样关手势，
+        // 由 ChatScreen 把「面板是否可见」同步进来。
         val webChatOpen = !wide && section == MainSection.Chat &&
             state.selectedSessionId != null && state.useWebChat
         val content: @Composable () -> Unit = {
@@ -230,7 +234,7 @@ private fun ConnectedApp(
         } else {
             ModalNavigationDrawer(
                 drawerState = drawerState,
-                gesturesEnabled = !webChatOpen,
+                gesturesEnabled = !webChatOpen && !state.composerOverlay,
                 drawerContent = {
                     ModalDrawerSheet(
                         drawerContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
