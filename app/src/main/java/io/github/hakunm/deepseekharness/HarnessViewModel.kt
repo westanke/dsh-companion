@@ -210,6 +210,16 @@ data class HarnessState(
     val selectedRootId: String? = null,
     val currentPath: String = "",
     val directory: DirectoryPage? = null,
+    /**
+     * 当前会话**工作目录**（cwd）下的条目，供输入框 `@` 补全用。
+     *
+     * 与 [directory] 刻意分开：那个是「文件」页的浏览状态（用户自己点来点去、
+     * 会切到别的根与子目录），而 `@` 永远指向**本会话的 cwd**，两者互不影响 ——
+     * 共用一个字段会导致「在文件页翻到别处，回会话里 `@` 就补全错目录」。
+     *
+     * 为 null 表示还没加载（或本会话解析不出工作目录，见 [loadMentionEntries]）。
+     */
+    val mentionEntries: List<FileEntry>? = null,
     val document: OpenDocument? = null,
     /** 会话文件面板正在查看的那一条（null 表示面板显示路径列表）。 */
     val sessionFileOpen: SessionFileOpen? = null,
@@ -650,6 +660,10 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
                 questions = emptyList(),
                 answeringCallId = null,
                 answeredCallIds = emptySet(),
+                // `@` 补全的文件列表属于**上一个会话的工作目录**，换会话必须清掉：
+                // 不清的话，切过去的头几百毫秒里 `@` 会列出上个会话的文件，
+                // 用户手快选中就发出一条指向错误路径的消息。
+                mentionEntries = null,
             )
         }
         if (id != null) {
@@ -657,6 +671,10 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
             refreshSessionModels()
             refreshPendingApprovals()
             refreshCommands()
+            // 进会话就顺手把工作目录的文件捞回来，等用户打 `@` 时直接可用 ——
+            // 放在这里而不是等 `@` 触发再拉：那时用户已经在等补全列表了，
+            // 多一次网络往返就是列表「慢半拍」的来源。
+            loadMentionEntries()
         }
     }
 
@@ -1493,6 +1511,34 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
                 nextCursor = next.nextCursor,
             ))
         }
+    }
+
+    /**
+     * 加载当前会话**工作目录**的条目，供输入框 `@` 补全（对齐官方「@ 调取当前工作目录
+     * 文件或文件夹」那条功能）。
+     *
+     * 为什么不直接用 [loadDirectory] 那套：那是「文件」页的浏览状态，用户会自己切根、
+     * 进子目录；`@` 必须**始终**指向本会话的 cwd，共用一个字段会导致「在文件页翻到别处，
+     * 回会话里补全出的是别的目录」。所以单独一个字段、单独一次请求。
+     *
+     * 三步：会话的 cwd 是**绝对路径**，而列举接口要的是「根 id + 相对根的路径」，
+     * 中间必须过一次 `resolvePath` 做翻译（客户端没有根的绝对路径，自己算不出来）。
+     * 任一步拿不到就静默放弃（`mentionEntries` 保持 null）——`@` 补全出不来不影响
+     * 打字与发送，不该为此弹错误提示打断用户。
+     */
+    fun loadMentionEntries() = withClient { api ->
+        val sessionId = mutableState.value.selectedSessionId ?: return@withClient
+        val session = mutableState.value.sessions.firstOrNull { it.id == sessionId } ?: return@withClient
+        val cwd = session.cwd.takeIf { it.isNotBlank() } ?: return@withClient
+        val resolved = runCatching { withContext(Dispatchers.IO) { api.resolvePath(cwd) } }.getOrNull()
+            ?: return@withClient
+        if (resolved.rootId.isBlank()) return@withClient
+        val page = runCatching {
+            withContext(Dispatchers.IO) { api.entries(resolved.rootId, resolved.path.trim('/')) }
+        }.getOrNull() ?: return@withClient
+        // 会话可能在请求期间被切走，回来发现已是另一个会话就别把那批文件塞进去。
+        if (mutableState.value.selectedSessionId != sessionId) return@withClient
+        update { copy(mentionEntries = page.entries) }
     }
 
     fun openEntry(entry: FileEntry) {

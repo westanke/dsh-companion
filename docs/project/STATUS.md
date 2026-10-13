@@ -1,18 +1,18 @@
 # 当前状态
 
 - 日期：2026-10-13
-- 阶段：本 fork 的 **2.x 版本线**。`v2.2.30`（`versionCode` 10055）已出包、已归档，**待双站发版**（用户未发话，先不推）
-- 版本线：v1.1.0 多地址连接 + 配置导入 → v1.2.0 插件清单页 → v1.4.0 会话文件与图片 → v1.9.0 长按选中/双击复制 + 文件按类型预览 → v2.0.0 起会话详情页增加 WebView 实现（2.2.15 起把网页版呈现方式反向移植回原生）→ v2.2.23 问答卡片、图片 PDF 预览、工具调用详情 → v2.2.24–2.2.26 模型失败可见、图片交接可用、出错文案跟随界面语言 → v2.2.27 真机七问题收口 → v2.2.28 补上「长按可选中复制片段」→ v2.2.29 耗电主因（流式期间每秒全量拉 history → 400ms 静默去抖）+ 跳转落到会话尾部 + isAtBottom 改 derivedStateOf + 浮动按钮半透明 → **v2.2.30 熄屏断流、亮屏接回（省电第二大头）**
+- 阶段：本 fork 的 **2.x 版本线**。`v2.2.31`（`versionCode` 10056）已出包、已归档，**待双站发版**（用户未发话，先不推）
+- 版本线：v1.1.0 多地址连接 + 配置导入 → v1.2.0 插件清单页 → v1.4.0 会话文件与图片 → v1.9.0 长按选中/双击复制 + 文件按类型预览 → v2.0.0 起会话详情页增加 WebView 实现（2.2.15 起把网页版呈现方式反向移植回原生）→ v2.2.23 问答卡片、图片 PDF 预览、工具调用详情 → v2.2.24–2.2.26 模型失败可见、图片交接可用、出错文案跟随界面语言 → v2.2.27 真机七问题收口 → v2.2.28 补上「长按可选中复制片段」→ v2.2.29 耗电主因（流式期间每秒全量拉 history → 400ms 静默去抖）+ 跳转落到会话尾部 + isAtBottom 改 derivedStateOf + 浮动按钮半透明 → v2.2.30 熄屏断流、亮屏接回（省电第二大头）→ **v2.2.31 输入框 `@` 调取当前工作目录文件/文件夹（对齐官方）**
 - 包名：`io.github.hakunm.deepseekharness`；Android 基线：min SDK 26、target/compile SDK 36、JDK 17
 - 插件基线：`dsh-remote-bridge` **≥ 2.3.1**（旧名 `dsh-workspace`；Web 挂载前缀仍是历史名 `/dsh-workspace-api`，未随改名变动）。「加载更早消息」**要求 ≥ 2.3.1** —— 2.3.0 及更早的 `history()` 会忽略 `beforeSeq`，点按钮不会有任何反应
-- 最近验证：**24 个测试类 / 256 用例 / 0 失败**（口径：跑 `scripts/build.sh :app:testDebugUnitTest`，再数 `app/build/test-results/` 下的 XML）。这个数字随代码变化，不要当常量引用
+- 最近验证：**25 个测试类 / 271 用例 / 0 失败**（口径：跑 `scripts/build.sh :app:testDebugUnitTest`，再数 `app/build/test-results/` 下的 XML）。这个数字随代码变化，不要当常量引用
 - **电源管理现状**（两个大头都已处理）：
   - v2.2.29 修掉头号：`scheduleChatRefresh` 的 1 秒轮询 —— 每个事件帧都把标志位置 true（事件分发末尾还有 `else ->` 兜底分支什么都命中），流式输出期间每秒一次全量 `history()`；改成 400ms 静默去抖，实时流式显示走 `chat.message.delta` → `liveChat` 独立那一路，不受影响。
   - v2.2.30 修掉第二大头：`eventSubscription` 原先只在 `onCleared()` 与主动断开时关闭，熄屏后 WebSocket 一直连着（WiFi 射频 + TCP keepalive 全程在线，系统还会反复唤醒进程）。现在 **熄屏断流、亮屏接回**：`MainActivity` 注册 `ACTION_SCREEN_OFF`/`ACTION_SCREEN_ON`（**不用 `onStop`** —— 切 App/分屏时屏幕还亮着不该断），ViewModel 加 `pauseEvents()`/`resumeEvents()`，熄屏只关流、**保留 active 连接与令牌**。亮屏补三样：会话列表、当前会话历史、**审批与待答问题**（后两类不走 history，必须单独补，否则熄屏期间产生的卡片永远不出现）。
   - 策略由用户拍板（原话「能让 熄屏 就不在线了，如果不是熄屏状态 实时优先」）。**代价**：熄屏期间收不到推送通知，亮屏一次性补上、不丢内容。
-- 当前产物：`artifacts/` 九包 + `SHA256SUMS.txt`：
-  - `DeepSeek-Harness-companion-v2.2.30.apk`，**2,869,642 字节**（当前版本，release 构建，R8 + 资源裁剪），SHA-256 `efb516aaad930c624dcda2266b276f4442786cb890597eff63d0d276faefad3a`
-  - `v2.2.29` / `v2.2.28` / `v2.2.27` / `v2.2.26` / `v2.2.25` / `v2.2.24` / `v2.2.23`，均为 release 构建（2.8~2.9 MB 量级）
+- 当前产物：`artifacts/` 十包 + `SHA256SUMS.txt`：
+  - `DeepSeek-Harness-companion-v2.2.31.apk`，**2,871,054 字节**（当前版本，release 构建，R8 + 资源裁剪），SHA-256 `61520951679a7f18637c29ba47b6ac55120c7b8ecd4aa5cfc8157b425eb7c6d4`（比 v2.2.30 多 1,412 字节：新增文件/文件夹图标与三条字符串资源，是**正常的增长**）
+  - `v2.2.30` / `v2.2.29` / `v2.2.28` / `v2.2.27` / `v2.2.26` / `v2.2.25` / `v2.2.24` / `v2.2.23`，均为 release 构建（2.8~2.9 MB 量级）
   - `DeepSeek-Harness-companion-v1.9.0.apk`，2,714,772 字节（旧签名，留作对照）
   - `DeepSeek-Harness-v1.0.0.apk` 与 `DeepSeek-Harness-compat02-release.apk`（上游基线，各 2,561,512 字节）。`.gitignore` 特意用 `!` 保留这两个，用途是比对「本 fork 证书 ≠ 上游证书」，**不要删**
 - **构建类型**：正式包一律 `scripts/build.sh assembleRelease`。debug 包不混淆、不裁剪资源，体积约 **21.8 MB**，与 release 的 2.87 MB 差 7.5 倍 —— 只看体积就能判断打错没打错
