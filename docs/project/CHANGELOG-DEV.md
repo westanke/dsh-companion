@@ -3,6 +3,96 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## 2026-10-13 · v2.2.29：耗电主因修掉，跳转按钮落到会话尾部，两处界面优化
+
+> 用户原话：「会话中的浮动一键到最新按钮，目前是到当页的尾部，应该直接到会话的尾部，
+> 另外在看看界面中有优化的方面吗给个建议，在看看整体 APP 的电源管理方面，感觉使用 APP 后设备电池耗电量增加了」。
+
+### ① 耗电主因：流式输出期间每秒拉一次全量历史
+
+`scheduleChatRefresh()` 原来的形状是：
+
+```kotlin
+delay(250)
+while (chatRefreshPending || chatSessionRefreshPending) {
+    ... api.history(id) ...
+    delay(1_000)          // ← 这里的 1 秒是轮询周期
+}
+```
+
+**问题不在 1 秒本身，在于它是个 while 轮询，而它的唤醒条件几乎恒为真**：
+事件分发末尾有一句兜底分支
+
+```kotlin
+else -> if (sessionId == mutableState.value.selectedSessionId) scheduleChatRefresh()
+```
+
+——**什么事件都命中**。每个事件帧都把 `chatRefreshPending` 重新置 true；
+而 `chat.message.delta` 是 token 级推送，一段回答几十秒内能来几百帧。
+于是 1 秒的循环窗口里几乎总有新帧进来 → 循环一直转 →
+**整个流式输出期间每秒一次 `history()` 全量拉取**，几百条消息反复下载。
+
+用户侧体感就是「一用 APP 电量掉得快」。
+
+**改成静默去抖**：`delay(400)` 后只跑一轮，跑完再确认一次「这 400ms 里有没有新帧」，
+没有就收工。流式期间事件不断、窗口一直被重置、任务根本不起跑；
+等这一轮消息落定、事件安静下来，才做那唯一一次 `history()`。
+
+**实时流式显示不受影响** —— 这一点是动手前查证的：`chat.message.delta`
+走的是 `liveChat.append(delta)` 独立那一路（token 级推送，不经 history），
+去抖只影响「消息落盘后补一次历史」的时机，不影响字一个一个往外冒。
+
+### ② 浮动「跳到最新」只跳到当页尾部
+
+原来定位用 `displayItems.lastIndex`，而列表里除了消息还有三类固定条目：
+顶部「复制手势提示」、底部「本次产生的文件」页脚、`hasMore` 为真时的「加载更早消息」按钮。
+少算一项就停在「看着到底了其实还差一截」的地方，用户会以为按钮没生效。
+
+改用 `listState.layoutInfo.totalItemsCount - 1` —— LazyColumn 自己的权威计数，
+以后再加任何固定条目都不用回来改这里。
+
+### ③ 连带修：`isAtBottom` 判定同样漏算
+
+它手算的是 `displayItems.size + 2`，而固定条目**随状态增减**（`hasMore` 会变、
+复制提示可以被关掉），漏算就会误判「已经到底」→ 自动跟随突然开火，
+把正在翻历史的人又拽回底部 —— 那正是本条最初要修的问题。
+两处统一改用 `totalItemsCount`。
+
+### ④ `isAtBottom` 改 `derivedStateOf`
+
+旧写法 `LaunchedEffect(listState.firstVisibleItemIndex, visibleItemsInfo.size) + mutableStateOf`
+在**每滑一帧都重新赋值**，哪怕值没变（绝大多数帧都没变）重组照样触发。
+
+`derivedStateOf` 只在读到的值**真的变了**才通知下游：滑动过程中绝大多数帧
+`isAtBottom` 都是同一个 `false`，Compose 直接跳过重组。滑得越长省得越多。
+
+连带的好处：它不可写，于是按钮点击时**不需要**手动把 `isAtBottom` 改回 true ——
+`animateScrollToItem` 滚到底之后它自己就变 true，按钮自动消失。
+
+### ⑤ 浮动按钮半透明 + 滚动中隐去
+
+滑动时那个实心圆盘压在滚过的文字上，读起来像脏点。现在：
+alpha 0.88 半透明，且**滚动中（`isScrollInProgress`）隐去、停手再浮现**，140ms 过渡。
+
+用 `animateFloatAsState` 驱动 alpha 而不是 `AnimatedVisibility` ——
+这个位置 `BoxScope` / `ColumnScope` 混排，`AnimatedVisibility` 的两个重载
+（顶层 vs `ColumnScope` 扩展）会被 Kotlin 的解析规则卡住，报
+`'ColumnScope.AnimatedVisibility ... cannot be called in this context with an implicit receiver'`。
+自己驱动 alpha 既绕开那个坑，也顺手把出现/隐去平滑化了。
+
+### 未做（等产品决策，不是 bug）
+
+**后台不断连事件流**。`eventSubscription` 只在 `onCleared()` 与主动断开时关闭，
+App 切后台时 WebSocket 一直连着 —— 息屏后 WiFi / TCP keepalive 全程在线，
+这是省电的第二个大头。但断连意味着**后台收不到通知**，属于「省电优先」还是
+「实时优先 + 前台服务」的产品取舍，**没有擅自改**，留给用户定。
+
+### 测了什么
+
+- `./scripts/build.sh :app:compileDebugKotlin` 通过
+- `./scripts/build.sh :app:testDebugUnitTest` 全绿（24 类 / 256 用例）
+- 手势与视觉（按钮落到真尾部、滚动中隐去、alpha 过渡）**待真机确认**
+
 ## 2026-10-13 · v2.2.28：会话里「长按可选中复制片段」是句空头支票
 
 > 用户原话：「App 原生界面中 提示双击文字段可以选择文字复制，实际中，双击不出来选择项」。
