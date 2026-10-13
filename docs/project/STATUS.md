@@ -14,13 +14,12 @@
   - v2.2.29 修掉头号：`scheduleChatRefresh` 的 1 秒轮询 —— 每个事件帧都把标志位置 true（事件分发末尾还有 `else ->` 兜底分支什么都命中），流式输出期间每秒一次全量 `history()`；改成 400ms 静默去抖，实时流式显示走 `chat.message.delta` → `liveChat` 独立那一路，不受影响。
   - v2.2.30 修掉第二大头：`eventSubscription` 原先只在 `onCleared()` 与主动断开时关闭，熄屏后 WebSocket 一直连着（WiFi 射频 + TCP keepalive 全程在线，系统还会反复唤醒进程）。现在 **熄屏断流、亮屏接回**：`MainActivity` 注册 `ACTION_SCREEN_OFF`/`ACTION_SCREEN_ON`（**不用 `onStop`** —— 切 App/分屏时屏幕还亮着不该断），ViewModel 加 `pauseEvents()`/`resumeEvents()`，熄屏只关流、**保留 active 连接与令牌**。亮屏补三样：会话列表、当前会话历史、**审批与待答问题**（后两类不走 history，必须单独补，否则熄屏期间产生的卡片永远不出现）。
   - 策略由用户拍板（原话「能让 熄屏 就不在线了，如果不是熄屏状态 实时优先」）。**代价**：熄屏期间收不到推送通知，亮屏一次性补上、不丢内容。
-- 当前产物：`artifacts/` 十五包 + `SHA256SUMS.txt`：
-  - `DeepSeek-Harness-companion-v2.2.34.apk`，**2,877,682 字节**（当前版本，release 构建，R8 + 资源裁剪），SHA-256 `eb0042aa21cb816389a01e3c0360388959dfe261b973aaab0e760ceb8dd8fee4`（比 v2.2.33 少 18,944 字节：删掉复制提示条与「本次产生的文件」两处区块的应有结果）
-  - `DeepSeek-Harness-companion-v2.2.33.apk`，2,896,626 字节，SHA-256 `3bbaeea72aa299ac4f59f51cba81fdef6adfe1adc2289af152c42b303609d431`（比 v2.2.32 多 16,884 字节：`@` 补全的修复 + 新增三态文案字符串）
-  - `DeepSeek-Harness-companion-v2.2.32.apk`，2,879,742 字节，SHA-256 `596c16210d9dfc89289ebeafde0fcbcc9d748ed1136a2834e29b33f9ee0ba3ad`（比 v2.2.31 多 8,688 字节：新增启停开关、确认对话框与 13 条字符串资源）
-  - `v2.2.30` / `v2.2.29` / `v2.2.28` / `v2.2.27` / `v2.2.26` / `v2.2.25` / `v2.2.24` / `v2.2.23`，均为 release 构建（2.8~2.9 MB 量级）
-  - `DeepSeek-Harness-companion-v1.9.0.apk`，2,714,772 字节（旧签名，留作对照）
+- 当前产物：**只保留「必须的」与「最新的」**（用户要求：已发布到 Release 的 APK 不在本地囤积）：
+  - `DeepSeek-Harness-companion-v2.2.34.apk`，**2,877,682 字节**（当前版本，release 构建，R8 + 资源裁剪），SHA-256 `eb0042aa21cb816389a01e3c0360388959dfe261b973aaab0e760ceb8dd8fee4`
   - `DeepSeek-Harness-v1.0.0.apk` 与 `DeepSeek-Harness-compat02-release.apk`（上游基线，各 2,561,512 字节）。`.gitignore` 特意用 `!` 保留这两个，用途是比对「本 fork 证书 ≠ 上游证书」，**不要删**
+  - `SHA256SUMS.txt`：**全量历史**校验和（含 v1.9.0 起所有已发布版本）。它是**校验记录**而不是本地文件清单，本地删包**不动它**。
+  - 其余版本的 APK（v1.1.0 ~ v2.2.33）**本地不留** —— 两站 Release 都有资产，需要时直接下载；`artifacts/*` 除 `SHA256SUMS.txt` 与上述两个基线包外全部被 `.gitignore` 忽略，**丢了无法从 git 回滚**，所以更不该在本地堆。
+  - 发新版本时的动作：构建 → 拷入 `artifacts/` → 上传两站 Release → **回读校验哈希** → 再删掉上一版本地包（等价于「本地只留最新」）。
 - **构建类型**：正式包一律 `scripts/build.sh assembleRelease`。debug 包不混淆、不裁剪资源，体积约 **21.8 MB**，与 release 的 2.87 MB 差 7.5 倍 —— 只看体积就能判断打错没打错
 - 签名：**`dsh-release.jks`**（`CN=DSH Pocket Client`，证书 SHA-256 `8b2ba797589da844b779941fec213da3432633062744f64bc916e62df9dbf68a`；alias `dshrelease`，口令见 `.secrets/deepseek-harness-android/signing.properties`，该文件与 `*.jks` 都在 `.gitignore` 内）
   - 2026-10-11 说明：**原始那把发布钥匙的密码已彻底丢失**（本机/仓库/CI/git 历史全查过），现用的是**重新生成**的钥匙，主题刻意与旧钥匙一致（同为 `CN=DSH Pocket Client`）。

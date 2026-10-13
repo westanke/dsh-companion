@@ -330,7 +330,14 @@ private fun FileRow(entry: FileEntry, viewModel: HarnessViewModel) {
             )
         }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-            Text(entry.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+            // 文件名最多 3 行。
+            //
+            // 原来是 `maxLines = 1`：手机屏窄，稍长的名字（比如
+            // `DeepSeek-Harness-companion-v2.2.34.apk`）就被省成 `DeepSeek-Harness-…`，
+            // 而第二行给的是「类型 · 大小」—— 那对区分文件**毫无帮助**，于是用户
+            // 「看不完名字，判断不出到底是哪个文件」（真机反馈）。放宽到 3 行足以覆盖
+            // 绝大多数文件名；再长的仍留 `Ellipsis` 兜底，不至于把一行撑满整屏。
+            Text(entry.name, maxLines = 3, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
             Text(
                 if (entry.kind == "directory") kindLabel else "$kindLabel · ${formatBytes(entry.size)}",
                 style = MaterialTheme.typography.labelSmall,
@@ -386,10 +393,12 @@ private fun EditorPane(
                 }
             }
             Column(Modifier.weight(1f).padding(start = if (onBack == null) 8.dp else 0.dp)) {
+                // 与列表里同一个理由：标题栏单行放不下长文件名，用户就看不出打开的是哪个。
+                // 这里是标题，给 2 行已经够；路径那行仍在下方兜底。
                 Text(
                     document.entry.name,
                     style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
