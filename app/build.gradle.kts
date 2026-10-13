@@ -489,8 +489,21 @@ android {
         //      认不出的新 scope 仍保留原文。
         // 另修一处既有测试不同步：ChatPresentationTest 还在断言 `error.title`，
         //   代码早已改为 `titleRes` 资源 id（stash 验证过，与本轮改动无关）。
-        versionCode = 10052
-        versionName = "2.2.27"
+        // 2.2.28 = 补上一个空头支票：会话里写着「长按可选中复制片段」，
+        //   实际上整条消息的渲染路径里**根本没有 SelectionContainer**，
+        //   长按什么也不弹（用户原话：「双击不出来选择项」）。
+        //   根因是 2.2.x 早期为了避开「combinedClickable 吃掉长按导致选择手柄
+        //   弹不出来」那件事，把长按整个让了出去 —— 却忘了**还得有人接**：
+        //   双击复制整条实现了，选择片段从来没实现，提示文案却两头都写了。
+        //   修法：`ChatItem` 内部包一层 `SelectionContainer`。
+        //     · 外层 `combinedClickable` **只声明 onClick/onDoubleClick、不声明 onLongClick**，
+        //       所以它不消费长按 —— 长按穿透到内层弹选择手柄，双击仍由外层复制整条；
+        //       **千万别给外层补 onLongClick**，那正是早期翻车的原因。
+        //     · 包在 Box 内层而不是给每个 Text 单独包：助手正文是第三方 Markdown
+        //       组件渲染的（com.mikepenz.markdown.m3），内部有几个 Text 由它决定，
+        //       外层包一次就覆盖全部段落、代码块与列表项。
+        versionCode = 10053
+        versionName = "2.2.28"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
