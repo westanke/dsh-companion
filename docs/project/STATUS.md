@@ -1,16 +1,16 @@
 # 当前状态
 
 - 日期：2026-10-13
-- 阶段：本 fork 的 **2.x 版本线**。`v2.2.27`（`versionCode` 10052）已出包、已打 tag、已在 GitHub 与 Gitee 双站发布 Release
-- 版本线：v1.1.0 多地址连接 + 配置导入 → v1.2.0 插件清单页 → v1.4.0 会话文件与图片 → v1.9.0 长按选中/双击复制 + 文件按类型预览 → v2.0.0 起会话详情页增加 WebView 实现（2.2.15 起把网页版呈现方式反向移植回原生）→ v2.2.23 问答卡片、图片 PDF 预览、工具调用详情 → v2.2.24–2.2.26 模型失败可见、图片交接可用、出错文案跟随界面语言 → **v2.2.27 真机七问题收口（返回键、推理档、自动滚动、回车换行、网络文案、权限中文化、更早消息分页）**
+- 阶段：本 fork 的 **2.x 版本线**。`v2.2.28`（`versionCode` 10053）已出包、已归档，**待双站发版**（用户未发话，先不推）
+- 版本线：v1.1.0 多地址连接 + 配置导入 → v1.2.0 插件清单页 → v1.4.0 会话文件与图片 → v1.9.0 长按选中/双击复制 + 文件按类型预览 → v2.0.0 起会话详情页增加 WebView 实现（2.2.15 起把网页版呈现方式反向移植回原生）→ v2.2.23 问答卡片、图片 PDF 预览、工具调用详情 → v2.2.24–2.2.26 模型失败可见、图片交接可用、出错文案跟随界面语言 → v2.2.27 真机七问题收口（返回键、推理档、自动滚动、回车换行、网络文案、权限中文化、更早消息分页）→ **v2.2.28 补上「长按可选中复制片段」（此前是句空头支票：消息渲染路径里没有 SelectionContainer）**
 - 包名：`io.github.hakunm.deepseekharness`；Android 基线：min SDK 26、target/compile SDK 36、JDK 17
 - 插件基线：`dsh-remote-bridge` **≥ 2.3.1**（旧名 `dsh-workspace`；Web 挂载前缀仍是历史名 `/dsh-workspace-api`，未随改名变动）。「加载更早消息」**要求 ≥ 2.3.1** —— 2.3.0 及更早的 `history()` 会忽略 `beforeSeq`，点按钮不会有任何反应
 - 最近验证：**24 个测试类 / 256 用例 / 0 失败**（口径：跑 `scripts/build.sh :app:testDebugUnitTest`，再数 `app/build/test-results/` 下的 XML）。这个数字随代码变化，不要当常量引用
-- 当前产物：`artifacts/` 六包 + `SHA256SUMS.txt`：
-  - `DeepSeek-Harness-companion-v2.2.27.apk`，**2,869,642 字节**（release 构建，R8 + 资源裁剪），SHA-256 `af81922736e04659cd1644ad861d1e92c8fb80e252d245763970f4fba2aa5c24`（当前版本）
-  - `v2.2.26` / `v2.2.25` / `v2.2.24` / `v2.2.23`，均为 release 构建（2.8~2.9 MB 量级）
+- 当前产物：`artifacts/` 七包 + `SHA256SUMS.txt`：
+  - `DeepSeek-Harness-companion-v2.2.28.apk`，**2,869,642 字节**（release 构建，R8 + 资源裁剪），SHA-256 `bc0344c25aa27144f3cc4014b8fbad47e602f8bcf02aa36a3e0cecebb852f1ae`（当前版本；与 v2.2.27 同字节数是巧合 —— `SelectionContainer` 不引入字节，hash 不同是因为内容变了）
+  - `v2.2.27` / `v2.2.26` / `v2.2.25` / `v2.2.24` / `v2.2.23`，均为 release 构建（2.8~2.9 MB 量级）
   - `DeepSeek-Harness-companion-v1.9.0.apk`，2,714,772 字节（旧签名，留作对照）
-  - `DeepSeek-Harness-v1.0.0.apk` 与 `DeepSeek-Harness-compat02-release.apk`（上游基线，各 2,561,512 字节）。`.gitignore` 特意用 `!` 保留这两个，用途是比对「本 fork 证书 ≠ 上游证书」，**不要删**
+  - `DeepSeek-Harness-v1.0.0.apk` 与 `DeepSeek-Harness-compat02-release.apk`（上游基线，各 2,561,512 字节）。`.gitignore`特意用 `!` 保留这两个，用途是比对「本 fork 证书 ≠ 上游证书」，**不要删**
 - **构建类型**：正式包一律 `scripts/build.sh assembleRelease`。debug 包不混淆、不裁剪资源，体积约 **21.8 MB**，与 release 的 2.87 MB 差 7.5 倍 —— 只看体积就能判断打错没打错
 - 签名：**`dsh-release.jks`**（`CN=DSH Pocket Client`，证书 SHA-256 `8b2ba797589da844b779941fec213da3432633062744f64bc916e62df9dbf68a`；alias `dshrelease`，口令见 `.secrets/deepseek-harness-android/signing.properties`，该文件与 `*.jks` 都在 `.gitignore` 内）
   - 2026-10-11 说明：**原始那把发布钥匙的密码已彻底丢失**（本机/仓库/CI/git 历史全查过），现用的是**重新生成**的钥匙，主题刻意与旧钥匙一致（同为 `CN=DSH Pocket Client`）。

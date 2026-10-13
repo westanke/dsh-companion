@@ -2349,6 +2349,18 @@ private fun ChatItem(
                 },
             ),
     ) {
+    // 「长按可选中复制片段」这句提示以前是**空头支票**：整条消息的渲染路径里
+    // 根本没有 SelectionContainer，长按自然什么也不弹（用户原话：「双击不出来选择项」）。
+    //
+    // 手势怎么分：外层 combinedClickable 只声明 onClick/onDoubleClick、**不声明 onLongClick**，
+    // 所以它不会消费长按 —— 长按穿透到内层的 SelectionContainer，弹出选择手柄；
+    // 双击仍由外层吃掉，复制整条。**千万别给外层补 onLongClick**，那会把长按吃掉、
+    // 选择手柄又弹不出来（早期版本正是这么翻车的）。
+    //
+    // 为什么包在 Box 里面而不是给每个 Text 单独包：助手消息正文是第三方 Markdown
+    // 组件渲染的（com.mikepenz.markdown.m3），里面有多少个 Text 由它决定，
+    // 在外层包一次就能覆盖全部段落、代码块、列表项。
+    SelectionContainer {
     when (item.kind) {
         ChatItemKind.USER -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             Column(
@@ -2383,6 +2395,7 @@ private fun ChatItem(
         ChatItemKind.FAILURE -> item.failure?.let { TurnFailureRow(it) }
         else -> ActivityRow(item)
     }
+    } // SelectionContainer：长按选词，双击（外层 Box）复制整条
     }
 }
 
