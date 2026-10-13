@@ -608,8 +608,24 @@ android {
         //      `null`+失败 = 读不到、空列表 = 真的是空的。此前「加载失败」会被说成
         //      「这个目录还是空的」—— 把失败谎报成空，和插件页那句
         //      「package.json 可能损坏」是同一类毛病。
-        versionCode = 10058
-        versionName = "2.2.33"
+        // 2.2.34 = 会话页三处减法 + `@` 面板可滚动（纯 App 侧，不动插件）。
+        //   ① **`@` 面板上划会拉出抽屉**（用户实测）：看着像抽屉乱抢手势，
+        //      实际是那个面板用的是 `Column` + `forEach`，**本身根本不能滚动**，
+        //      还硬截 8 条。用户上划时列表纹丝不动、手势没人消费，就顺着通道传给了
+        //      外层 `ModalNavigationDrawer`。改法两层：列表换成 LazyColumn（可滚动，
+        //      上限 264dp，条数 8 → 50）；另外面板开着时把抽屉的横划手势也关掉
+        //      （新增 `HarnessUiState.composerOverlay`，与既有的 `webChatOpen` 同一套思路）。
+        //      两道都要：列表滚到顶/底时手势仍会外溢，而面板之外的横划也不该开抽屉。
+        //   ② **取消会话页顶部的「长按可选中复制…」提示条**（用户要求）。
+        //      连同 `copyHintDismissed` 状态与中英两条字符串一起删。
+        //   ③ **取消消息流末尾的「本次产生的文件」区块**（用户要求）。
+        //      原生侧删 `SessionFilesFooter` 与只服务它的 `sessionFiles` 变量；
+        //      WebView 侧同步删（`chat.html` 的 `<details id="files">` 元素、`setFiles`/
+        //      `openFile`、`window.dshChat.setFiles` 导出、`#files` 系列 CSS，
+        //      以及 ChatWebScreen 里那段推送）—— 两边显示同一批文件，只删一边会不一致。
+        //      注意顶部那个文件夹按钮**保留**：`sessionFileList` 仍被它的弹层用着。
+        versionCode = 10059
+        versionName = "2.2.34"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }

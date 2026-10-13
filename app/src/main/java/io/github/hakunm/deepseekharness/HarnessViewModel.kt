@@ -229,6 +229,19 @@ data class HarnessState(
      * 和上轮插件页那句「package.json 可能损坏」是同一类毛病。
      */
     val mentionFailed: Boolean = false,
+    /**
+     * 输入框上方是否**开着补全面板**（`@` 文件补全，或 `/` 命令补全）。
+     *
+     * 为什么这要进共享状态、而不是留在 ChatScreen 里：它要影响**外层抽屉的手势**。
+     * Material3 的 `ModalNavigationDrawer` 默认从屏幕任意位置横向拖动都能开，
+     * 而补全面板正好是贴着输入框、又长又宽的浮层 —— 用户在面板上横向划一下想看看
+     * 长文件名，抽屉就弹出来了（"会话/文件/插件/模型/设置"）。它和列表滚动在同一个
+     * 手势通道上抢触摸，所以只能把「面板开着」这个事实告诉外层。
+     *
+     * 与 WebView 那条 `webChatOpen` 是同一类修法：**关掉手势不影响正常使用**，
+     * 左上角汉堡按钮照样能开抽屉。
+     */
+    val composerOverlay: Boolean = false,
     val document: OpenDocument? = null,
     /** 会话文件面板正在查看的那一条（null 表示面板显示路径列表）。 */
     val sessionFileOpen: SessionFileOpen? = null,
@@ -1596,6 +1609,18 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
             if (page == null) copy(mentionEntries = null, mentionFailed = true)
             else copy(mentionEntries = page.entries, mentionFailed = false)
         }
+    }
+
+    /**
+     * 把「输入框上方的补全面板开着」这个事实同步出去，供外层抽屉决定是否响应滑动手势
+     * （见 [HarnessUiState.composerOverlay]）。
+     *
+     * 由 ChatScreen 在面板出现/消失时调用。只在**值真的变了**的时候写 state ——
+     * 这个函数会在重组路径上被调到，每次无条件 update 会白白推一串快照。
+     */
+    fun setComposerOverlay(active: Boolean) {
+        if (mutableState.value.composerOverlay == active) return
+        update { copy(composerOverlay = active) }
     }
 
     fun openEntry(entry: FileEntry) {

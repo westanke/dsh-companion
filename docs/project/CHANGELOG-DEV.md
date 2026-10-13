@@ -3,6 +3,60 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## 2026-10-13 · v2.2.34：会话页三处减法 + `@` 面板终于能滚
+
+纯 App 侧改动，不动插件。用户提的三条 + 一条补充。
+
+### 一、`@` 面板上划会拉出侧边栏
+
+用户描述是「在 @ 出来的文件列表上划，划出『会话、文件、插件、模型、设置』的侧边栏」，
+补充说「文件要随上划动作上划」。
+
+**看着像抽屉乱抢手势，实际根因在面板自己身上**：那个浮层用的是 `Column` + `forEach`，
+**它根本不能滚动**，还硬截 `.take(8)`。用户上划时列表纹丝不动 —— 手势没被任何控件消费，
+就顺着手势通道一路传到外层 `ModalNavigationDrawer`，抽屉于是被拉出来。
+
+**改法两层，缺一不可**：
+
+- 列表换 `LazyColumn`（上限 264dp，约 5 条半），条数 `.take(8)` → `.take(50)`。
+  能滚了就不该再截那么狠 —— 一个几十文件的目录里 8 条几乎等于找不到。
+- 面板开着时**关掉抽屉的横划手势**（新增 `HarnessUiState.composerOverlay`，
+  由 ChatScreen 同步、App.kt 消费，与既有的 `webChatOpen` 同一套思路）。
+  这道保险仍需要：列表滚到顶/底时手势会外溢，面板之外的横划也不该开抽屉。
+
+`/` 命令面板的「是否显示」判据也被抽成 `commandSuggestions()`，两处共用一条规则 ——
+否则面板可见时抽屉该不该关，会出现两套判据漂移。
+
+### 二、取消会话页顶部的「长按可选中复制…」提示条
+
+连 `copyHintDismissed` 状态与中英两条字符串一起删。
+
+### 三、取消「本次产生的文件」区块
+
+用户看着的是**原生**会话页，但 **WebView 版会话页另有一套**（把文件列表推给网页渲染）。
+用户确认「一并取消，保持一致」，所以两边都删：
+
+- 原生：删 `SessionFilesFooter` 组件、它的调用点，以及只服务它的 `sessionFiles` 变量；
+  中英 `session_files_footer` / `_hint` 两条字符串。
+- WebView：`chat.html` 的 `<details id="files">` 元素、`setFiles` / `openFile` 两个函数、
+  `window.dshChat.setFiles` 导出、`#files` 系列 CSS，以及 ChatWebScreen 里那段推送
+  （连带去掉已无用的 `SessionFileRefs` 导入）。
+
+**没删的**：顶部那个文件夹按钮与 `sessionFileList()` —— 前者是另一条入口，
+后者当初就是为了让「底部区块」和「顶部弹层」显示同一批文件才抽出来的，弹层还在用。
+
+**删 WebView 那段格外小心**：`chat.html` 顶部有条真实教训注释 ——
+v2.2.7 撤了 `#diag` 元素却漏删 `.onclick` 绑定，顶层语句在加载时 `$('diag')` 返回 null、
+抛 TypeError、整个脚本中断、`window.dshChat` 根本没定义，页面全白。所以这次删完
+专门把内联脚本抽出来跑了 `node --check`，确认语法完整。
+
+### 测了什么
+
+- `:app:testDebugUnitTest` **273 用例 / 0 失败**。
+- 编译无未使用导入告警；grep 确认 `copy_hint`、`session_files_footer`、`SessionFilesFooter`、
+  `setFiles`、`openFile`、`id="files"` 全无残留。
+- `chat.html` 内联脚本 `node --check` 通过（防白屏）。
+
 ## 2026-10-13 · v2.2.33：修 `@` 补全 —— 它从写出来就没成功列出过文件
 
 配套插件端 v2.3.5。用户报「APP 会话中使用 `@` 出现问题」，截图里面板只显示

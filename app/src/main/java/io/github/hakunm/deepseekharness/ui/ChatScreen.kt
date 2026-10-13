@@ -114,6 +114,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -434,6 +435,20 @@ private fun ChatDetail(
     LaunchedEffect(state.pendingText) {
         if (state.pendingText.isNotBlank()) message = state.pendingText
     }
+    // 输入框上方的补全面板（`@` 文件 / `/` 命令）开着时，**关掉外层抽屉的横向滑动手势**。
+    //
+    // 这个浮层贴着输入框、又长又宽，用户在它上面横向划一下（想看被截断的长文件名，
+    // 或者只是手抖），`ModalNavigationDrawer` 就把「会话/文件/插件/模型/设置」拉出来了 ——
+    // 两者在同一个手势通道上抢触摸，只能在这里把「面板开着」告诉外层。
+    // 判据与真正弹出面板的那两处**共用同一个函数**，不会漂移。
+    val composerOverlayActive = MentionQuery.activeStart(message) != null ||
+        commandSuggestions(message, state.commands).isNotEmpty()
+    LaunchedEffect(composerOverlayActive) { viewModel.setComposerOverlay(composerOverlayActive) }
+    // 会话切走/页面离开时面板自然消失，但状态还留在 ViewModel 里，会让抽屉手势一直失效 ——
+    // 那比误触更难发现（用户只会觉得「抽屉划不开了」）。所以离开时主动清掉。
+    DisposableEffect(Unit) {
+        onDispose { viewModel.setComposerOverlay(false) }
+    }
     var modelSheet by remember(selected.id) { mutableStateOf(false) }
     var filesSheet by remember(selected.id) { mutableStateOf(false) }
     var tasksExpanded by rememberSaveable(selected.id) { mutableStateOf(true) }
@@ -498,15 +513,7 @@ private fun ChatDetail(
         .filter { showContext || it.kind != ChatItemKind.CONTEXT }
     val displayItems = historyItems + liveItems
     val todos = state.history?.todoItems().orEmpty()
-    // 只取**最后一次运行之后**的文件：新回复还在流式输出时（liveChat != null）不显示，
-    // 否则文件列表会随着每个工具调用闪一下 —— 那正是网页版「会话结束后才出现」的由来。
-    // 与标题栏文件夹弹层共用同一个来源（见 sessionFileList 的 KDoc）。
-    val sessionFiles = remember(state.history, state.liveChat) {
-        if (state.liveChat != null) emptyList() else sessionFileList(state.history)
-    }
     val listState = rememberLazyListState()
-    // 复制手势提示只需出现一次：记住它被关掉，而不是每次进会话都啰嗦一遍。
-    var copyHintDismissed by rememberSaveable { mutableStateOf(false) }
     // 用户是否在底部附近——只在底部时才自动滚动，否则不打扰翻历史。
     //
     // 用 `derivedStateOf` 而不是 `LaunchedEffect` + `mutableStateOf`：
@@ -573,34 +580,6 @@ private fun ChatDetail(
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            // 复制手势提示。
-            //
-            // 为什么需要它：长按既用来「选中片段」又曾经被用来「复制整条」，
-            // 两个手势互相抢，用户既选不了也猜不出怎么复制。改成双击复制之后，
-            // 行为从旧版换掉了，不说一声用户会以为功能没了 —— 所以明确写在最上面。
-            if (displayItems.isNotEmpty() && !copyHintDismissed) {
-                item(key = "copy-hint") {
-                    Row(
-                        Modifier.fillMaxWidth().padding(bottom = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            stringResource(R.string.copy_hint),
-                            modifier = Modifier.weight(1f),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                        Text(
-                            stringResource(R.string.copy_hint_dismiss),
-                            modifier = Modifier
-                                .combinedClickable(onClick = { copyHintDismissed = true })
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
-                            color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                    }
-                }
-            }
             if (state.history?.hasMore == true) {
                 item {
                     TextButton(onClick = viewModel::loadOlderHistory, modifier = Modifier.fillMaxWidth()) {
@@ -628,17 +607,6 @@ private fun ChatDetail(
                     onAnswer = { answer -> viewModel.sendMessage(answer, steer = false) },
                     genUiDebug = state.genUiDebug,
                 )
-            }
-            // 消息流末尾的「本次产生的文件」。
-            //
-            // 网页版是这个形态：会话结束后，文件直接列在对话下方，不必点任何入口。
-            // App 原先只有一个文件夹图标按钮挂在顶栏，用户得先知道它存在 ——
-            // 于是「功能其实有，但用户找不到」。这里补上自动呈现的那一份，
-            // 顶栏按钮保留（大屏下翻历史时仍然好用），两者不冲突。
-            if (state.liveChat == null && sessionFiles.isNotEmpty()) {
-                item(key = "session-files-footer") {
-                    SessionFilesFooter(sessionFiles, viewModel::openSessionFile)
-                }
             }
         }
         // 浮动按钮：不在底部时显示，点击跳到**会话尾部**。
@@ -997,67 +965,6 @@ private fun SessionFileList(state: HarnessState, onOpen: (String) -> Unit) {
                     )
                 }
             }
-        }
-    }
-}
-
-/**
- * 消息流末尾的「本次产生的文件」区块。
- *
- * 形态对齐网页版：会话结束后，文件直接出现在对话下方，不需要用户去找入口。
- * 顶栏那个文件夹按钮保留 —— 翻历史消息时它更省事，两者不重复。
- *
- * 默认折叠：文件多的时候（实测单会话能提取出 30 个路径）铺满一屏会把对话顶没，
- * 但完全不出现又等于没做，所以折叠 + 显示条数，让用户自己决定看不看。
- */
-@Composable
-private fun SessionFilesFooter(refs: List<SessionFileRef>, onOpen: (String) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(top = 14.dp, bottom = 6.dp),
-    ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(MaterialTheme.shapes.medium)
-                .clickable { expanded = !expanded }
-                .padding(vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Icon(
-                Icons.Outlined.FolderOpen,
-                contentDescription = null,
-                modifier = Modifier.size(17.dp),
-                tint = MaterialTheme.colorScheme.secondary,
-            )
-            Text(
-                stringResource(R.string.session_files_footer),
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                refs.size.toString(),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Icon(
-                if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                contentDescription = null,
-                modifier = Modifier.size(19.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (expanded) {
-            Text(
-                stringResource(R.string.session_files_footer_hint),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 3.dp),
-            )
-            refs.forEach { ref -> SessionFileRow(ref) { onOpen(ref.path) } }
         }
     }
 }
@@ -2240,7 +2147,10 @@ private fun MentionSuggestions(
         // 目录排前面：用户 `@` 一个文件夹继续往里选的场景很常见，
         // 混在一起时文件夹总被文件名淹掉。
         .sortedWith(compareByDescending<FileEntry> { it.kind == "directory" }.thenBy { it.name.lowercase() })
-        .take(8)
+        // 列表已经可滚动（见下方 LazyColumn），就不该再硬截 8 条 —— 一个几十文件的
+        // 目录里，8 条几乎等于让人找不到。仍留一个上限：filter/sort 是跑在完整
+        // entries 上的，超大目录下没有上限会让每次击键都重算几万条。
+        .take(50)
     Surface(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
         shape = MaterialTheme.shapes.medium,
@@ -2276,52 +2186,81 @@ private fun MentionSuggestions(
                     style = MaterialTheme.typography.bodySmall,
                 )
             } else {
-                matches.forEach { entry ->
-                    val isDir = entry.kind == "directory"
-                    val absolute = MentionQuery.absolute(cwdAbsolute, cwd.orEmpty(), entry.path)
-                    Row(
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                            // 目录结尾补 `/` 且**不加空格**：用户大概率要继续往里选，
-                            // 直接接着打下一级正好；文件则补空格，把这一条结束掉。
-                            .clickable { onSelect("@$absolute${if (isDir) "/" else " "}") }
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Icon(
-                            if (isDir) Icons.Outlined.Folder else Icons.Outlined.InsertDriveFile,
-                            null,
-                            Modifier.size(19.dp),
-                            tint = MaterialTheme.colorScheme.secondary,
-                        )
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                entry.name + if (isDir) "/" else "",
-                                style = MaterialTheme.typography.labelLarge,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
+                // **必须可滚动**：此前这里是 `Column` + `forEach`，列表本身不动 ——
+                // 用户在面板上往上划想翻更多条目时，手势没被任何东西消费，顺着手势通道
+                // 一路传到外层 `ModalNavigationDrawer`，把「会话/文件/插件/模型/设置」
+                // 抽屉拉了出来。列表能滚，这个问题才从根上消失（外层的
+                // `composerOverlay` 只是第二道保险）。
+                //
+                // 高度上限：面板贴在输入框上方，铺满整屏会把对话顶没；264dp 大约
+                // 5 条半，能滚说明还有更多。
+                LazyColumn(Modifier.heightIn(max = 264.dp)) {
+                    items(matches, key = { it.path }) { entry ->
+                        val isDir = entry.kind == "directory"
+                        val absolute = MentionQuery.absolute(cwdAbsolute, cwd.orEmpty(), entry.path)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                // 目录结尾补 `/` 且**不加空格**：用户大概率要继续往里选，
+                                // 直接接着打下一级正好；文件则补空格，把这一条结束掉。
+                                .clickable { onSelect("@$absolute${if (isDir) "/" else " "}") }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Icon(
+                                if (isDir) Icons.Outlined.Folder else Icons.Outlined.InsertDriveFile,
+                                null,
+                                Modifier.size(19.dp),
+                                tint = MaterialTheme.colorScheme.secondary,
                             )
-                            // 第二行给**相对工作目录的路径**：绝对路径往往太长被截断，
-                            // 而用户判断「是不是我要的那个」靠的通常就是中间那几级目录。
-                            Text(
-                                entry.path,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                        if (!isDir && entry.size > 0) {
-                            Text(
-                                ChatContentParts.formatBytes(entry.size),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.labelSmall,
-                            )
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    entry.name + if (isDir) "/" else "",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                // 第二行给**相对工作目录的路径**：绝对路径往往太长被截断，
+                                // 而用户判断「是不是我要的那个」靠的通常就是中间那几级目录。
+                                Text(
+                                    entry.path,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                            if (!isDir && entry.size > 0) {
+                                Text(
+                                    ChatContentParts.formatBytes(entry.size),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * `/` 命令面板此刻会显示哪几条（空列表 = 不显示）。
+ *
+ * 抽成独立函数是为了让**外层抽屉**也能问到同一个判据：面板可见时必须关掉抽屉的
+ * 横向滑动手势（见 [HarnessUiState.composerOverlay]），否则用户在面板上横划一下就
+ * 把「会话/文件/插件/模型/设置」拉出来了。两处共用一条规则，判据不会漂移。
+ */
+private fun commandSuggestions(
+    value: String,
+    commands: List<CommandDescriptor>,
+): List<CommandDescriptor> {
+    val query = value.removePrefix("/")
+    return if (value.startsWith("/") && query.none { it.isWhitespace() }) {
+        commands.filter { it.name.startsWith(query, ignoreCase = true) }.take(5)
+    } else {
+        emptyList()
     }
 }
 
@@ -2331,12 +2270,7 @@ private fun CommandSuggestions(
     commands: List<CommandDescriptor>,
     onSelect: (String) -> Unit,
 ) {
-    val query = value.removePrefix("/")
-    val suggestions = if (
-        value.startsWith("/") && query.none { it.isWhitespace() }
-    ) {
-        commands.filter { it.name.startsWith(query, ignoreCase = true) }.take(5)
-    } else emptyList()
+    val suggestions = commandSuggestions(value, commands)
     AnimatedVisibility(visible = suggestions.isNotEmpty()) {
         Surface(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),

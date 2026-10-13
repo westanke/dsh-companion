@@ -219,16 +219,6 @@ pre:hover .copy{opacity:1}
 #diag[hidden]{display:none}
 /* 提示气泡原来 bottom:88px，同样会压到输入区，抬到输入框之上 */
 #toast{bottom:104px}
-/* ── 会话文件 ── */
-#files{margin:0 12px 10px;padding:10px 12px;background:var(--card);
-  border:1px solid var(--line);border-radius:10px;font-size:13px;flex:0 0 auto}
-#files[hidden]{display:none}
-#files .body{margin-top:7px;max-height:30vh;overflow:auto}
-#files .f{display:block;width:100%;text-align:left;border:0;background:transparent;
-  color:var(--fg);padding:5px 6px;border-radius:6px;cursor:pointer}
-#files .f:active{background:var(--line)}
-#files .f .n{font-size:13px}
-#files .f .p{font-size:11px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;word-break:break-all}
 /* ── dsh-ui 卡片 ── */
 .card{border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0;background:var(--card)}
 .card .t{font-weight:700;font-size:14px;margin-bottom:8px}
@@ -315,11 +305,6 @@ pre:hover .copy{opacity:1}
 <details id="todos" hidden>
   <summary class="hd"><span class="caret">▸</span><span>当前任务</span><span class="cnt" id="todoCnt"></span></summary>
   <div id="todoList"></div>
-</details>
-
-<details id="files" hidden>
-  <summary class="hd"><span class="caret">▸</span><span>本次产生的文件</span><span class="cnt" id="filesCnt"></span></summary>
-  <div class="body" id="filesBody"></div>
 </details>
 
 <div id="log"><div id="empty">正在读取会话…</div></div>
@@ -2002,42 +1987,8 @@ document.addEventListener("click", function (e) {
  * `null.onclick = ...` 抛 TypeError → 整个脚本当场中断 →
  * window.dshChat 根本没定义 → 页面全白，只剩一句被 file:// 屏蔽掉细节的
  * 「Script error. @0」。撤元素时一定要连它的绑定一起删。 */
-/* 待办与文件现在都是 <details>，展开收起由浏览器原生处理，不需要 JS 绑定。
+/* 待办现在是 <details>，展开收起由浏览器原生处理，不需要 JS 绑定。
 
-
-/* ═══════════ 1. 会话产生的文件 ═══════════
-   路径由原生用 SessionFileRefs 提取后推来 —— 那套「哪些路径算文件」的取舍
-   （不解析 bash/grep 的 path，因为那是搜索范围）不该在这里重写一遍。 */
-var FILES = [];
-function setFiles(list) {
-  FILES = list || [];
-  var box = $('files');
-  if (!FILES.length) { box.hidden = true; return; }
-  box.hidden = false;
-  $('filesCnt').textContent = String(FILES.length);
-  $('filesBody').innerHTML = FILES.map(function (f) {
-    var name = String(f.path || '').split('/').pop() || f.path;
-    return '<button class="f" data-p="' + esc(f.path) + '">' +
-      '<div class="n">' + esc(name) + '</div>' +
-      '<div class="p">' + esc(f.path) + '</div></button>';
-  }).join('');
-  $('filesBody').querySelectorAll('[data-p]').forEach(function (b) {
-    b.onclick = function () { openFile(b.getAttribute('data-p')); };
-  });
-}
-function openFile(path) {
-  if (!path) return;
-  api('/roots/resolve?path=' + encodeURIComponent(path))
-    .then(function (r) {
-      var rootId = r && (r.rootId || r.id);
-      if (!rootId) { toast('这个文件不在授权目录里'); return; }
-      return api('/roots/' + encodeURIComponent(rootId) + '/content?path=' +
-                 encodeURIComponent(path));
-    })
-    .then(function () { toast('文件已在电脑上，不便在手机上直接打开'); })
-    .catch(function (e) { toast('打不开：' + e.message); });
-}
-/* 同上：<details> 原生处理收起，不再手工切高度。
 
 /* ═══════════ 2. dsh-ui 卡片 ═══════════
    规格由原生 parseGenUi 解析后推来；这里只负责画。
@@ -2461,7 +2412,6 @@ window.dshChat = {
     lastLiveItems = null;
   },
 
-  setFiles: setFiles,
   setCards: setCards,
   addAtt: addAtt,
   clearAtts: function () { ATTS = []; renderAtts(); },
