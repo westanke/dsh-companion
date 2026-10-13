@@ -6,6 +6,7 @@ import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.calculateZoom
@@ -330,14 +331,23 @@ private fun FileRow(entry: FileEntry, viewModel: HarnessViewModel) {
             )
         }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-            // 文件名最多 3 行。
+            // 文件名放不下时**横向滚动**（跑马灯），而不是被省成 `DeepSeek-Harness-…`。
             //
-            // 原来是 `maxLines = 1`：手机屏窄，稍长的名字（比如
-            // `DeepSeek-Harness-companion-v2.2.34.apk`）就被省成 `DeepSeek-Harness-…`，
-            // 而第二行给的是「类型 · 大小」—— 那对区分文件**毫无帮助**，于是用户
-            // 「看不完名字，判断不出到底是哪个文件」（真机反馈）。放宽到 3 行足以覆盖
-            // 绝大多数文件名；再长的仍留 `Ellipsis` 兜底，不至于把一行撑满整屏。
-            Text(entry.name, maxLines = 3, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium)
+            // 上一步试过放宽到 3 行：绝大多数名字够用，但超长的仍会截断 —— 而这里的
+            // 文件名恰恰经常「又长又前缀雷同」（几个 `DeepSeek-Harness-companion-v2.2.xx.apk`
+            // 截出来长得一模一样），于是用户「判断不出到底是哪个文件」。滚动能保证
+            // **总有机会看全**；第二行那个「类型 · 大小」本来就帮不上区分。
+            //
+            // `basicMarquee` 只在文本**溢出时**才动，短名字完全不受影响。
+            // `iterations = Int.MAX_VALUE` 是持续滚动 —— 只滚一遍的话动画结束会回到
+            // 起点，等于没解决；默认每轮之间还有 1.2s 停顿，不至于一直在动。
+            Text(
+                entry.name,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE),
+                style = MaterialTheme.typography.bodyMedium,
+            )
             Text(
                 if (entry.kind == "directory") kindLabel else "$kindLabel · ${formatBytes(entry.size)}",
                 style = MaterialTheme.typography.labelSmall,
@@ -393,13 +403,14 @@ private fun EditorPane(
                 }
             }
             Column(Modifier.weight(1f).padding(start = if (onBack == null) 8.dp else 0.dp)) {
-                // 与列表里同一个理由：标题栏单行放不下长文件名，用户就看不出打开的是哪个。
-                // 这里是标题，给 2 行已经够；路径那行仍在下方兜底。
+                // 与列表里同一个理由，改成滚动：标题栏比列表项还窄，长文件名更容易看不全，
+                // 而「我打开的到底是哪个文件」正是靠这一行判断的。路径那行仍在下方兜底。
                 Text(
                     document.entry.name,
                     style = MaterialTheme.typography.titleMedium,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE),
                 )
                 Text(
                     document.entry.path,
