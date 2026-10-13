@@ -124,7 +124,7 @@ fun SettingsScreen(state: HarnessState, viewModel: HarnessViewModel) {
             ) {
                 scopes.forEach { scope ->
                     Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainer) {
-                        Text(scope, Modifier.padding(horizontal = 10.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium)
+                        Text(scopeLabel(scope), Modifier.padding(horizontal = 10.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium)
                     }
                 }
             }
@@ -296,4 +296,26 @@ private fun SwitchRow(
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
+}
+
+/**
+ * 设备授权 scope 的药丸标签：跟着界面语言走。
+ *
+ * scope 本身是协议级标识（`chat.read` 这类），服务端只认它，但**给人看的**
+ * 不该是协议串 —— 中文界面露一串英文小点，用户得自己猜 `settings.read`
+ * 是「能看设置」还是「能改设置」。
+ *
+ * 认不出的 scope 保留原文：服务端将来新增权限时，与其编一个名字把人带偏，
+ * 不如让它原样露出来，至少能和文档对得上（与错误码表同一原则）。
+ */
+@Composable
+private fun scopeLabel(scope: String): String = when (scope) {
+    "chat.read" -> stringResource(R.string.scope_chat_read)
+    "chat.write" -> stringResource(R.string.scope_chat_write)
+    "files.read" -> stringResource(R.string.scope_files_read)
+    "files.write" -> stringResource(R.string.scope_files_write)
+    "files.delete" -> stringResource(R.string.scope_files_delete)
+    "settings.read" -> stringResource(R.string.scope_settings_read)
+    "settings.write" -> stringResource(R.string.scope_settings_write)
+    else -> scope
 }

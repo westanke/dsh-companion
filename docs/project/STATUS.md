@@ -1,21 +1,26 @@
 # 当前状态
 
-- 日期：2026-10-11
-- 阶段：本 fork 的 **2.x 版本线**。`v2.2.23`（`versionCode` 10048）已出包、已打 tag、已在 GitHub 与 Gitee 双站发布 Release
-- 版本线：v1.1.0 多地址连接 + 配置导入 → v1.2.0 插件清单页 → v1.4.0 会话文件与图片 → v1.9.0 长按选中/双击复制 + 文件按类型预览 → v2.0.0 起会话详情页增加 WebView 实现（2.2.15 起把网页版呈现方式反向移植回原生）→ **v2.2.23 问答卡片、图片 PDF 预览、工具调用详情**
+- 日期：2026-10-13
+- 阶段：本 fork 的 **2.x 版本线**。`v2.2.27`（`versionCode` 10052）已出包、已打 tag、已在 GitHub 与 Gitee 双站发布 Release
+- 版本线：v1.1.0 多地址连接 + 配置导入 → v1.2.0 插件清单页 → v1.4.0 会话文件与图片 → v1.9.0 长按选中/双击复制 + 文件按类型预览 → v2.0.0 起会话详情页增加 WebView 实现（2.2.15 起把网页版呈现方式反向移植回原生）→ v2.2.23 问答卡片、图片 PDF 预览、工具调用详情 → v2.2.24–2.2.26 模型失败可见、图片交接可用、出错文案跟随界面语言 → **v2.2.27 真机七问题收口（返回键、推理档、自动滚动、回车换行、网络文案、权限中文化、更早消息分页）**
 - 包名：`io.github.hakunm.deepseekharness`；Android 基线：min SDK 26、target/compile SDK 36、JDK 17
-- 插件基线：`dsh-remote-bridge` **≥ 2.2.2**（旧名 `dsh-workspace`；Web 挂载前缀仍是历史名 `/dsh-workspace-api`，未随改名变动）。问答卡片**要求 ≥ 2.2.2**，更早的插件没有 `/questions` 端点
-- 最近验证：**24 个测试类 / 242 用例 / 0 失败**（口径：跑 `scripts/build.sh :app:testDebugUnitTest`，再数 `app/build/test-results/` 下的 XML）。这个数字随代码变化，不要当常量引用
-- 当前产物：`artifacts/` 四包 + `SHA256SUMS.txt`：
-  - `DeepSeek-Harness-companion-v2.2.23.apk`，2,825,262 字节，SHA-256 `54105945fa5926dbbe37880553748f9867637ba09c8613c5a94874f84b8768cd`（当前版本）
+- 插件基线：`dsh-remote-bridge` **≥ 2.3.1**（旧名 `dsh-workspace`；Web 挂载前缀仍是历史名 `/dsh-workspace-api`，未随改名变动）。「加载更早消息」**要求 ≥ 2.3.1** —— 2.3.0 及更早的 `history()` 会忽略 `beforeSeq`，点按钮不会有任何反应
+- 最近验证：**24 个测试类 / 256 用例 / 0 失败**（口径：跑 `scripts/build.sh :app:testDebugUnitTest`，再数 `app/build/test-results/` 下的 XML）。这个数字随代码变化，不要当常量引用
+- 当前产物：`artifacts/` 六包 + `SHA256SUMS.txt`：
+  - `DeepSeek-Harness-companion-v2.2.27.apk`，**2,869,642 字节**（release 构建，R8 + 资源裁剪），SHA-256 `af81922736e04659cd1644ad861d1e92c8fb80e252d245763970f4fba2aa5c24`（当前版本）
+  - `v2.2.26` / `v2.2.25` / `v2.2.24` / `v2.2.23`，均为 release 构建（2.8~2.9 MB 量级）
   - `DeepSeek-Harness-companion-v1.9.0.apk`，2,714,772 字节（旧签名，留作对照）
   - `DeepSeek-Harness-v1.0.0.apk` 与 `DeepSeek-Harness-compat02-release.apk`（上游基线，各 2,561,512 字节）。`.gitignore` 特意用 `!` 保留这两个，用途是比对「本 fork 证书 ≠ 上游证书」，**不要删**
-- 签名：**当前用 Android 调试密钥**（`CN=DSH Debug`，证书 SHA-256 `f0e6c7011a78eda9b83e0a67fe896b6efecbd376116b7a16d5ad42e49df0c34a`）。**项目发布证书已丢失** —— v1.9.0 及更早是 `CN=DSH Pocket Client`（`4e7fa1db395c4a2436e7a96fcdf6c606e20a14bad55dfcd60c80892f4f92deb3`），两者不同，**跨签名升级必须先卸载**（会清除已保存的连接）。与上游 `CN=Hakunm` 同样不同。当前包只能自用/内部分发
+- **构建类型**：正式包一律 `scripts/build.sh assembleRelease`。debug 包不混淆、不裁剪资源，体积约 **21.8 MB**，与 release 的 2.87 MB 差 7.5 倍 —— 只看体积就能判断打错没打错
+- 签名：**`dsh-release.jks`**（`CN=DSH Pocket Client`，证书 SHA-256 `8b2ba797589da844b779941fec213da3432633062744f64bc916e62df9dbf68a`；alias `dshrelease`，口令见 `.secrets/deepseek-harness-android/signing.properties`，该文件与 `*.jks` 都在 `.gitignore` 内）
+  - 2026-10-11 说明：**原始那把发布钥匙的密码已彻底丢失**（本机/仓库/CI/git 历史全查过），现用的是**重新生成**的钥匙，主题刻意与旧钥匙一致（同为 `CN=DSH Pocket Client`）。
+  - 后果：**它不是旧钥匙** —— v1.9.0 及更早（旧 `CN=DSH Pocket Client`，证书 `4e7fa1db…`）与上游 `CN=Hakunm` 都盖不上去，跨签名升级**必须先卸载**（会清除已保存的连接）。**v2.2.24 之后的包彼此可以直接覆盖**（v2.2.26 → v2.2.27 实测同一把钥匙）
+  - 旧钥匙已归档在同目录 `archived-unknown-password/` 下，保留不删
 - 仓库：`https://github.com/westanke/dsh-companion`、`https://gitee.com/westanke/dsh-companion`；上游 `Hakunm/dsh-android-app` 只作参考，**不推送**
-- 已打 tag：`v1.1.0` / `v1.2.0` / `v1.4.0` / `v1.9.0` / **`v2.2.20`** / **`v2.2.23`**（`git tag` 实测）。v2.0.0–v2.2.19 之间没有 tag
-- 真机验收：**问答卡片已端到端验证通过**（内核提问 → 插件推帧 → App 渲染 → 作答 → 答案回到内核，审计表有完整证据链）。**尚未逐项验收**：图片/PDF 预览的翻页与缩放手感、工具调用详情的展开观感、长按选中/双击复制的手势边界、`dsh-ui` 卡片观感、HTML 结构预览排版、输入区 `⋯` 菜单在窄屏与各输入法下的可达性
+- 已打 tag：`v1.1.0` / `v1.2.0` / `v1.4.0` / `v1.9.0` / `v2.2.20` / `v2.2.23` / **`v2.2.26`** / **`v2.2.27`**（`git tag` 实测）。v2.0.0–v2.2.19 之间没有 tag
+- 真机验收：**问答卡片已端到端验证通过**（内核提问 → 插件推帧 → App 渲染 → 作答 → 答案回到内核，审计表有完整证据链）。v2.2.27 的七项修复**待本轮真机验收**。**尚未逐项验收**：图片/PDF 预览的翻页与缩放手感、工具调用详情的展开观感、长按选中/双击复制的手势边界、`dsh-ui` 卡片观感、HTML 结构预览排版、输入区 `⋯` 菜单在窄屏与各输入法下的可达性
 - 已知缺口：单测夹具 `ConnectionShareInteropTest.kt` 仍内嵌一枚**已吊销**的真实设备令牌；该文件在 `app/src` 内，是否改写夹具待定（文档侧已全部脱敏）
-- 其他文档：`docs/project/CHANGELOG-DEV.md`（逐版开发日志）、`docs/project/PARITY.md`（对等矩阵）、`docs/project/webview-report.md`（WebView 线复盘）、`docs/project/webview-parity-audit.md`（原生 vs WebView 能力边界）、`docs/project/webview-port-todo.md`（移植清单）、`docs/task-14-session-audit.md`（能力缺口审计）、`README.en.md`（英文 README，已同步 2.2.23）
+- 其他文档：`docs/project/CHANGELOG-DEV.md`（逐版开发日志）、`docs/project/PARITY.md`（对等矩阵）、`docs/project/webview-report.md`（WebView 线复盘）、`docs/project/webview-parity-audit.md`（原生 vs WebView 能力边界）、`docs/project/webview-port-todo.md`（移植清单）、`docs/task-14-session-audit.md`（能力缺口审计）、`README.en.md`（英文 README，已同步 2.2.27）
 - 插件仓库侧的排查复盘值得一读：`dsh-remote-bridge/docs/project/RETRO-question-card.md` —— 问答卡片「一直不显示」的排查里，**卡片代码从头到尾都是对的**，错的是排查方法（先解释现象、却没先确认现象真的发生过）
 - 阻塞项：`PARITY.md` 中仍有后续 DSH WebUI 能力未对等；`IME-001` 继续扩大不同厂商键盘实机覆盖
-- 下一步：真机验收上一条列的未验收项；按需补齐 DSH WebUI 对等能力（设置五大组、终端、插件启停等需要先改插件开 REST 通道）
+- 下一步：真机验收 v2.2.27 的七项修复与上一条列的未验收项；按需补齐 DSH WebUI 对等能力（设置五大组、终端、插件启停等需要先改插件开 REST 通道）

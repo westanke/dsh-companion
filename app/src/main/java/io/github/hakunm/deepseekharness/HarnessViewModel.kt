@@ -57,8 +57,15 @@ import io.github.hakunm.deepseekharness.data.binaryPreviewByteLimit
 import io.github.hakunm.deepseekharness.data.previewKind
 import io.github.hakunm.deepseekharness.data.previewKindOf
 import java.io.Closeable
+import java.io.EOFException
+import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.net.ConnectException
+import java.net.SocketException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import javax.net.ssl.SSLException
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 import kotlinx.coroutines.CancellationException
@@ -528,11 +535,18 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
             }
             return
         }
-        val recorded = applyProbes(connection.host, connection.probes).withPreferred(connection.endpoint.id)
-        hostStore.upsert(recorded)
+        // 网络（currentDevice 与 loadSnapshot 的一串 REST 调用）和磁盘落盘
+        // 必须落在 IO 线程：restoreConnection 从主线程协程直接调进来，这里不切换，
+        // 冷启动自动重连第一发就是 NetworkOnMainThreadException（真机启动必现）。
+        // 在被调函数内部切换，比逐个约束调用方更稳 —— 手动连接走 launchOperation
+        // 已是 IO，重复 withContext 只是无害空转。
+        val (recorded, snapshot) = withContext(Dispatchers.IO) {
+            val recorded = applyProbes(connection.host, connection.probes).withPreferred(connection.endpoint.id)
+            hostStore.upsert(recorded)
+            val resolved = device ?: connection.client.currentDevice()
+            recorded to loadSnapshot(connection.client, resolved)
+        }
         active = connection
-        val resolvedDevice = device ?: connection.client.currentDevice()
-        val snapshot = loadSnapshot(connection.client, resolvedDevice)
         update {
             snapshot.copy(
                 restoring = false,
@@ -1932,8 +1946,28 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
     private fun childPath(parent: String, name: String): String =
         if (parent.isBlank()) name.trim('/') else "$parent/${name.trim('/')}"
 
+    /**
+     * 异常 → 给人看的句子。分三层：
+     *
+     * 1. [DshApiException]（服务端错误码）→ 按码查 [localizedErrorRes] 本地化表；
+     * 2. 网络层 IOException 家族 → 按**异常类型**本地化。这层以前直接露
+     *    `error.message` 原文——`DshConnectionException` 的 "All N endpoint(s)
+     *    unreachable: ..."、OkHttp 的 "failed to connect to ..." 全是英文，
+     *    中文界面下启动报错就是一整句英文。子类必须在父类 [SocketException] /
+     *    [IOException] 之前判断（超时/拒绝/解析失败都是它们的子类）；
+     * 3. 其余未知异常 → 保留原文，能搜能贴给开发者（与错误码表「认不出不硬猜」
+     *    同一原则）。
+     */
     private fun messageOf(error: Throwable): String = when (error) {
         is DshApiException -> localizedError(error.code, error.message)
+        is DshConnectionException -> appString(R.string.err_connect_all_unreachable)
+        is SocketTimeoutException -> appString(R.string.err_network_timeout)
+        is UnknownHostException -> appString(R.string.err_network_unreachable)
+        is ConnectException -> appString(R.string.err_network_refused)
+        is SSLException -> appString(R.string.err_network_reset)
+        is SocketException -> appString(R.string.err_network_reset)
+        is EOFException -> appString(R.string.err_network_reset)
+        is IOException -> appString(R.string.err_network_generic, error.message ?: error::class.java.simpleName)
         else -> error.message ?: error::class.java.simpleName
     }
 
