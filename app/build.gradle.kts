@@ -525,8 +525,27 @@ android {
         //      而非 AnimatedVisibility —— 这里 BoxScope/ColumnScope 混排，
         //      AnimatedVisibility 两个重载会被解析歧义卡住，自己驱动 alpha 既
         //      绕开那个坑，也把出现/隐去平滑化（140ms）。
-        versionCode = 10054
-        versionName = "2.2.29"
+        // 2.2.30 = 熄屏断流、亮屏接回（策略由用户定：**熄屏=断连，亮屏=实时**）。
+        //   这是耗电的第二大头：`eventSubscription` 原先只在 onCleared() 与主动断开时
+        //   关闭，App 切后台/熄屏后 WebSocket 一直连着 —— 息屏后 WiFi 射频与 TCP
+        //   keepalive 全程在线，系统还会反复唤醒进程。
+        //   ① MainActivity 动态注册 ACTION_SCREEN_OFF / ACTION_SCREEN_ON
+        //      （`ContextCompat.registerReceiver` + RECEIVER_NOT_EXPORTED：API 34 起
+        //      动态接收器强制要声明导出性，不写直接抛 SecurityException）。
+        //   ② **为什么不用 onStop**：切到别的 App、分屏时屏幕还亮着，用户看得到内容、
+        //      实时性仍有价值，那时断流是白白牺牲；只有真熄屏（电源键/合盖/超时黑屏）
+        //      保持连接才是纯耗电。`ACTION_SCREEN_OFF` 正好把这两种情形分开。
+        //   ③ ViewModel 新增 pauseEvents() / resumeEvents()：熄屏只关流，
+        //      **保留 active 连接与令牌**（不走 disconnect() —— 那会把 active 一起清掉，
+        //      亮屏得重走探活+配对校验，代价远大于收益）。
+        //   ④ 亮屏时补三样，缺一样用户就会觉得「手机卡住了/什么也没发生」：
+        //      会话列表 + 当前会话历史（复用 scheduleChatRefresh，自带 400ms 去抖与单飞），
+        //      以及**审批面板与待答问题** —— 这两类不走 history，熄屏期间若正好有
+        //      审批在等或 Agent 提问了，不单独补刷新就永远不出现，而电脑端还在等决定。
+        //   ⑤ `eventsPaused` 标志用来区分「熄屏暂停」与「用户主动断开」：disconnect()
+        //      会清掉它，否则下次亮屏会把用户刚断开的连接又接回去。
+        versionCode = 10055
+        versionName = "2.2.30"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
