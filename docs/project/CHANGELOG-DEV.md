@@ -3,6 +3,126 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## 2026-10-13 · v2.2.27：真机反馈的七个问题一次收口（已发版）
+
+七条问题里六条在客户端、一条在插件。逐条写清**现象 → 根因 → 修法**。
+
+### ① 「加载更早消息」点了没反应（插件侧修复）
+
+**根因在插件**：`dsh-remote-bridge` 的 `history()` 只用 `follow()` 的开场帧取历史，
+**把客户端传的 `beforeSeq` 整个忽略** —— 传不传都返回同一窗。客户端把返回的与已有的
+一合并、按 `seq` 去重，自然什么都没多出来。
+
+修法：带 `beforeSeq` 时改走内核 `sessionController.page()`，`throughSeq` 取
+开场帧的 `cursor`（内核要求该值必须取自对应 follow 开场帧，硬编码会返回 HTTP 200 +
+空页这种静默失败）。详见插件侧 `CHANGELOG-DEV.md` 的 v2.3.1 条目。
+
+### ② 会话页返回键/左滑直接退出 APP
+
+**根因**：原生 `ChatDetail` 只把 `onBack` 传给了顶栏返回按钮，**没有注册 `BackHandler`** ——
+系统返回键直接穿透到 Activity 默认行为（退出 APP）。WebView 版 `ChatWebScreen` 早就有
+`BackHandler`，原生这条一直是漏的。
+
+修法：`ChatScreen.kt` 的 `ChatDetail` 补 `onBack?.let { BackHandler(enabled = true, onBack = it) }`，
+与 WebView 版对齐。现在首次返回退到会话列表，再按才退出。
+
+### ③ 从 high 档会话切到不支持推理的模型，切不过去
+
+**根因**：`ModelRow` 点击时传的是
+
+```kotlin
+model.reasoning?.defaultEffort ?: current.reasoningEffort
+```
+
+目标模型**不支持推理**时 `model.reasoning` 为 null，`?.` 返回 null 于是**回退到当前档位**
+（比如 `high`）—— 而目标模型根本不支持 `high`，内核报 `MODEL_UNAVAILABLE`。
+
+修法：去掉那个 `?:` 回退，只传 `model.reasoning?.defaultEffort`（不支持推理时自然为 null，
+正是内核想要的「不带推理参数」）。
+
+### ④ 翻历史时页面总被拽到最新
+
+**根因**：`LaunchedEffect(displayItems.size, state.liveChat?.revision)` 无条件滚到末尾 ——
+新内容一来就抢走用户正在看的位置。
+
+修法：加 `isAtBottom`（看最后一个可见 item 是否落在总数 -3 以内）。
+**只有本来就在底部附近才自动跟随**；不在底部时右下角出现浮动按钮（`FloatingActionButton`
++ `Icons.Outlined.KeyboardArrowDown`）一键回到底部。`animateScrollToItem` 是挂起函数，
+按钮回调里用 `scope.launch` 包。
+
+### ⑤ 输入法回车显示「换行」，按下去却发送
+
+**根因**：Composer 的 `onKeyEvent` 判据是
+
+```kotlin
+if (!sessionRunning && !alternate) return@onKeyEvent false   // 只有「空闲 + 无修饰键」才放行
+```
+
+注释以为「只有物理键盘才派发 `Key.Enter`」，但**中文输入法的软键盘回车也会派发** ——
+于是会话运行中按那个画着「换行」的回车，被当成发送。
+
+修法：改成 `if (!alternate) return@onKeyEvent false` —— **普通回车一律换行**，
+只有 `Ctrl/Meta + Enter`（物理键盘快捷键）才发送。发送只走软键盘的「发送」action 键
+与输入框旁的发送按钮。
+
+### ⑥ 中文界面下启动报错显示英文
+
+**根因**：`messageOf` 只对 `DshApiException`（服务端错误码）做了本地化，
+**网络异常直接露 `error.message` 原文** —— `DshConnectionException` 的
+`All N endpoint(s) unreachable: ...`、OkHttp 的 `failed to connect to ...` 全是英文。
+
+修法：按**异常类型**映射（子类必须排在父类 `SocketException` / `IOException` 之前）：
+
+| 异常 | 文案 |
+| --- | --- |
+| `DshConnectionException` | 连不上这台电脑，所有地址都没通（检查电脑是否开机、远程访问是否开启） |
+| `SocketTimeoutException` | 连接超时了，请检查网络后重试 |
+| `UnknownHostException` | 找不到服务器，请检查地址是否正确、网络是否连通 |
+| `ConnectException` | 连接被拒绝了，请确认远程访问已开启 |
+| `SSLException` / `SocketException` / `EOFException` | 网络连接中断了，请重试 |
+| 其余 `IOException` | 网络请求失败了（附原文兜底） |
+
+中英各加 7 条字符串。
+
+### ⑦ 设置页「当前设备」权限显示成协议串
+
+**根因**：`SettingsScreen` 直接 `Text(scope)` —— `chat.read`、`settings.write` 原样端出来，
+中文界面挂一排英文小点。
+
+修法：新增 `scopeLabel()` 按界面语言查表（读取聊天 / 发送消息 / 读取文件 / 写入文件 /
+删除文件 / 查看设置 / 修改设置），**认不出的新 scope 保留原文**（与错误码表「认不出不硬猜」
+同一原则）。中英各加 7 条。
+
+### ⑧ 附带修复：启动必报 `NetworkOnMainThreadException`
+
+这条是用户真机反馈「网络正常，每次启动都显示」。
+
+**根因**：`connectHostInternal` 里 `connection.client.currentDevice()` 与 `loadSnapshot()`
+是同步 HTTP、`hostStore.upsert` 是磁盘 IO，而 `restoreConnection` 从
+`viewModelScope.launch`（**主线程**）直接调它。手动连接走 `launchOperation`（IO）所以不炸，
+**只有冷启动这条主线程路径必炸**。
+
+修法：在**被调函数内部**用 `withContext(Dispatchers.IO)` 包住这三件事 ——
+比逐个约束调用方更稳，重复切换只是无害空转。
+
+### ⑨ 顺手修的既有问题
+
+`ChatPresentationTest` 两处断言还在测 `error.title`（字符串），而代码早已改成
+`titleRes`（资源 id）—— 测试编译不过（`git stash` 验证过是既有问题，与本轮改动无关）。
+改为断言 `R.string.turn_failed_title` / `R.string.turn_stopped_title`。
+
+### 测了什么
+
+- `./scripts/build.sh assembleRelease` 通过（含 `lintVitalRelease` + `minifyReleaseWithR8`）
+- `./scripts/build.sh :app:testDebugUnitTest` 全绿
+- 插件侧：`pnpm check` 全绿（30 文件 / 198 用例），并**实测分页**：
+  第一页 261 事件（seq 104~364）→ 带 `beforeSeq=104` 返回 104 事件（seq 0~103）
+
+### 出包
+
+`artifacts/DeepSeek-Harness-companion-v2.2.27.apk`，2,869,642 字节（release 构建，
+R8 + 资源裁剪），`CN=DSH Pocket Client` 签名，可直接覆盖 v2.2.24~v2.2.26。
+
 ## 2026-10-11 · 出错文案跟随界面语言（不再把英文原文端给用户）
 
 > 未出包。`./gradlew :app:compileDebugKotlin` 通过。

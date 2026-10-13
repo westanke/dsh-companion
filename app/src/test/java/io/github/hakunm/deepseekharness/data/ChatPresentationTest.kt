@@ -1,5 +1,6 @@
 package io.github.hakunm.deepseekharness.data
 
+import io.github.hakunm.deepseekharness.R
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -308,7 +309,7 @@ class ChatPresentationTest {
         ).displayItems().single { it.kind == ChatItemKind.FAILURE }
 
         val error = requireNotNull(failure.failure)
-        assertEquals("本轮运行失败", error.title)
+        assertEquals(R.string.turn_failed_title, error.titleRes)
         assertTrue(error.message.contains("API 速率限制"))
         // 空串 code 必须**保留空串**：客户端要原样显示错误码那一格，当成缺失就少一列信息。
         assertEquals("", error.code)
@@ -333,7 +334,7 @@ class ChatPresentationTest {
         assertEquals(ChatItemKind.FAILURE, failure.kind)
         val error = requireNotNull(failure.failure)
         assertTrue(error.stopped)
-        assertEquals("任务已停止", error.title)
+        assertEquals(R.string.turn_stopped_title, error.titleRes)
         assertEquals("ACCOUNT_SIGNED_OUT", error.code)
     }
 
