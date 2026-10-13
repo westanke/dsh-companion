@@ -469,8 +469,28 @@ android {
         //      与文件页预览同一个端点、同一份 `files.read` 授权，没为图片另开口子；
         //   ③ 渲染复用现有附件管线（缩略图 + 失败原因），新增一条
         //      「图片不在已授权的目录里」的中英文案。
-        versionCode = 10051
-        versionName = "2.2.26"
+        // 2.2.27 = 真机测试反馈的七个问题一次收口（纯客户端 + 插件各半）：
+        //   ① 加载更早消息无反应 → 插件 `history()` 补 `beforeSeq` 分页分支：
+        //      先用 follow 开场帧的 cursor 当 throughSeq，再调内核 `page()` 取更早的
+        //      记录（此前无论传不传 beforeSeq 都只返回开场那一窗，点按钮像没反应）；
+        //   ② 会话页返回键/左滑直接退出 APP → 原生 `ChatDetail` 补 `BackHandler`
+        //      （WebView 版早就有，原生这条漏了）：首次返回退到会话列表，再按才退出；
+        //   ③ 思考模式切换受限 → 切模型时不再回退到 `current.reasoningEffort`：
+        //      目标模型不支持推理时传 null，支持时用它的 defaultEffort。
+        //      此前从 high 档会话切到不支持 high 的模型会 MODEL_UNAVAILABLE；
+        //   ④ 翻历史时被自动滚到底 → 加 `isAtBottom` 判定，只在底部附近才自动跟随；
+        //      不在底部时右下角出现浮动按钮，点一下回到底部；
+        //   ⑤ 输入法回车显示「换行」却触发发送 → 普通回车一律放行换行（中文输入法
+        //      的软键盘回车也会派发 Key.Enter，不能只当物理键盘处理），
+        //      发送只走「发送」action 键与发送按钮，物理键盘保留 Ctrl/Meta+Enter；
+        //   ⑥ 中文界面启动报错显示英文 → 网络层 IOException 家族按异常类型本地化
+        //      （超时/找不到主机/连接被拒/连接中断 + 连不上电脑），中英双份文案；
+        //   ⑦ 设置页权限药丸露协议串 → 按界面语言显示（读取聊天/发送消息/写入文件…），
+        //      认不出的新 scope 仍保留原文。
+        // 另修一处既有测试不同步：ChatPresentationTest 还在断言 `error.title`，
+        //   代码早已改为 `titleRes` 资源 id（stash 验证过，与本轮改动无关）。
+        versionCode = 10052
+        versionName = "2.2.27"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }

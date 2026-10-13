@@ -81,6 +81,14 @@
     <string name="endpoint">API endpoint</string>
     <string name="device">Current device</string>
     <string name="permissions">Permissions</string>
+    <!-- Device scope pill labels: follow the UI language; unknown scopes show as-is. -->
+    <string name="scope_chat_read">Read chats</string>
+    <string name="scope_chat_write">Send messages</string>
+    <string name="scope_files_read">Read files</string>
+    <string name="scope_files_write">Write files</string>
+    <string name="scope_files_delete">Delete files</string>
+    <string name="scope_settings_read">View settings</string>
+    <string name="scope_settings_write">Change settings</string>
     <string name="language">Language</string>
     <string name="chinese">中文</string>
     <string name="english">English</string>
@@ -407,6 +415,14 @@
     <string name="err_remote_enabled">Turn off remote access before changing this</string>
     <string name="err_signed_out">Signed out of DeepSeek — this turn stopped here</string>
     <string name="err_request_generic">That action didn\'t complete (%1$s)</string>
+
+    <!-- Network layer (IOException family, looked up by exception type) -->
+    <string name="err_connect_all_unreachable">Can\'t reach this computer — no endpoint responded (is it on? is remote access enabled?)</string>
+    <string name="err_network_timeout">Connection timed out — check your network and try again</string>
+    <string name="err_network_unreachable">Can\'t find the server — check the address or your network</string>
+    <string name="err_network_refused">Connection refused — make sure remote access is enabled</string>
+    <string name="err_network_reset">The connection dropped — try again</string>
+    <string name="err_network_generic">Network request failed (%1$s)</string>
     <string name="turn_failed_title">This turn failed</string>
     <string name="turn_stopped_title">Stopped</string>
 

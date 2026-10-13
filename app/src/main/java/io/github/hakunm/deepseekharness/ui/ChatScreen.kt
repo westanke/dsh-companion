@@ -8,6 +8,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -53,6 +54,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Archive
@@ -99,6 +101,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -113,6 +116,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -495,8 +500,19 @@ private fun ChatDetail(
     val listState = rememberLazyListState()
     // 复制手势提示只需出现一次：记住它被关掉，而不是每次进会话都啰嗦一遍。
     var copyHintDismissed by rememberSaveable { mutableStateOf(false) }
+    // 用户是否在底部附近——只在底部时才自动滚动，否则不打扰翻历史
+    var isAtBottom by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(listState.firstVisibleItemIndex, listState.layoutInfo.visibleItemsInfo.size) {
+        val visibleItems = listState.layoutInfo.visibleItemsInfo
+        if (visibleItems.isNotEmpty()) {
+            val lastVisibleIndex = visibleItems.last().index
+            val totalItems = displayItems.size + 2 // +2 for copy-hint and older-messages button
+            isAtBottom = lastVisibleIndex >= totalItems - 3
+        }
+    }
     LaunchedEffect(displayItems.size, state.liveChat?.revision) {
-        if (displayItems.isNotEmpty()) {
+        if (displayItems.isNotEmpty() && isAtBottom) {
             if (liveItems.isNotEmpty()) listState.scrollToItem(displayItems.lastIndex)
             else listState.animateScrollToItem(displayItems.lastIndex)
         }
@@ -509,6 +525,7 @@ private fun ChatDetail(
     val canSteer = state.approvalState == ApprovalUiState.None && canWrite &&
         (ComposerSendPolicy.canSubmit(message, canWrite) || state.pendingAttachments.isNotEmpty())
 
+    onBack?.let { BackHandler(enabled = true, onBack = it) }
     CompositionLocalProvider(LocalUriHandler provides linkHandler) {
         Column(modifier.imePadding()) {
             ConversationHeader(
@@ -530,9 +547,10 @@ private fun ChatDetail(
             if (todos.isNotEmpty()) {
                 TodoPanel(todos, tasksExpanded, onToggle = { tasksExpanded = !tasksExpanded })
             }
+            Box(Modifier.weight(1f)) {
             LazyColumn(
             state = listState,
-            modifier = Modifier.weight(1f).fillMaxWidth(),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp),
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
@@ -603,6 +621,29 @@ private fun ChatDetail(
                     SessionFilesFooter(sessionFiles, viewModel::openSessionFile)
                 }
             }
+        }
+        // 浮动按钮：不在底部时显示，点击跳到底部
+        if (!isAtBottom) {
+            FloatingActionButton(
+                onClick = {
+                    isAtBottom = true
+                    if (displayItems.isNotEmpty()) {
+                        scope.launch { listState.animateScrollToItem(displayItems.lastIndex) }
+                    }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 16.dp, end = 16.dp)
+                    .size(48.dp),
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+            ) {
+                Icon(
+                    Icons.Outlined.KeyboardArrowDown,
+                    contentDescription = "跳转到最新",
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+        }
         }
         // 待回答问题（ask_user_question）。
         //
@@ -1802,8 +1843,10 @@ private fun Composer(
                                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                                 if (event.key != Key.Enter && event.key != Key.NumPadEnter) return@onKeyEvent false
                                 val alternate = event.isCtrlPressed || event.isMetaPressed
-                                // 空闲且没按修饰键时放行，让 Enter 保持换行（多行输入是正常需求）。
-                                if (!sessionRunning && !alternate) return@onKeyEvent false
+                                // 普通回车一律放行换行——软键盘的「换行」键也会派发 Key.Enter
+                                // 到这里（输入法实现差异），不能只当物理键盘处理。
+                                // 发送只走两条路：软键盘「发送」action 键 + 旁边发送按钮。
+                                if (!alternate) return@onKeyEvent false
                                 if (!canSubmit) return@onKeyEvent false
                                 val steer = ComposerSendPolicy
                                     .resolve(sessionRunning, state.busySendMode, alternate) == BusySendMode.STEER
@@ -3006,7 +3049,7 @@ private fun ModelRow(
                     ModelSelection(
                         providerId,
                         model.id,
-                        model.reasoning?.defaultEffort ?: current.reasoningEffort,
+                        model.reasoning?.defaultEffort,
                     ),
                 )
             }
