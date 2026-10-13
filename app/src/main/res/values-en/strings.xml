@@ -174,6 +174,9 @@
     <string name="task_completed">Completed</string>
     <string name="available_commands">Available commands</string>
     <string name="command_input_hint">Argument: %1$s</string>
+    <string name="workspace_files">Working directory files</string>
+    <string name="workspace_files_empty">This directory is empty</string>
+    <string name="workspace_files_unavailable">Can\'t read this session\'s working directory</string>
     <string name="command_compact_description">Compact older conversation history</string>
     <string name="command_export_description">Download this session log as a ZIP file</string>
     <string name="command_feedback_description">Record feedback about this session</string>

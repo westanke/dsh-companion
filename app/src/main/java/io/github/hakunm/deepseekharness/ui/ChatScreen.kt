@@ -77,6 +77,7 @@ import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.InsertDriveFile
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.ModelTraining
 import androidx.compose.material.icons.outlined.QuestionAnswer
@@ -174,6 +175,8 @@ import io.github.hakunm.deepseekharness.data.ChatWorkspace
 import io.github.hakunm.deepseekharness.data.AgentPreset
 import io.github.hakunm.deepseekharness.data.BusySendMode
 import io.github.hakunm.deepseekharness.data.CommandDescriptor
+import io.github.hakunm.deepseekharness.data.FileEntry
+import io.github.hakunm.deepseekharness.data.MentionQuery
 import io.github.hakunm.deepseekharness.data.ComposerSendPolicy
 import io.github.hakunm.deepseekharness.data.ModelSelection
 import io.github.hakunm.deepseekharness.data.ModelView
@@ -1779,7 +1782,22 @@ private fun Composer(
         },
     )
     Column(Modifier.fillMaxWidth()) {
-        CommandSuggestions(value, state.commands, onValueChange)
+        // 两个补全面板**互斥**：`/` 只在整行以斜杠开头时才出（官方命令是行首语法），
+        // `@` 只在光标落在一个提及词里时才出。同一时刻两者不可能同时成立 ——
+        // 但万一将来判据放宽，这里先立规矩：斜杠优先，避免两个列表叠在一起。
+        val mentioning = MentionQuery.activeStart(value) != null
+        if (mentioning) {
+            MentionSuggestions(
+                value = value,
+                entries = state.mentionEntries,
+                cwd = state.sessions.firstOrNull { it.id == state.selectedSessionId }?.cwd,
+                // 选中后**只替换「@…末尾」那一段**，不是整行替换：
+                // 用户很可能已经写了半句「帮我看看 @xxx」，整行替换会把前半句吃掉。
+                onSelect = { inserted -> onValueChange(MentionQuery.applySelection(value, inserted)) },
+            )
+        } else {
+            CommandSuggestions(value, state.commands, onValueChange)
+        }
         // 一整条药丸（网页版 #row）：边框 + 圆角 22dp 由它统一画，
         // + / 输入框 / 发送都在里面，输入框自己不再画边框和圆角。
         Surface(
@@ -2187,6 +2205,115 @@ private fun TodoPanel(todos: List<TodoItem>, expanded: Boolean, onToggle: () -> 
         }
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+}
+
+/**
+ * 输入框 `@` 的工作目录文件补全（对齐官方「@ 调取当前工作目录文件或文件夹」）。
+ *
+ * 识别与替换的规则都在 [MentionQuery] 里（纯逻辑、有单测），这里只管画。
+ *
+ * **插入的形态是绝对路径**（`@/abs/path/to/file `），不是相对路径：
+ * 会话事件与工具调用里给模型看的都是绝对路径，而模型读到相对路径时得先猜
+ * 「相对于谁」—— 猜错就是一次无效工具调用。官方同样给绝对路径。
+ *
+ * **没有数据时也显示一条说明**，而不是静默什么都不发生：用户打了 `@` 却在等一个
+ * 永远不出现的列表，只会以为是卡了。读不到工作目录（授权根没覆盖、会话没 cwd）
+ * 时明说「读不到这个会话的工作目录」，比装作无事发生诚实。
+ */
+@Composable
+private fun MentionSuggestions(
+    value: String,
+    entries: List<FileEntry>?,
+    cwd: String?,
+    onSelect: (String) -> Unit,
+) {
+    val query = MentionQuery.query(value) ?: return
+    val matches = entries.orEmpty()
+        .filter { it.name.contains(query, ignoreCase = true) }
+        // 目录排前面：用户 `@` 一个文件夹继续往里选的场景很常见，
+        // 混在一起时文件夹总被文件名淹掉。
+        .sortedWith(compareByDescending<FileEntry> { it.kind == "directory" }.thenBy { it.name.lowercase() })
+        .take(8)
+    Surface(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        shadowElevation = 2.dp,
+    ) {
+        Column(Modifier.padding(vertical = 5.dp)) {
+            Text(
+                stringResource(R.string.workspace_files),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelMedium,
+            )
+            if (entries == null) {
+                // 还没加载完 / 加载失败：说清楚状态，别让用户对着空气等。
+                Text(
+                    stringResource(
+                        if (cwd.isNullOrBlank()) R.string.workspace_files_unavailable
+                        else R.string.workspace_files_empty,
+                    ),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else if (matches.isEmpty()) {
+                Text(
+                    stringResource(R.string.workspace_files_empty),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            } else {
+                matches.forEach { entry ->
+                    val isDir = entry.kind == "directory"
+                    val absolute = MentionQuery.absolute(cwd, entry.path)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            // 目录结尾补 `/` 且**不加空格**：用户大概率要继续往里选，
+                            // 直接接着打下一级正好；文件则补空格，把这一条结束掉。
+                            .clickable { onSelect("@$absolute${if (isDir) "/" else " "}") }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(
+                            if (isDir) Icons.Outlined.Folder else Icons.Outlined.InsertDriveFile,
+                            null,
+                            Modifier.size(19.dp),
+                            tint = MaterialTheme.colorScheme.secondary,
+                        )
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                entry.name + if (isDir) "/" else "",
+                                style = MaterialTheme.typography.labelLarge,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            // 第二行给**相对工作目录的路径**：绝对路径往往太长被截断，
+                            // 而用户判断「是不是我要的那个」靠的通常就是中间那几级目录。
+                            Text(
+                                entry.path,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        if (!isDir && entry.size > 0) {
+                            Text(
+                                ChatContentParts.formatBytes(entry.size),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
