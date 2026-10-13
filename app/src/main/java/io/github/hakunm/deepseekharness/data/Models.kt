@@ -373,7 +373,51 @@ data class PluginEntry(
     /** 是否 DSH 官方包（`@deepseek-ai/` 前缀）。 */
     val official: Boolean = false,
     val state: String = "",
+    /** 包自己声明的简介；服务器可能给 null。 */
+    val description: String? = null,
+    /** 包的主页 / 仓库地址（服务器已剥掉 `git+` 与 `.git`）；可能为 null。 */
+    val homepage: String? = null,
+    /**
+     * 有没有新版本可装。
+     *
+     * **三态，别当布尔用**：`null` 表示「没查 / 查不到」，与 `false`（「已是最新」）
+     * 不是一回事。服务器只在带 `?checkUpdates=1` 时才去问 registry —— 不查的时候
+     * 把 null 显示成「已是最新」就是在撒谎。
+     */
+    val updateAvailable: Boolean? = null,
+    /** npm 上的最新版本号；没查或查不到时为 null。 */
+    val latestVersion: String? = null,
+    /**
+     * 能否在 App 里启停。
+     *
+     * 官方包（随 DSH 运行时安装）与没装进 profile 的包都为 false —— 界面对它们
+     * 不该画开关：画了就是骗用户去点一个必然失败的按钮。
+     */
+    val toggleable: Boolean = false,
 )
+
+/**
+ * `PATCH /api/v1/settings/plugins` 的响应：启停一个插件的结果。
+ *
+ * [restartRequired] 目前**恒为 true**：服务端改写的是 profile 的
+ * `dsh.profile.bundles`，而那份清单**只在 DSH 启动时读一次** —— 运行中的进程
+ * 仍旧用着旧集合。界面必须把这句话明说，否则用户点完开关看到插件照旧在跑，
+ * 只会以为「这个功能是坏的」。
+ */
+@Serializable
+data class PluginToggleResult(
+    val name: String = "",
+    val loaded: Boolean = false,
+    /** 改动前写的备份文件名（幂等时为空串）。 */
+    val backupName: String = "",
+    /** 改动后 bundles 数组的长度，便于界面显示「17 → 18」。 */
+    val bundleCount: Int = 0,
+    val restartRequired: Boolean = true,
+)
+
+/** `PATCH /api/v1/settings/plugins` 的请求体。 */
+@Serializable
+data class PluginToggleRequest(val name: String, val loaded: Boolean)
 
 /**
  * `GET /api/v1/settings/plugins` 的响应。

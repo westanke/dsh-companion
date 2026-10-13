@@ -561,8 +561,29 @@ android {
         //   ⑤ 插入**绝对路径**（对齐官方与内核惯例）：相对路径会让模型先猜「相对于谁」，
         //      猜错就是一次无效工具调用。目录结尾补 `/` 不加空格（便于继续下拉一级），
         //      文件结尾补空格（结束这个词）。
-        versionCode = 10056
-        versionName = "2.2.31"
+        // 2.2.32 = 「插件」页从只读清单升级为可操作：详情增强 + 手机上直接启停
+        //   （配套插件端 v2.3.2 的 profile 判定修复 + v2.3.3 的 PATCH 端点）。
+        //   ① 详情：description 直接显示（手机上只有一串 @scope/name@1.2.3 时，
+        //      用户靠它判断「这个能不能停用」）；homepage 可点（服务端已剥 git+/.git）；
+        //      updateAvailable 只在**确实有新版本**时提示 —— 它是三态，null 表示没查，
+        //      显示成「已是最新」就是撒谎。
+        //   ② 启停：Switch 只对 `toggleable` 且本设备有 settings.write 时出现。
+        //      不能启停的**必须说明原因**（官方包 / 没装 / 声明缺失），否则用户会去找
+        //      一个根本不存在的开关。
+        //   ③ **先确认再执行**：这会改电脑上 profile 的 package.json，写坏了 dsh 下次
+        //      起不来、而用户此刻在手机上。对话框里说清「会写进电脑上的插件清单，
+        //      并自动备份原文件」。
+        //   ④ 成功后重拉清单：本地那份 loaded 还是旧值，不重拉开关会弹回原位，
+        //      用户会以为没生效（实际生效了，只是要重启 DSH 才算数）。
+        //   ⑤ 把「要重启」说在明处：页面上有条件地显示一行说明，操作成功也给一次性
+        //      提示 —— 服务端恒返回 restartRequired=true，不说用户会以为功能坏了。
+        //   ⑥ 「检查更新」单独一个按钮：它是重活（每个包一次 registry 请求，清单从
+        //      毫秒级变成好几秒），与顶栏那个轻快的「刷新」不是一类动作。
+        //   ⑦ 顺手更正一条过期文案：`plugins_unavailable_profile_unknown` 原本写
+        //      「请确认 DSH 启动时带有 --profile 参数」—— 那是 v2.3.2 之前的说法，
+        //      现在 `dsh web` 简写也能识别了。
+        versionCode = 10057
+        versionName = "2.2.32"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }

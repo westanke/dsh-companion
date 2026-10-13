@@ -1339,6 +1339,45 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         update { copy(pluginInventory = api.pluginInventory()) }
     }
 
+    /**
+     * 带版本检查地刷新插件清单（用户主动点「检查更新」时）。
+     *
+     * 单独一条路而不是给 [refreshPluginInventory] 加参数：版本检查要给每个已装包
+     * 发一次 registry 请求，清单会从毫秒级变成好几秒。默认那条必须保持轻快，
+     * 否则每次进页面都慢一下 —— 而九成的情况用户只是想看「哪个没启用」。
+     */
+    fun refreshPluginInventoryWithUpdates() = withClient { api ->
+        if ("settings.read" !in mutableState.value.device?.scopes.orEmpty()) return@withClient
+        update { copy(pluginInventory = api.pluginInventoryWithUpdates()) }
+    }
+
+    /**
+     * 启用 / 停用一个插件。
+     *
+     * 走 [launchOperation] 而不是自己起协程，图两件事：
+     * - **全局 busy 把按钮禁掉**，重复点击不会连发两次写请求 —— 这是**改 profile 的
+     *   package.json** 的操作，连点两次的后果是写两份备份、改两次 bundles；
+     * - 失败统一落进既有错误通道（`messageOf` 已按界面语言本地化，服务端那些
+     *   `PLUGIN_OFFICIAL_IMMUTABLE` / `PLUGIN_NOT_INSTALLED` 都有对应文案）。
+     *
+     * 成功后**必须重拉清单**：本地那份的 `loaded` 还是旧值，不重拉的话开关会弹回原位，
+     * 用户会以为没生效（而实际上是生效了，只是要重启 DSH 才算数）。
+     *
+     * 成功提示也走同一个通道（`notify`）：服务端恒返回 `restartRequired: true`，
+     * 这句话**必须说出来** —— 用户点完开关看到插件照旧在跑，只会以为功能坏了。
+     */
+    fun setPluginLoaded(name: String, loaded: Boolean) = withClient { api ->
+        if ("settings.write" !in mutableState.value.device?.scopes.orEmpty()) {
+            update { copy(error = appString(R.string.plugins_write_permission_required)) }
+            return@withClient
+        }
+        val result = api.setPluginLoaded(name, loaded)
+        // 重拉清单：本地那份的 loaded 还是旧值，不重拉开关会弹回原位，
+        // 用户会以为没生效（实际生效了，只是要重启 DSH 才算数）。
+        update { copy(pluginInventory = api.pluginInventory()) }
+        if (result.restartRequired) notify(appString(R.string.plugins_toggle_saved))
+    }
+
     fun updateProvider(providerId: String, patch: ProviderPatch) = withClient { api ->
         update { copy(providerSettings = api.updateProvider(providerId, patch), discoveredModels = emptyList()) }
     }
