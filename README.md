@@ -258,7 +258,7 @@ scripts/build.sh :app:testDebugUnitTest   # 单元测试
 - Gitee（国内访问更快）：<https://gitee.com/westanke/dsh-companion/releases/latest>
 
 ```text
-DeepSeek-Harness-companion-v2.2.29.apk
+DeepSeek-Harness-companion-v2.2.30.apk
 ```
 
 安装要求：
@@ -498,13 +498,13 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.29`（`versionCode` 10054）
+- 当前版本：`v2.2.30`（`versionCode` 10055）
 - 包名：`io.github.hakunm.deepseekharness`
 - 单元测试：24 个测试类 / 256 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DeepSeek-Harness-companion-v2.2.29.apk`，2,869,642 字节，
-  SHA-256 `4699f5a3f6885403eb2803a29bbdc5ee93f995739935deecc3771faea4aa0f23`（`artifacts/SHA256SUMS.txt` 同步）
-- 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用，v2.2.28 → v2.2.29 可直接覆盖升级）
+- 当前 APK：`DeepSeek-Harness-companion-v2.2.30.apk`，2,869,642 字节，
+  SHA-256 `efb516aaad930c624dcda2266b276f4442786cb890597eff63d0d276faefad3a`（`artifacts/SHA256SUMS.txt` 同步）
+- 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用，v2.2.29 → v2.2.30 可直接覆盖升级）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)
 - 许可证：[GNU Affero General Public License v3.0](./LICENSE)
 - 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.1**（「加载更早消息」需要 2.3.1+）

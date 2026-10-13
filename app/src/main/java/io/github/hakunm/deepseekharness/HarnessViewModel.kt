@@ -407,6 +407,14 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
      */
     fun activeConnection(): ActiveConnection? = active
     private var eventSubscription: Closeable? = null
+    /**
+     * 事件流是否因熄屏而主动暂停（见 [pauseEvents]）。
+     *
+     * 用它区分「用户主动断开」与「熄屏暂停」：前者 `active` 已被清空、不该被
+     * [resumeEvents] 复活；后者连接还在，亮屏就该接回去。没有这个标志的话，
+     * 亮屏会把用户刚刚手动断开的连接又拉起来。
+     */
+    @Volatile private var eventsPaused = false
     private var chatRefreshJob: Job? = null
     @Volatile private var chatRefreshPending = false
     @Volatile private var chatSessionRefreshPending = false
@@ -606,6 +614,9 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
     fun disconnect() {
         eventSubscription?.close()
         eventSubscription = null
+        // 手动断开要清掉熄屏暂停标志：否则下次亮屏 resumeEvents 会把
+        // 用户刚刚主动断开的连接又接回去 —— 那是最容易让人以为「断开没用」的 bug。
+        eventsPaused = false
         active = null
         mutableState.value = HarnessState(restoring = false, hosts = hostStore.loadHosts()).withPreferences()
     }
@@ -1661,6 +1672,51 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
             )
             hostStore.loadHosts()
         }.getOrDefault(emptyList())
+    }
+
+    /**
+     * 熄屏暂停事件流；亮屏恢复（用户定下的策略：**熄屏=断连，亮屏=实时**）。
+     *
+     * 为什么不是断开连接：`disconnect()` 会把 `active` 一起清掉，亮屏后得重新
+     * 走一遍探活 + 配对校验（还要弹「恢复中」），代价远大于收益。熄屏时真正费电的
+     * 只有那条 WebSocket —— WiFi 射频与 TCP keepalive 全程在线、后台还会被系统
+     * 反复唤醒。所以只关流、**保留已建立的连接与令牌**，亮屏时直接把流接回去。
+     *
+     * 为什么听 `ACTION_SCREEN_OFF` 而不是 `onStop`：切到别的 App（分屏、切后台
+     * 但屏幕还亮着）不该断 —— 用户看得到屏幕，实时性仍然有价值；而合上盖子/按电源键
+     * 熄屏时，用户看不到内容，保持连接纯属白耗电。用广播能精确区分这两种情形。
+     *
+     * 恢复时**必须补一次快照**：熄屏期间事件流是关着的，期间落盘的消息一条都没收到，
+     * 不补的话亮屏后看到的是熄屏那一刻的旧内容，得等下一次事件来才刷新
+     * （用户会以为「手机卡住了」）。这里复用既有的 [scheduleChatRefresh]，
+     * 它自带 400ms 静默去抖与单飞，连发几次也只拉一次。
+     */
+    fun pauseEvents() {
+        if (eventSubscription == null) return
+        eventsPaused = true
+        eventSubscription?.close()
+        eventSubscription = null
+        // 状态里保留 connected=true：连接本身（主机、令牌、端点）都还在，
+        // 只是事件流暂停。把它标成未连接会让界面闪一下「已断开」再跳回来。
+    }
+
+    fun resumeEvents() {
+        if (!eventsPaused) return
+        eventsPaused = false
+        val connection = active ?: return
+        connectEvents(connection.client)
+        // 补上熄屏期间错过的一切：当前会话的历史 + 会话列表。
+        chatSessionRefreshPending = true
+        scheduleChatRefresh()
+        // 还要单独补两类**交互性**状态：审批面板与待答问题。
+        //
+        // 它们不走 history —— 熄屏期间若正好有审批在等、或 Agent 提问了，
+        // 事件流是关着的，这两张卡不会自己出现。用户亮屏后看到的是一片安静，
+        // 而电脑端其实在等他的决定 —— 「我明明没看到有东西问我」是最坏的体验。
+        // 这两个方法各自带「会话切换后丢弃结果」的保护（比对 selectedSessionId），
+        // 直接调用是安全的。
+        refreshPendingApprovals()
+        refreshPendingQuestions()
     }
 
     private fun connectEvents(api: DshClient) {
