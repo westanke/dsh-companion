@@ -582,8 +582,34 @@ android {
         //   ⑦ 顺手更正一条过期文案：`plugins_unavailable_profile_unknown` 原本写
         //      「请确认 DSH 启动时带有 --profile 参数」—— 那是 v2.3.2 之前的说法，
         //      现在 `dsh web` 简写也能识别了。
-        versionCode = 10057
-        versionName = "2.2.32"
+        // 2.2.33 = 修 2.2.31 那个 `@` 补全**从写出来就没成功列出过文件**的 bug
+        //   （配套插件端 v2.3.5）。用户报「会话里用 @ 有问题，只显示『读不到这个
+        //   会话的工作目录』」。
+        //   ① 根因一（注释写反了）：2.2.31 这里把 cwd 记成「绝对路径」，
+        //      **实际是「相对授权根」的 wire 路径** —— 服务端 ChatSessionView.cwd
+        //      的注释一直这么写。于是把它送去 `resolvePath` 时，服务端对相对路径
+        //      **硬拒绝**（400 PATH_NOT_ABSOLUTE），补全必然拿不到数据。
+        //      而且那一步翻译本身就是多余的：会话里已经有 rootId，列举接口要的正是
+        //      「根 id + 相对根的路径」，两个值都现成，中间那次转换纯属绕路。
+        //   ② 根因二（空串被当成「没有」）：会话工作目录**正好等于授权根本身**时，
+        //      服务端算出的相对路径是**空串**（path.relative(root, root) === ''）——
+        //      那是合法值，意思是「根目录」。原先 `takeIf { it.isNotBlank() }`
+        //      把它当成「没有工作目录」直接放弃，界面于是显示「读不到」。
+        //   ③ 根因三（App 手里没有绝对路径）：RootView 刻意不含根的 realPath
+        //      （那是机器信息），所以拼不出官方那种绝对路径。服务端 v2.3.5 新增
+        //      可选字段 `cwdAbsolute` 补上这一环；拿不到时（老服务端）降级插入
+        //      相对根的路径 —— 能用，但不完整。
+        //   ④ MentionQuery.absolute 一并纠错：列举接口给的 entry.path 是
+        //      **相对授权根**的完整路径，会话目录只是它的一段前缀 —— 正确操作是
+        //      **换前缀**（把前缀换成绝对根），不是「cwd + 相对路径」那种拼接。
+        //      旧实现与旧单测都按错的语义写，一起改了；顺带钉住「前缀要按整段比对」，
+        //      否则 "ws" 会误配 "wsx/a.txt"、拼出一个不存在的路径。
+        //   ⑤ 面板文案分三态（新增 mentionFailed 字段）：`null`+未失败 = 还在读、
+        //      `null`+失败 = 读不到、空列表 = 真的是空的。此前「加载失败」会被说成
+        //      「这个目录还是空的」—— 把失败谎报成空，和插件页那句
+        //      「package.json 可能损坏」是同一类毛病。
+        versionCode = 10058
+        versionName = "2.2.33"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }

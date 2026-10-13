@@ -220,6 +220,15 @@ data class HarnessState(
      * 为 null 表示还没加载（或本会话解析不出工作目录，见 [loadMentionEntries]）。
      */
     val mentionEntries: List<FileEntry>? = null,
+    /**
+     * `@` 补全这次**尝试过但没拿到**（网络失败、会话没有可用工作目录…）。
+     *
+     * 与 [mentionEntries] 的 null 配合才能分清三态：`null + false` 是「还在读」，
+     * `null + true` 是「读不到」，**空列表才是「目录真的是空的」**。
+     * 少这一位的话，「加载失败」会被界面说成「这个目录还是空的」—— 把失败谎报成空，
+     * 和上轮插件页那句「package.json 可能损坏」是同一类毛病。
+     */
+    val mentionFailed: Boolean = false,
     val document: OpenDocument? = null,
     /** 会话文件面板正在查看的那一条（null 表示面板显示路径列表）。 */
     val sessionFileOpen: SessionFileOpen? = null,
@@ -664,6 +673,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
                 // 不清的话，切过去的头几百毫秒里 `@` 会列出上个会话的文件，
                 // 用户手快选中就发出一条指向错误路径的消息。
                 mentionEntries = null,
+                mentionFailed = false,
             )
         }
         if (id != null) {
@@ -1560,24 +1570,32 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
      * 进子目录；`@` 必须**始终**指向本会话的 cwd，共用一个字段会导致「在文件页翻到别处，
      * 回会话里补全出的是别的目录」。所以单独一个字段、单独一次请求。
      *
-     * 三步：会话的 cwd 是**绝对路径**，而列举接口要的是「根 id + 相对根的路径」，
-     * 中间必须过一次 `resolvePath` 做翻译（客户端没有根的绝对路径，自己算不出来）。
-     * 任一步拿不到就静默放弃（`mentionEntries` 保持 null）——`@` 补全出不来不影响
-     * 打字与发送，不该为此弹错误提示打断用户。
+     * **只用两步，不走 `resolvePath`**：会话里已经有 `rootId`，而 `cwd` 本身就是
+     * 「相对授权根」的 wire 路径 —— 列举接口要的正是这两样。此前这里先把 `cwd` 送去
+     * `resolvePath`「翻译」成「根 id + 相对路径」，可那个端点**要求绝对路径输入**、
+     * 对相对路径直接 400（`PATH_NOT_ABSOLUTE`），于是第二步必然失败、补全永远列不出
+     * 文件。多绕的这一圈是纯粹的误解：服务端给的 `cwd` 从来就是相对路径。
+     *
+     * **`cwd` 为空字符串是合法值**，表示会话工作目录就是授权根本身
+     * （`path.relative(root, root) === ''`）。此前 `.takeIf { it.isNotBlank() }` 把它
+     * 当成「没有工作目录」丢掉 —— 线上那句「读不到这个会话的工作目录」就是这么来的。
+     *
+     * 拿不到时把 [HarnessUiState.mentionFailed] 置真，让界面如实说「读不到」，
+     * 而不是谎称「目录是空的」。`@` 补全出不来不影响打字与发送，所以不弹错误提示打断用户。
      */
     fun loadMentionEntries() = withClient { api ->
         val sessionId = mutableState.value.selectedSessionId ?: return@withClient
         val session = mutableState.value.sessions.firstOrNull { it.id == sessionId } ?: return@withClient
-        val cwd = session.cwd.takeIf { it.isNotBlank() } ?: return@withClient
-        val resolved = runCatching { withContext(Dispatchers.IO) { api.resolvePath(cwd) } }.getOrNull()
-            ?: return@withClient
-        if (resolved.rootId.isBlank()) return@withClient
         val page = runCatching {
-            withContext(Dispatchers.IO) { api.entries(resolved.rootId, resolved.path.trim('/')) }
-        }.getOrNull() ?: return@withClient
+            // 空 cwd（= 授权根本身）照常列举；trim('/') 只把结尾多余的斜杠收干净。
+            withContext(Dispatchers.IO) { api.entries(session.rootId, session.cwd.trim('/')) }
+        }.getOrNull()
         // 会话可能在请求期间被切走，回来发现已是另一个会话就别把那批文件塞进去。
         if (mutableState.value.selectedSessionId != sessionId) return@withClient
-        update { copy(mentionEntries = page.entries) }
+        update {
+            if (page == null) copy(mentionEntries = null, mentionFailed = true)
+            else copy(mentionEntries = page.entries, mentionFailed = false)
+        }
     }
 
     fun openEntry(entry: FileEntry) {

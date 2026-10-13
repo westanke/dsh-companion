@@ -73,7 +73,22 @@ data class TrashEntry(
 data class ChatSession(
     val id: String,
     val rootId: String,
+    /**
+     * 会话工作目录**相对授权根**的路径 —— 列举接口（`roots/{id}/entries`）要的正是它。
+     *
+     * **空字符串是合法值**：会话工作目录正好就是授权根本身时，服务端算出的相对路径
+     * 就是空的。别把空串当成「没有工作目录」丢掉，那会让 `@` 补全在根目录下直接瘫痪
+     * （线上就是这么表现的：「读不到这个会话的工作目录」）。
+     */
     val cwd: String,
+    /**
+     * 会话工作目录的**绝对路径**（服务端 v2.3.5 起提供；老服务端不返回时为 null）。
+     *
+     * `@` 要往输入框里插一条绝对路径（官方与内核给模型看的都是绝对路径，相对路径会让
+     * 模型先猜「相对于谁」），而客户端手里没有根的 realPath —— `RootView` 刻意不含它。
+     * 这个字段就是那条缺失的桥。
+     */
+    val cwdAbsolute: String? = null,
     val updatedAt: Long,
     val running: Boolean,
     val blank: Boolean,

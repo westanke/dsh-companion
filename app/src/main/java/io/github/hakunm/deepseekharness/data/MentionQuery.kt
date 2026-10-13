@@ -50,14 +50,40 @@ object MentionQuery {
     }
 
     /**
-     * 把条目的相对路径拼成绝对路径（会话工作目录 + 相对路径）。
+     * 把条目的路径拼成**绝对路径**，供插进输入框。
      *
      * 官方与内核给模型看的都是绝对路径，相对路径会让模型先猜「相对于谁」，
-     * 猜错就是一次无效工具调用。`cwd` 为空时（解析不出工作目录）退化成相对路径 ——
-     * 是降级，但比什么都不给强。
+     * 猜错就是一次无效工具调用。
+     *
+     * 拼接不是简单的「cwd + 相对路径」—— 列举接口返回的 [entryPath] 是
+     * **相对授权根**的完整路径（不是相对会话目录），会话目录在它里面是一段前缀。
+     * 所以正确做法是**换前缀**：
+     *
+     * ```
+     * cwdAbsolute = /r/ws          cwdRelative = ws        entryPath = ws/a.txt
+     * 绝对路径 = /r/ws + "/" + (entryPath 去掉 "ws/") = /r/ws/a.txt
+     * ```
+     *
+     * `cwdRelative` 为空串是合法且常见的：那表示会话工作目录**就是授权根本身**，
+     * 此时 [cwdAbsolute] 就是根的绝对路径，直接接上 [entryPath] 即可。
+     *
+     * 两种降级都返回相对根的路径而不是硬拼一个错的绝对路径：
+     * 老服务端不返回 `cwdAbsolute`（null/空），或 [entryPath] 竟然不在 `cwdRelative`
+     * 之下（理论上不该发生）。
      */
-    fun absolute(cwd: String?, relative: String): String {
-        val prefix = cwd.orEmpty().trimEnd('/')
-        return if (prefix.isEmpty()) relative else "$prefix/$relative"
+    fun absolute(cwdAbsolute: String?, cwdRelative: String, entryPath: String): String {
+        val root = cwdAbsolute?.trim()?.trimEnd('/').orEmpty()
+        if (root.isEmpty()) return entryPath
+
+        val prefix = cwdRelative.trim().trim('/')
+        val tail = when {
+            prefix.isEmpty() -> entryPath
+            entryPath == prefix -> ""
+            // 必须带分隔符比对：否则 "ws" 会误配 "wsx/a.txt" 的前缀。
+            entryPath.startsWith("$prefix/") -> entryPath.substring(prefix.length + 1)
+            else -> return entryPath
+        }
+        val clean = tail.trimStart('/')
+        return if (clean.isEmpty()) root else "$root/$clean"
     }
 }

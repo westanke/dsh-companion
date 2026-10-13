@@ -101,22 +101,42 @@ class MentionQueryTest {
         assertEquals("@/w/src/", MentionQuery.applySelection("@s", "@/w/src/"))
     }
 
-    // ── absolute：相对路径拼绝对路径 ──
+    // ── absolute：把「相对授权根的条目路径」换成绝对路径 ──
+    //
+    // 关键语义：列举接口给的 entryPath 是**相对授权根**的完整路径，会话工作目录
+    // 只是它的一段前缀 —— 所以这里是「换前缀」，不是「cwd + 相对路径」那种拼接。
+    // 旧的实现与旧测试都按后一种理解写，于是 `@` 插进输入框的是错的路径。
 
     @Test
-    fun `cwd 与相对路径拼接`() {
-        assertEquals("/home/u/proj/src/Main.kt", MentionQuery.absolute("/home/u/proj", "src/Main.kt"))
+    fun `会话目录在根下时换掉前缀`() {
+        assertEquals("/r/ws/a.txt", MentionQuery.absolute("/r/ws", "ws", "ws/a.txt"))
+        assertEquals("/r/ws/深/一层.kt", MentionQuery.absolute("/r/ws", "ws", "ws/深/一层.kt"))
     }
 
     @Test
-    fun `cwd 结尾多余斜杠不会拼出双斜杠`() {
-        assertEquals("/home/u/proj/a.txt", MentionQuery.absolute("/home/u/proj/", "a.txt"))
+    fun `会话目录就是授权根本身时直接接上`() {
+        // cwd 为空串是**合法值**：path.relative(root, root) === ''。此时 cwdAbsolute 即根。
+        // 线上那句「读不到这个会话的工作目录」就是因为把它当成了「没有工作目录」。
+        assertEquals("/r/a.txt", MentionQuery.absolute("/r", "", "a.txt"))
+        assertEquals("/r", MentionQuery.absolute("/r", "", ""))
     }
 
     @Test
-    fun `cwd 为空时退化成相对路径`() {
-        // 降级路径：解析不出工作目录时至少还能看出是哪个文件，比什么都不给强。
-        assertEquals("a.txt", MentionQuery.absolute(null, "a.txt"))
-        assertEquals("a.txt", MentionQuery.absolute("", "a.txt"))
+    fun `绝对路径结尾的多余斜杠不会拼出双斜杠`() {
+        assertEquals("/r/ws/a.txt", MentionQuery.absolute("/r/ws/", "ws", "ws/a.txt"))
+    }
+
+    @Test
+    fun `前缀按整段比对，不误配同前缀的兄弟目录`() {
+        // "ws" 不能把 "wsx/a.txt" 的前缀吃掉 —— 那会拼出一个不存在的路径，
+        // 而模型拿到无效路径只会白白失败一次。
+        assertEquals("wsx/a.txt", MentionQuery.absolute("/r/ws", "ws", "wsx/a.txt"))
+    }
+
+    @Test
+    fun `拿不到绝对根时退化成相对根的路径`() {
+        // 老服务端不返回 cwdAbsolute：这里是降级，但比硬拼一个错的绝对路径强。
+        assertEquals("ws/a.txt", MentionQuery.absolute(null, "ws", "ws/a.txt"))
+        assertEquals("ws/a.txt", MentionQuery.absolute("", "ws", "ws/a.txt"))
     }
 }
