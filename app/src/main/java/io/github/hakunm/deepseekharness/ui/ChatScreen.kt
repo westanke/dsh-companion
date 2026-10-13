@@ -20,6 +20,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
@@ -987,10 +988,14 @@ private fun SessionFileRow(ref: SessionFileRef, onClick: () -> Unit) {
             tint = MaterialTheme.colorScheme.secondary,
         )
         Column(Modifier.weight(1f)) {
+            // 文件名放不下时横向滚动，而不是截断 —— 与「文件」页同一个理由：
+            // 这里的名字常常又长又前缀雷同，截出来分不清是哪个。
+            // 完整路径在下面那行（可换行两行），保留它作为不动的那份参照。
             Text(
                 ref.path.substringAfterLast('/').ifBlank { ref.path },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE),
                 style = MaterialTheme.typography.bodyMedium,
             )
             // agent 为交付物写的说明（「本轮排障报告」「v2.2.18 安装包」这种）。
@@ -2214,11 +2219,15 @@ private fun MentionSuggestions(
                                 tint = MaterialTheme.colorScheme.secondary,
                             )
                             Column(Modifier.weight(1f)) {
+                                // 与「文件」页同一个理由：`@` 出来的名字常常又长又前缀雷同，
+                                // 截断后分不清是哪个。放不下就横向滚动。
+                                // 下面那行相对路径仍原样保留，作为不动的那份参照。
                                 Text(
                                     entry.name + if (isDir) "/" else "",
                                     style = MaterialTheme.typography.labelLarge,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE),
                                 )
                                 // 第二行给**相对工作目录的路径**：绝对路径往往太长被截断，
                                 // 而用户判断「是不是我要的那个」靠的通常就是中间那几级目录。
