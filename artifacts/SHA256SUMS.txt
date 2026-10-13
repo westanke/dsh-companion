@@ -10,3 +10,4 @@ bc0344c25aa27144f3cc4014b8fbad47e602f8bcf02aa36a3e0cecebb852f1ae  DeepSeek-Harne
 4699f5a3f6885403eb2803a29bbdc5ee93f995739935deecc3771faea4aa0f23  DeepSeek-Harness-companion-v2.2.29.apk
 efb516aaad930c624dcda2266b276f4442786cb890597eff63d0d276faefad3a  DeepSeek-Harness-companion-v2.2.30.apk
 61520951679a7f18637c29ba47b6ac55120c7b8ecd4aa5cfc8157b425eb7c6d4  DeepSeek-Harness-companion-v2.2.31.apk
+596c16210d9dfc89289ebeafde0fcbcc9d748ed1136a2834e29b33f9ee0ba3ad  DeepSeek-Harness-companion-v2.2.32.apk

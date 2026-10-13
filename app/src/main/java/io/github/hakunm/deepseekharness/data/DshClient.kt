@@ -200,6 +200,30 @@ class DshClient(
 
     fun pluginInventory(): PluginInventory = get("settings/plugins", PluginInventory.serializer())
 
+    /**
+     * 带版本检查地拉插件清单（`?checkUpdates=1`）。
+     *
+     * 与 [pluginInventory] 分开是有意的：版本检查要对每个已装包发一次 registry 请求，
+     * 清单会从毫秒级变成好几秒。用户点进「插件」页九成只想看「装了啥、哪个没启用」，
+     * 所以默认走轻的那条，只有用户**主动要看更新**时才走这条。
+     */
+    fun pluginInventoryWithUpdates(): PluginInventory =
+        get("settings/plugins?checkUpdates=1", PluginInventory.serializer())
+
+    /**
+     * 启用 / 停用一个插件。
+     *
+     * 服务端只改写 profile 的 `dsh.profile.bundles`（加载清单），**不碰依赖、不装包**，
+     * 且写前会备份 profile 的 package.json。返回结果里的 `restartRequired` 恒为 true ——
+     * 那份清单只在 DSH 启动时读一次，所以必须提示用户重启才生效。
+     */
+    fun setPluginLoaded(name: String, loaded: Boolean): PluginToggleResult = patch(
+        pathUrl("settings", "plugins"),
+        PluginToggleRequest(name, loaded),
+        PluginToggleRequest.serializer(),
+        PluginToggleResult.serializer(),
+    )
+
     fun updateProvider(providerId: String, patch: ProviderPatch): ProviderSettings = patch(
         pathUrl("settings", "providers", providerId),
         patch,

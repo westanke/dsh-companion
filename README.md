@@ -258,14 +258,14 @@ scripts/build.sh :app:testDebugUnitTest   # 单元测试
 - Gitee（国内访问更快）：<https://gitee.com/westanke/dsh-companion/releases/latest>
 
 ```text
-DeepSeek-Harness-companion-v2.2.31.apk
+DeepSeek-Harness-companion-v2.2.32.apk
 ```
 
 安装要求：
 
 - Android 8.0（API 26）或更高版本
 - 已运行的 DeepSeek Harness WebUI
-- DSH WebUI 已安装 `dsh-remote-bridge` **≥ 2.3.1**（旧名 `dsh-workspace`；2.0.0 / 2.0.1 有严重缺陷：
+- DSH WebUI 已安装 `dsh-remote-bridge` **≥ 2.3.3**（旧名 `dsh-workspace`；2.0.0 / 2.0.1 有严重缺陷：
   图片读取全部失败、插件无法激活）
 - 插件中至少添加了一个授权根，并已启用远程访问
 - 手机可以访问插件配置的 IP、域名和端口
@@ -498,13 +498,13 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.31`（`versionCode` 10056）
+- 当前版本：`v2.2.32`（`versionCode` 10057）
 - 包名：`io.github.hakunm.deepseekharness`
 - 单元测试：25 个测试类 / 271 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DeepSeek-Harness-companion-v2.2.31.apk`，2,871,054 字节，
-  SHA-256 `61520951679a7f18637c29ba47b6ac55120c7b8ecd4aa5cfc8157b425eb7c6d4`（`artifacts/SHA256SUMS.txt` 同步）
-- 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用，v2.2.30 → v2.2.31 可直接覆盖升级）
+- 当前 APK：`DeepSeek-Harness-companion-v2.2.32.apk`，2,879,742 字节，
+  SHA-256 `596c16210d9dfc89289ebeafde0fcbcc9d748ed1136a2834e29b33f9ee0ba3ad`（`artifacts/SHA256SUMS.txt` 同步）
+- 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用，v2.2.31 → v2.2.32 可直接覆盖升级）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)
 - 许可证：[GNU Affero General Public License v3.0](./LICENSE)
 - 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.1**（「加载更早消息」需要 2.3.1+）

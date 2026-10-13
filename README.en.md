@@ -287,14 +287,14 @@ Download from this repository's Releases (both hosts carry the same file — pic
 - Gitee (faster from mainland China): <https://gitee.com/westanke/dsh-companion/releases/latest>
 
 ```text
-DeepSeek-Harness-companion-v2.2.31.apk
+DeepSeek-Harness-companion-v2.2.32.apk
 ```
 
 Requirements:
 
 - Android 8.0 (API 26) or newer
 - A running DeepSeek Harness WebUI
-- `dsh-remote-bridge` **≥ 2.3.1** installed in the WebUI (formerly `dsh-workspace`; 2.0.0 / 2.0.1 are
+- `dsh-remote-bridge` **≥ 2.3.3** installed in the WebUI (formerly `dsh-workspace`; 2.0.0 / 2.0.1 are
   seriously broken: image reads fail entirely and the plugin cannot activate)
 - At least one authorized root added in the plugin, with remote access enabled
 - The phone can reach the IP, domain, and port configured in the plugin
@@ -531,15 +531,15 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.31` (`versionCode` 10056)
+- Version: `v2.2.32` (`versionCode` 10057)
 - Package: `io.github.hakunm.deepseekharness`
 - Unit tests: 24 test classes / 256 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DeepSeek-Harness-companion-v2.2.31.apk`, 2,871,054 bytes,
-  SHA-256 `61520951679a7f18637c29ba47b6ac55120c7b8ecd4aa5cfc8157b425eb7c6d4` (kept in sync in
+- Current APK: `DeepSeek-Harness-companion-v2.2.32.apk`, 2,879,742 bytes,
+  SHA-256 `596c16210d9dfc89289ebeafde0fcbcc9d748ed1136a2834e29b33f9ee0ba3ad` (kept in sync in
   `artifacts/SHA256SUMS.txt`)
-- Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25; v2.2.30 → v2.2.31 installs in place)
+- Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25; v2.2.31 → v2.2.32 installs in place)
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)
 - License: [GNU Affero General Public License v3.0](./LICENSE)
 - Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.1** (loading older messages needs 2.3.1+)

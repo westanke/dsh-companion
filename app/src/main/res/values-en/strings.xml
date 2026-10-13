@@ -310,10 +310,26 @@
     <string name="plugins_state_installed_not_loaded">Installed, not loaded</string>
     <string name="plugins_state_declared_missing">Declared but missing</string>
     <string name="plugins_state_unknown">Unknown state</string>
-    <string name="plugins_unavailable_profile_unknown">The server cannot tell which plugin profile is in use, so the inventory is unavailable. Make sure DSH is started with a --profile argument.</string>
+    <string name="plugins_unavailable_profile_unknown">The server cannot tell which plugin profile is in use, so the inventory is unavailable. Make sure DSH is started as `dsh web` or `dsh --profile web`.</string>
     <string name="plugins_unavailable_manifest_unreadable">The server cannot read the plugin manifest: package.json may be corrupt, missing, or unreadable.</string>
     <string name="plugins_unavailable_generic">The server cannot provide the plugin inventory right now (%1$s).</string>
     <string name="plugins_permission_required">This device does not have the settings.read scope, so the plugin inventory cannot be shown. Enable settings read for this device in the DSH WebUI workspace settings.</string>
+    <string name="cancel">Cancel</string>
+    <string name="plugins_toggle_official_locked">An official DSH plugin shipped with the runtime; it cannot be toggled.</string>
+    <string name="plugins_toggle_missing_locked">Declared for loading but not found on the computer. Install it there first.</string>
+    <string name="plugins_toggle_not_installed_locked">This package is not installed on the computer, so it cannot be toggled.</string>
+    <string name="plugins_write_permission_required">This device does not have the settings.write scope, so plugins cannot be enabled or disabled. Enable settings write for this device in the DSH WebUI workspace settings.</string>
+    <string name="plugins_toggle_enable">Enable</string>
+    <string name="plugins_toggle_disable">Disable</string>
+    <string name="plugins_restart_hint">This writes DSH\'s startup bundle list, so it takes effect after DSH restarts. Until then the plugin keeps running in its previous state.</string>
+    <string name="plugins_toggle_saved">Written to the startup bundle list. It takes effect after DSH restarts.</string>
+    <string name="plugins_check_updates">Check for updates</string>
+    <string name="plugins_update_available">Version %1$s available</string>
+    <string name="plugins_checking_updates">Checking for updates…</string>
+    <string name="plugins_homepage">Homepage</string>
+    <string name="plugins_toggle_confirm_title">%1$s “%2$s”?</string>
+    <string name="plugins_toggle_confirm_disable">Disabling removes whatever this plugin provides. The change is written to the plugin list on your computer, with a backup of the original file. It takes effect after DSH restarts.</string>
+    <string name="plugins_toggle_confirm_enable">Enabling restores whatever this plugin provides. The change is written to the plugin list on your computer, with a backup of the original file. It takes effect after DSH restarts.</string>
 
     <!-- Files mentioned in the conversation -->
     <string name="session_files">Files in this session</string>

@@ -310,10 +310,26 @@
     <string name="plugins_state_installed_not_loaded">已安装未启用</string>
     <string name="plugins_state_declared_missing">声明缺失</string>
     <string name="plugins_state_unknown">状态未知</string>
-    <string name="plugins_unavailable_profile_unknown">服务器判定不出当前使用的插件档案，暂时读不到插件清单。请确认 DSH 启动时带有 --profile 参数。</string>
+    <string name="plugins_unavailable_profile_unknown">服务器判定不出当前使用的插件档案，暂时读不到插件清单。请确认 DSH 以 dsh web 或 dsh --profile web 启动。</string>
     <string name="plugins_unavailable_manifest_unreadable">服务器读不出插件清单：package.json 可能损坏、缺失或没有读取权限。</string>
     <string name="plugins_unavailable_generic">服务器暂时无法提供插件清单（%1$s）。</string>
     <string name="plugins_permission_required">当前设备没有 settings.read 权限，无法查看插件清单。请在 DSH WebUI 的工作区设置中为此设备启用设置读取权限。</string>
+    <string name="cancel">取消</string>
+    <string name="plugins_toggle_official_locked">DSH 官方插件，随运行时提供，无法启停。</string>
+    <string name="plugins_toggle_missing_locked">声明要加载但电脑上找不到这个包，请先在电脑上安装。</string>
+    <string name="plugins_toggle_not_installed_locked">电脑上没有装这个包，无法启停。</string>
+    <string name="plugins_write_permission_required">当前设备没有 settings.write 权限，无法启用或停用插件。请在 DSH WebUI 的工作区设置中为此设备启用设置写入权限。</string>
+    <string name="plugins_toggle_enable">启用</string>
+    <string name="plugins_toggle_disable">停用</string>
+    <string name="plugins_restart_hint">改动写入的是 DSH 的启动清单，重启 DSH 后生效。重启前插件仍按旧状态运行。</string>
+    <string name="plugins_toggle_saved">已写入启动清单，重启 DSH 后生效。</string>
+    <string name="plugins_check_updates">检查更新</string>
+    <string name="plugins_update_available">有新版本 %1$s</string>
+    <string name="plugins_checking_updates">正在检查更新…</string>
+    <string name="plugins_homepage">主页</string>
+    <string name="plugins_toggle_confirm_title">确认%1$s「%2$s」？</string>
+    <string name="plugins_toggle_confirm_disable">停用后，这个插件提供的功能会消失。改动会写进电脑上的插件清单，并自动备份原文件。重启 DSH 后生效。</string>
+    <string name="plugins_toggle_confirm_enable">启用后，这个插件提供的功能会恢复。改动会写进电脑上的插件清单，并自动备份原文件。重启 DSH 后生效。</string>
 
     <!-- 会话里提到的文件 -->
     <string name="session_files">本会话的文件</string>
