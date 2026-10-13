@@ -624,8 +624,24 @@ android {
         //      `openFile`、`window.dshChat.setFiles` 导出、`#files` 系列 CSS，
         //      以及 ChatWebScreen 里那段推送）—— 两边显示同一批文件，只删一边会不一致。
         //      注意顶部那个文件夹按钮**保留**：`sessionFileList` 仍被它的弹层用着。
-        versionCode = 10059
-        versionName = "2.2.34"
+        // 2.2.35 = 长文件名改为横向滚动显示（纯 App 侧）。
+        //   ① 起因是用户报「设置-文件中的文件名过长，显示不全，判断不出到底是哪个文件」。
+        //      查下去这里格外严重：文件列表第二行给的是「类型 · 大小」，对区分文件
+        //      **毫无帮助**，而文件名又常常「又长又前缀雷同」——几个
+        //      `DeepSeek-Harness-companion-v2.2.xx.apk` 截断后长得一模一样。
+        //   ② 先试过放宽到 3 行（超长名仍截断），用户随后明确要「滚动显示」，于是
+        //      四处统一改用 `Modifier.basicMarquee()`：文件列表项、文件预览标题、
+        //      会话「文件」弹层的文件名、输入框 `@` 补全面板的文件名。
+        //   ③ 为什么是持续滚动（`iterations = Int.MAX_VALUE`）：只滚一遍的话，
+        //      动画结束会回到起点，结果与截断无异 —— 等于没改。`basicMarquee`
+        //      只在文本**溢出时**才动，短名字不受影响；每轮之间默认还夹 1.2s 停顿。
+        //      `LazyColumn` 会回收屏幕外的项，真正同时在滚的只有当前可见的几条。
+        //   ④ 各处的第二行（类型·大小 / 相对路径 / 完整路径）**一律不动** ——
+        //      它们是会换行、更适合阅读的那份参照，与滚动的名字互补。
+        //   另：`artifacts/` 起只留「必须的」（两个上游基线包）与「最新的」，
+        //   已发布到 Release 的 APK 不在本地囤积（见 STATUS）。
+        versionCode = 10060
+        versionName = "2.2.35"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
