@@ -1677,7 +1677,9 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
                         //
                         // 以前这里**不**刷新：正文只能靠页面里那个独立的实时区显示，
                         // 而实时区换 step 就重置 —— 真机表现是「这一段说完，上一段没了」。
-                        // scheduleChatRefresh 自带 250ms 去抖 + 单飞，token 再密也只捞一次。
+                        // scheduleChatRefresh 自带 400ms 静默去抖 + 单飞，token 再密也只捞一次。
+                        // （旧实现是 1 秒轮询 + 每帧置位，token 流式期间等于每秒拉一次全量
+                        //  history —— 那是 v2.2.29 修掉的耗电主因，详见该函数 KDoc。）
                         scheduleChatRefresh()
                     }
                 } else if (event.type.startsWith("chat.")) {
@@ -1845,7 +1847,22 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         chatRefreshPending = true
         if (chatRefreshJob?.isActive == true) return
         chatRefreshJob = viewModelScope.launch {
-            delay(250)
+            // 去抖窗口，不是轮询周期。
+            //
+            // 旧实现是 `delay(1_000)` 之后回 while 条件，而**每一个事件帧都会把
+            // chatRefreshPending 重新置 true**（事件分发末尾那个 `else ->` 兜底分支
+            // 什么都命中）。于是模型流式输出期间，这一秒内只要来过任何一帧，循环就
+            // 继续转 —— 实际表现是**整个流式期间每秒拉一次全量 history**，几百条消息
+            // 反复下载。用户侧的体感就是「一用 APP 电量掉得快」。
+            //
+            // 现在改成：等到**安静 400ms** 才拉一次，且一轮只拉一次。流式输出期间
+            // 事件不断到来，窗口一直被重置、任务一直不起跑；等这一轮消息落定、
+            // 事件安静下来，才做那唯一一次 history() —— 屏幕上该有的内容一次到位，
+            // 实时过程由 liveChat 那一路负责渲染（见 renderLive），不必靠轮询补。
+            //
+            // 400ms 是取舍：短于它会漏掉「最后一条消息落盘」的信号（那就得再补一次），
+            // 长于它用户会看到正文延迟。liveChat 的 delta 推送不受这个窗口影响。
+            delay(400)
             while (chatRefreshPending || chatSessionRefreshPending) {
                 chatRefreshPending = false
                 val refreshSessions = chatSessionRefreshPending
@@ -1884,7 +1901,11 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
                             }
                         }
                 }
-                delay(1_000)
+                // 限流重试之外的正常路径到这里就该收工了。
+                // 保留一个短的「再确认一次」窗口：处理 history 的这段时间里可能又来了新帧，
+                // 那一帧之后仍然安静 400ms 才算真正静默，这里给的是这个静默窗口，不是轮询周期。
+                delay(400)
+                if (!chatRefreshPending && !chatSessionRefreshPending) break
             }
         }
     }

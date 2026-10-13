@@ -13,6 +13,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
@@ -112,6 +114,7 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -125,6 +128,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.runtime.CompositionLocalProvider
@@ -500,21 +504,33 @@ private fun ChatDetail(
     val listState = rememberLazyListState()
     // 复制手势提示只需出现一次：记住它被关掉，而不是每次进会话都啰嗦一遍。
     var copyHintDismissed by rememberSaveable { mutableStateOf(false) }
-    // 用户是否在底部附近——只在底部时才自动滚动，否则不打扰翻历史
-    var isAtBottom by remember { mutableStateOf(true) }
-    val scope = rememberCoroutineScope()
-    LaunchedEffect(listState.firstVisibleItemIndex, listState.layoutInfo.visibleItemsInfo.size) {
-        val visibleItems = listState.layoutInfo.visibleItemsInfo
-        if (visibleItems.isNotEmpty()) {
-            val lastVisibleIndex = visibleItems.last().index
-            val totalItems = displayItems.size + 2 // +2 for copy-hint and older-messages button
-            isAtBottom = lastVisibleIndex >= totalItems - 3
+    // 用户是否在底部附近——只在底部时才自动滚动，否则不打扰翻历史。
+    //
+    // 用 `derivedStateOf` 而不是 `LaunchedEffect` + `mutableStateOf`：
+    //   · 旧写法监听 `firstVisibleItemIndex` + `visibleItemsInfo.size`，**每滑一帧都
+    //     重新赋值** isAtBottom —— 哪怕值没变（大多数帧都没变），重组依然被触发。
+    //   · `derivedStateOf` 只在**读到的值真的变了**时才通知下游；滑动过程中绝大多数
+    //     帧 isAtBottom 都是同一个 false，Compose 直接跳过重组。滑得越长省得越多。
+    //
+    // 判据用 layoutInfo.totalItemsCount（LazyColumn 自己的权威计数）而不是手算
+    // displayItems.size + 2：列表里除了消息还有「复制手势提示」「加载更早消息」
+    // 「本次产生的文件」三类固定条目，它们随状态有无而增减（hasMore 会变、
+    // 提示可以被关掉），手算的 +2 一旦漏掉某一项，误判「已经到底」就会让自动
+    // 跟随突然开火，把正在翻历史的人又拽回底部 —— 那正是本条最初要修的问题。
+    val isAtBottom by remember {
+        derivedStateOf {
+            val visible = listState.layoutInfo.visibleItemsInfo
+            if (visible.isEmpty()) true else {
+                visible.last().index >= listState.layoutInfo.totalItemsCount - 3
+            }
         }
     }
+    val scope = rememberCoroutineScope()
     LaunchedEffect(displayItems.size, state.liveChat?.revision) {
         if (displayItems.isNotEmpty() && isAtBottom) {
-            if (liveItems.isNotEmpty()) listState.scrollToItem(displayItems.lastIndex)
-            else listState.animateScrollToItem(displayItems.lastIndex)
+            val target = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
+            if (liveItems.isNotEmpty()) listState.scrollToItem(target)
+            else listState.animateScrollToItem(target)
         }
     }
 
@@ -622,19 +638,46 @@ private fun ChatDetail(
                 }
             }
         }
-        // 浮动按钮：不在底部时显示，点击跳到底部
-        if (!isAtBottom) {
+        // 浮动按钮：不在底部时显示，点击跳到**会话尾部**。
+        //
+        // 为什么不能直接用 displayItems.lastIndex：列表里除了消息还有别的条目 ——
+        // 顶部「复制手势提示」、底部「本次产生的文件」页脚，还有 hasMore 为真时的
+        // 「加载更早消息」按钮（它在**列表开头**，见上方 item 块）。少算一项就停在
+        // 「看着到底了其实还差一条」的位置，用户会以为按钮没生效。
+        //
+        // 用 totalItems 反推而不是硬编码 -1：LazyColumn 的 itemCount 是权威值，
+        // 以后再加任何固定条目都不用回来改这里。
+        //
+        // 「滚动中先隐去」：滑动的每一帧都会把按钮画在内容之上，半透明的小圆盘压在
+        // 滚过去的文字上，读起来像脏点。等手指松开（isScrollInProgress 变 false）再
+        // 让它实体出现，既不挡阅读、出现时又足够醒目。顺带省掉滑动途中的重绘。
+        //
+        // 点了按钮不用手动把 isAtBottom 改回 true —— 它现在是 derivedStateOf（不可写），
+        // 而 animateScrollToItem 滚到底之后 isAtBottom 自己就变 true、按钮自动消失。
+        val scrolling = listState.isScrollInProgress
+        // 半透明 + 滚动中隐去。用 animateFloatAsState 驱动 alpha 而不是
+        // AnimatedVisibility：这个位置在 BoxScope/ColumnScope 混排里，
+        // AnimatedVisibility 的两个重载（顶层 vs ColumnScope）会被解析歧义卡住
+        // （'ColumnScope.AnimatedVisibility cannot be called with an implicit receiver'），
+        // 自己驱动 alpha 既绕开那个坑，也顺手把「滚动中先隐去、停手再浮现」平滑化。
+        val jumpButtonAlpha by animateFloatAsState(
+            targetValue = if (!isAtBottom && !scrolling) 0.88f else 0f,
+            animationSpec = tween(durationMillis = 140),
+            label = "jump-to-latest-alpha",
+        )
+        if (jumpButtonAlpha > 0.01f) {
             FloatingActionButton(
                 onClick = {
-                    isAtBottom = true
-                    if (displayItems.isNotEmpty()) {
-                        scope.launch { listState.animateScrollToItem(displayItems.lastIndex) }
+                    val target = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
+                    if (target > 0) {
+                        scope.launch { listState.animateScrollToItem(target) }
                     }
                 },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(bottom = 16.dp, end = 16.dp)
-                    .size(48.dp),
+                    .size(48.dp)
+                    .graphicsLayer { alpha = jumpButtonAlpha },
                 containerColor = MaterialTheme.colorScheme.primaryContainer,
             ) {
                 Icon(

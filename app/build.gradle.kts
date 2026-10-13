@@ -502,8 +502,31 @@ android {
         //     · 包在 Box 内层而不是给每个 Text 单独包：助手正文是第三方 Markdown
         //       组件渲染的（com.mikepenz.markdown.m3），内部有几个 Text 由它决定，
         //       外层包一次就覆盖全部段落、代码块与列表项。
-        versionCode = 10053
-        versionName = "2.2.28"
+        // 2.2.29 = 修耗电 + 修跳转 + 两处界面优化（用户真机反馈）：
+        //   ① **耗电主因**：`scheduleChatRefresh()` 原是 `delay(1000)` 后回 while
+        //      判条件，而**每个事件帧都把 chatRefreshPending 置 true**（事件分发
+        //      末尾那个 `else ->` 兜底分支什么都命中）。于是模型流式输出期间每秒
+        //      十几帧，循环一直转 —— 实际是**整个回答期间每秒拉一次全量 history**，
+        //      几百条消息反复下载。改成 **400ms 静默去抖**：事件不断就重置窗口、
+        //      任务不起跑；等这一轮安静下来才拉那唯一一次。实时流式显示不受影响
+        //      （chat.message.delta 走 liveChat 独立渲染，token 级推送）。
+        //   ② 浮动「跳到最新」按钮原本只跳到**当页尾部**：`displayItems.lastIndex`
+        //      漏算了「复制手势提示」「加载更早消息」「本次产生的文件」三类固定
+        //      条目，看着到底了其实还差一截。改用
+        //      `listState.layoutInfo.totalItemsCount - 1`（LazyColumn 权威计数）。
+        //   ③ 连带修 `isAtBottom` 判定：原来手算 `displayItems.size + 2`，固定条目
+        //      增减时会误判「已经到底」，让自动跟随突然开火把翻历史的人拽回底部 ——
+        //      正是本条最初要修的问题。两处统一用 totalItemsCount。
+        //   ④ `isAtBottom` 改 `derivedStateOf`：`LaunchedEffect` + `mutableStateOf`
+        //      在**每滑一帧都重新赋值**（哪怕值没变也触发重组）；derivedStateOf
+        //      只在读到的值真变了才通知下游，长列表滑得越多省得越多。
+        //   ⑤ 浮动按钮半透明（alpha 0.88）+ **滚动中隐去、停手再浮现**：
+        //      滑动时它压在滚过的文字上像脏点。用 `animateFloatAsState` 驱动 alpha
+        //      而非 AnimatedVisibility —— 这里 BoxScope/ColumnScope 混排，
+        //      AnimatedVisibility 两个重载会被解析歧义卡住，自己驱动 alpha 既
+        //      绕开那个坑，也把出现/隐去平滑化（140ms）。
+        versionCode = 10054
+        versionName = "2.2.29"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
