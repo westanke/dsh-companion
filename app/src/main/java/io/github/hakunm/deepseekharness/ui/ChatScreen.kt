@@ -1787,10 +1787,15 @@ private fun Composer(
         // 但万一将来判据放宽，这里先立规矩：斜杠优先，避免两个列表叠在一起。
         val mentioning = MentionQuery.activeStart(value) != null
         if (mentioning) {
+            // 会话目录的两种形态都要：相对根的 `cwd` 用来在条目路径里做前缀替换，
+            // 绝对形态 `cwdAbsolute` 用来拼出真正能用的绝对路径。
+            val mentionSession = state.sessions.firstOrNull { it.id == state.selectedSessionId }
             MentionSuggestions(
                 value = value,
                 entries = state.mentionEntries,
-                cwd = state.sessions.firstOrNull { it.id == state.selectedSessionId }?.cwd,
+                failed = state.mentionFailed,
+                cwd = mentionSession?.cwd,
+                cwdAbsolute = mentionSession?.cwdAbsolute,
                 // 选中后**只替换「@…末尾」那一段**，不是整行替换：
                 // 用户很可能已经写了半句「帮我看看 @xxx」，整行替换会把前半句吃掉。
                 onSelect = { inserted -> onValueChange(MentionQuery.applySelection(value, inserted)) },
@@ -2224,7 +2229,9 @@ private fun TodoPanel(todos: List<TodoItem>, expanded: Boolean, onToggle: () -> 
 private fun MentionSuggestions(
     value: String,
     entries: List<FileEntry>?,
+    failed: Boolean,
     cwd: String?,
+    cwdAbsolute: String?,
     onSelect: (String) -> Unit,
 ) {
     val query = MentionQuery.query(value) ?: return
@@ -2249,11 +2256,13 @@ private fun MentionSuggestions(
                 style = MaterialTheme.typography.labelMedium,
             )
             if (entries == null) {
-                // 还没加载完 / 加载失败：说清楚状态，别让用户对着空气等。
+                // 三态，别把「读不到」谎报成「空的」：
+                //   null + 未失败 → 还在读；null + 失败 → 读不到。
+                // 真正的空目录走下面 `matches.isEmpty()` 那条分支（那才是空列表）。
                 Text(
                     stringResource(
-                        if (cwd.isNullOrBlank()) R.string.workspace_files_unavailable
-                        else R.string.workspace_files_empty,
+                        if (failed) R.string.workspace_files_unavailable
+                        else R.string.workspace_files_loading,
                     ),
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2269,7 +2278,7 @@ private fun MentionSuggestions(
             } else {
                 matches.forEach { entry ->
                     val isDir = entry.kind == "directory"
-                    val absolute = MentionQuery.absolute(cwd, entry.path)
+                    val absolute = MentionQuery.absolute(cwdAbsolute, cwd.orEmpty(), entry.path)
                     Row(
                         modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                             // 目录结尾补 `/` 且**不加空格**：用户大概率要继续往里选，

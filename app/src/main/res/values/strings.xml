@@ -177,6 +177,7 @@
     <string name="workspace_files">工作目录文件</string>
     <string name="workspace_files_empty">这个目录还是空的</string>
     <string name="workspace_files_unavailable">读不到这个会话的工作目录</string>
+    <string name="workspace_files_loading">正在读取会话工作目录…</string>
     <string name="command_compact_description">压缩较早的会话历史</string>
     <string name="command_export_description">将当前会话日志下载为 ZIP 文件</string>
     <string name="command_feedback_description">记录当前会话的反馈</string>
