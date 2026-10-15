@@ -27,6 +27,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -129,13 +130,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.stringResource
@@ -151,6 +155,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownTypography
@@ -225,28 +230,80 @@ fun ChatScreen(state: HarnessState, viewModel: HarnessViewModel, wide: Boolean) 
 
     // 会话**列表**两条路共用（它是原生资产，换掉没有收益）；只有详情页有两个实现。
     // WebView 版尚未过真机验证，所以由 AppPreferences.useWebChat 决定，默认走原生。
-    val detail: @Composable (() -> Unit) -> Unit = { onBack ->
+    //
+    // 第二个参数 wide 只影响**原生**详情页（ConversationHeader 的标题行数等）；
+    // WebView 版自己渲染，不消费它。
+    val detail: @Composable (() -> Unit, Boolean) -> Unit = { onBack, wideFlag ->
         if (state.useWebChat) {
             ChatWebScreen(state, viewModel, onBack, Modifier.fillMaxSize())
         } else {
-            ChatDetail(state, viewModel, onBack, Modifier.fillMaxSize())
+            ChatDetail(state, viewModel, onBack, Modifier.fillMaxSize(), wideFlag)
         }
     }
 
     if (wide) {
-        Row(Modifier.fillMaxSize()) {
-            SessionPane(state, viewModel, { createSheet = true }, { workspaceSheet = true }, Modifier.width(304.dp).fillMaxHeight())
-            VerticalDivider(Modifier.fillMaxHeight(), color = MaterialTheme.colorScheme.outlineVariant)
-            detail({})
+        // 会话列表栏宽**随屏宽伸缩**（见 sessionPaneWidth）：旧的 304.dp 是手机抽屉宽度，
+        // 直接照搬到平板，长标题在 840–1440dp 的常见平板宽度里几乎必然被腰斩。
+        // BoxWithConstraints 只包 wide 分支 —— 手机路径保持原样，像素级零改动。
+        //
+        // paneWidth 在 BoxWithConstraints 的 lambda 开头取出（不进 Row 的 content），
+        // 否则嵌套 receiver（BoxWithConstraintsScope → RowScope）会让 maxWidth 解析歧义。
+        //
+        // 曾试过给会话列表加收起态（v2.2.39，48dp 竖条开关、收起时把 320–440dp
+        // 全让给详情），用户实测后要求回到本形态：列表常驻、不收起。
+        // 一级导航（App.kt 的 navExpanded）仍然默认收起 —— 那是另一处，不受此影响。
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val paneWidth = sessionPaneWidth(maxWidth)
+            Row(Modifier.fillMaxSize()) {
+                SessionPane(
+                    state,
+                    viewModel,
+                    { createSheet = true },
+                    { workspaceSheet = true },
+                    Modifier.width(paneWidth).fillMaxHeight(),
+                    wide = true,
+                )
+                VerticalDivider(Modifier.fillMaxHeight(), color = MaterialTheme.colorScheme.outlineVariant)
+                if (selected == null) {
+                    // 未选会话时右侧不再是一整块空白：放一个概览（主机状态 + 最近会话 + 新建入口）。
+                    SessionOverviewPane(
+                        state,
+                        viewModel,
+                        { createSheet = true },
+                        Modifier.weight(1f).fillMaxHeight(),
+                    )
+                } else {
+                    detail({}, true)
+                }
+            }
         }
     } else if (selected == null) {
         SessionPane(state, viewModel, { createSheet = true }, { workspaceSheet = true }, Modifier.fillMaxSize())
     } else {
-        detail { viewModel.selectSession(null) }
+        detail({ viewModel.selectSession(null) }, false)
     }
     if (createSheet) NewSessionSheet(state, viewModel) { createSheet = false }
     if (workspaceSheet) WorkspaceManagementSheet(state, viewModel) { workspaceSheet = false }
 }
+
+/**
+ * 会话展示标题（[SessionRow] 与 [SessionOverviewPane] 共用同一口径）。
+ *
+ * 优先级：用户起的 `title` → `workspaceTitle` → 相对工作目录 `cwd`（空串时兜底 id 前 12 位）。
+ * 抽成纯函数是为了让「显示什么」这一条规则只写一次 —— 两处列表各抄一遍迟早漂移。
+ */
+internal fun sessionDisplayTitle(session: ChatSession): String =
+    session.title ?: session.workspaceTitle ?: session.cwd.ifBlank { session.id.take(12) }
+
+/**
+ * 平板（wide）分支里会话列表栏的宽度。
+ *
+ * 只被 wide 分支调用（手机/窄屏永远走固定布局，不经过这里）；
+ * 比例 0.25 给长标题留足横向空间，下限 320.dp 保证不会比旧的 304.dp 更窄，
+ * 上限 440.dp 避免把内容区挤没。纯函数，可单测钉住边界。
+ */
+internal fun sessionPaneWidth(maxWidth: Dp): Dp =
+    (maxWidth * 0.25f).coerceIn(320.dp, 440.dp)
 
 @Composable
 private fun SessionPane(
@@ -255,6 +312,7 @@ private fun SessionPane(
     onCreate: () -> Unit,
     onManageWorkspaces: () -> Unit,
     modifier: Modifier,
+    wide: Boolean = false,
 ) {
     Column(modifier.padding(horizontal = 14.dp)) {
         Row(
@@ -305,9 +363,126 @@ private fun SessionPane(
                         onRename = { viewModel.renameSession(session.id, it) },
                         onFork = { viewModel.forkSession(session.id) },
                         onArchive = { viewModel.archiveSession(session.id) },
+                        wide = wide,
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f))
                 }
+            }
+        }
+    }
+}
+
+/**
+ * 平板（wide）分支里未选会话时的右侧概览。
+ *
+ * 旧实现在这个位置只画一句居中的「选择一个会话」—— 平板上这是超过一半屏幕的纯空白。
+ * 概览放三样东西：当前主机状态、最近 5 个会话（点击直接选中）、新建会话入口。
+ *
+ * 刻意不显示「最后活跃时间」：内核给 `ChatSession.updatedAt` 的单位未定（毫秒/秒），
+ * 猜错就显示 1970 年 —— 锦上添花的东西宁可不做。
+ *
+ * 只在 wide 分支被调用，手机端路径零改动。
+ */
+@Composable
+private fun SessionOverviewPane(
+    state: HarnessState,
+    viewModel: HarnessViewModel,
+    onCreate: () -> Unit,
+    modifier: Modifier,
+) {
+    val recent = remember(state.sessions) {
+        state.sessions.sortedByDescending { it.updatedAt }.take(5)
+    }
+    val canWrite = "chat.write" in state.device?.scopes.orEmpty()
+    Column(modifier.padding(horizontal = 24.dp, vertical = 28.dp)) {
+        Text(stringResource(R.string.session_overview), style = MaterialTheme.typography.headlineMedium)
+        Row(
+            Modifier.padding(top = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            StatusLabel(
+                if (state.eventsConnected) stringResource(R.string.online) else stringResource(R.string.offline),
+                state.eventsConnected,
+            )
+            state.device?.name?.let {
+                Text(
+                    it,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+        Spacer(Modifier.size(16.dp))
+        Text(
+            stringResource(R.string.recent_sessions),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Spacer(Modifier.size(8.dp))
+        if (recent.isEmpty()) {
+            EmptyState(
+                Icons.Outlined.ChatBubbleOutline,
+                stringResource(R.string.no_sessions),
+                Modifier.weight(1f).fillMaxWidth(),
+            )
+        } else {
+            recent.forEach { session ->
+                Surface(
+                    onClick = { viewModel.selectSession(session.id) },
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                sessionDisplayTitle(session),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            session.workspaceTitle?.takeIf { it.isNotBlank() }?.let {
+                                Text(
+                                    it,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                        if (session.running) {
+                            CircularProgressIndicator(
+                                Modifier.size(14.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        }
+                        Icon(
+                            Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                            contentDescription = null,
+                            modifier = Modifier.padding(start = 8.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                Spacer(Modifier.size(6.dp))
+            }
+        }
+        if (canWrite) {
+            Spacer(Modifier.size(12.dp))
+            OutlinedButton(onClick = onCreate) {
+                Icon(
+                    Icons.Outlined.Add,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(stringResource(R.string.new_session), modifier = Modifier.padding(start = 8.dp))
             }
         }
     }
@@ -322,8 +497,9 @@ private fun SessionRow(
     onRename: (String) -> Unit,
     onFork: () -> Unit,
     onArchive: () -> Unit,
+    wide: Boolean = false,
 ) {
-    val displayTitle = session.title ?: session.workspaceTitle ?: session.cwd.ifBlank { session.id.take(12) }
+    val displayTitle = sessionDisplayTitle(session)
     var menuExpanded by remember { mutableStateOf(false) }
     var renameOpen by remember { mutableStateOf(false) }
     var archiveOpen by remember { mutableStateOf(false) }
@@ -350,7 +526,14 @@ private fun SessionRow(
             )
         }
         Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-            Text(displayTitle, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+            // 平板（wide）下会话列表栏更宽，长标题允许占满两行 ——
+            // 旧的 304.dp 栏里一行必然腰斩（截图里全是 ……），手机端保持单行不动。
+            Text(
+                displayTitle,
+                maxLines = if (wide) 2 else 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.titleMedium,
+            )
             Row(
                 Modifier.padding(top = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -419,6 +602,7 @@ private fun ChatDetail(
     viewModel: HarnessViewModel,
     onBack: (() -> Unit)?,
     modifier: Modifier,
+    wide: Boolean = false,
 ) {
     val selected = state.sessions.find { it.id == state.selectedSessionId }
     if (selected == null) {
@@ -551,6 +735,9 @@ private fun ChatDetail(
     val canWrite = "chat.write" in state.device?.scopes.orEmpty()
     val canSteer = state.approvalState == ApprovalUiState.None && canWrite &&
         (ComposerSendPolicy.canSubmit(message, canWrite) || state.pendingAttachments.isNotEmpty())
+    // 外接物理键盘检测（Configuration.keyboard）：平板上接蓝牙/USB 键盘、或跑桌面模式时为真。
+    // 手机端恒为 false —— 所以下面给 Composer 传的这个参数在手机上永远是默认值，零行为变化。
+    val physicalKeyboard = hasPhysicalKeyboard(LocalConfiguration.current)
 
     onBack?.let { BackHandler(enabled = true, onBack = it) }
     CompositionLocalProvider(LocalUriHandler provides linkHandler) {
@@ -570,6 +757,7 @@ private fun ChatDetail(
                     viewModel.sendMessage(message, true)
                     message = ""
                 },
+                wide = wide,
             )
             if (todos.isNotEmpty()) {
                 TodoPanel(todos, tasksExpanded, onToggle = { tasksExpanded = !tasksExpanded })
@@ -703,6 +891,7 @@ private fun ChatDetail(
                 onAttachFile = viewModel::attachFile,
                 onRemoveAttachment = viewModel::removePendingAttachment,
                 onSubmit = { steer -> viewModel.sendMessage(message, steer); message = "" },
+                physicalKeyboard = physicalKeyboard,
             )
             ApprovalUiState.Loading -> ApprovalLoading()
             is ApprovalUiState.Pending -> approvals.items.firstOrNull()?.let { approval ->
@@ -748,6 +937,7 @@ private fun ConversationHeader(
     onPermissionSelect: (String) -> Unit,
     canSteer: Boolean,
     onSteer: () -> Unit,
+    wide: Boolean = false,
 ) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
@@ -757,9 +947,11 @@ private fun ConversationHeader(
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back)) }
         }
         Column(Modifier.weight(1f).padding(start = if (onBack == null) 10.dp else 2.dp)) {
+            // 标题在窄屏（手机）永远单行；平板（wide）下允许两行 —— 兜底到长 cwd 路径时
+            // 不会在顶栏被腰斩，短标题（用户起的名字）依然只占一行，布局无感。
             Text(
-                session.title ?: session.workspaceTitle ?: session.cwd.ifBlank { session.id },
-                maxLines = 1,
+                sessionDisplayTitle(session),
+                maxLines = if (wide) 2 else 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.titleMedium,
             )
@@ -1656,6 +1848,7 @@ private fun Composer(
     onAttachFile: (name: String, sizeBytes: Long, openInput: () -> InputStream) -> Unit,
     onRemoveAttachment: (String) -> Unit,
     onSubmit: (steer: Boolean) -> Unit,
+    physicalKeyboard: Boolean = false,
 ) {
     val canWrite = "chat.write" in state.device?.scopes.orEmpty()
     // 刻意**不**把 state.busy 放进可提交条件：全局 busy 连一次刷新都会置位。
@@ -1685,14 +1878,35 @@ private fun Composer(
     var attachMenu by remember { mutableStateOf(false) }
     // 运行中提示不再单独占一行，而是并进占位符 —— 照网页版 chat.html:1399
     // 直接改 textarea 的 placeholder 的做法，省掉输入区上方那一行高度。
-    // 占位符必须一行放得下（下面 maxLines = 1 + Ellipsis），所以只留「运行中 + 发送去哪」。
-    val placeholder = stringResource(
-        when (composerHint(sessionRunning, defaultIsSteer)) {
-            ComposerHint.IDLE -> R.string.message_hint
-            ComposerHint.RUNNING_QUEUE -> R.string.message_hint_running_queue
-            ComposerHint.RUNNING_STEER -> R.string.message_hint_running_steer
-        },
-    )
+    // 占位符必须一行放得下（下面 maxLines = 1 + Ellipsis），所以只留「运行中 + 发送去哪」；
+    // 外接物理键盘时再追加「Ctrl+Enter 发送」（见 composerHint 的 physicalKeyboard 分支）。
+    val hint = composerHint(sessionRunning, defaultIsSteer, physicalKeyboard)
+    val placeholder = when (hint) {
+        ComposerHint.IDLE -> stringResource(R.string.message_hint)
+        // 两段拼接而不是新增资源：空闲短文案 + 快捷键提示。用 stringResource 取两段再拼，
+        // 语言切换时两段都跟着切（写死一串中英混排不行）。
+        ComposerHint.IDLE_PHYSICAL -> stringResource(R.string.message_hint) +
+            " · " + stringResource(R.string.message_hint_ctrl_enter)
+        ComposerHint.RUNNING_QUEUE -> stringResource(R.string.message_hint_running_queue)
+        ComposerHint.RUNNING_STEER -> stringResource(R.string.message_hint_running_steer)
+    }
+    // 接了物理键盘时**不弹软键盘**：平板 + 外接键盘是常态，点一下输入框弹出占掉半屏的
+    // 软键盘纯属浪费（而且 Android 不会因为接了外接键盘就自动不弹）。
+    //
+    // 关键在**时机**：必须在输入框**获得焦点的那一刻** hide，而不是 Composer 组合时。
+    // 组合时执行的那一版（本版之前）是空操作 —— 那时输入框还没焦点，hide 什么都不会发生；
+    // 等用户点输入框，软键盘照弹，物理键盘的 Enter / Ctrl+Enter 全被 IME 吞掉
+    // （onKeyEvent 一个事件都收不到，表现为「回车就是换行」——换行正是 IME 的行为）。
+    //
+    // 做法：BasicTextField 挂 onFocusChanged，焦点为真即 hide。不主动 requestFocus
+    // （没有需要「一进页面就抢焦点」的场景），所以不需要 FocusRequester。
+    // 不依赖实验 API，也不改 KeyboardOptions（那会连 IME action 一起改掉）。
+    // 手机端 physicalKeyboard 恒为 false，整段不执行，行为零变化。
+    val keyboardController = LocalSoftwareKeyboardController.current
+    var composerFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(composerFocused, physicalKeyboard) {
+        if (composerFocused && physicalKeyboard) keyboardController?.hide()
+    }
     Column(Modifier.fillMaxWidth()) {
         // 两个补全面板**互斥**：`/` 只在整行以斜杠开头时才出（官方命令是行首语法），
         // `@` 只在光标落在一个提及词里时才出。同一时刻两者不可能同时成立 ——
@@ -1815,16 +2029,25 @@ private fun Composer(
                         BasicTextField(
                             value = value,
                             onValueChange = onValueChange,
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp).onKeyEvent { event ->
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 10.dp)
+                                // 焦点变化驱动上面的软键盘 hide：接了物理键盘时，
+                                // 用户每点一次输入框都要收一次软键盘（见那段注释）。
+                                .onFocusChanged { composerFocused = it.isFocused }
+                                .onKeyEvent { event ->
                                 // 物理键盘（外接键盘、桌面模式）的 Enter。
                                 // 软键盘的「发送」键走下面的 KeyboardActions.onSend。
                                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                                 if (event.key != Key.Enter && event.key != Key.NumPadEnter) return@onKeyEvent false
                                 val alternate = event.isCtrlPressed || event.isMetaPressed
-                                // 普通回车一律放行换行——软键盘的「换行」键也会派发 Key.Enter
-                                // 到这里（输入法实现差异），不能只当物理键盘处理。
-                                // 发送只走两条路：软键盘「发送」action 键 + 旁边发送按钮。
+                                // 软键盘派发的事件一律放行换行：触摸屏上按不出「真的 Ctrl」，
+                                // IME 偶尔补发的带修饰键事件也是同一个来源，若不拦就会被当成
+                                // Ctrl+Enter 误发。只有物理键盘的 Ctrl+Enter 才走到发送。
                                 if (!alternate) return@onKeyEvent false
+                                if (isSoftKeyboardEvent(event.nativeKeyEvent.flags)) {
+                                    return@onKeyEvent false
+                                }
                                 if (!canSubmit) return@onKeyEvent false
                                 val steer = ComposerSendPolicy
                                     .resolve(sessionRunning, state.busySendMode, alternate) == BusySendMode.STEER
@@ -1873,14 +2096,54 @@ private fun Composer(
  * 占位符成了唯一说明。所以把「选哪一段」抽成纯函数并单测（ComposerPillTest），
  * 免得这种「只差一行字」的取舍在界面里悄悄错掉：选错资源在屏幕上只是一行小字。
  */
-internal enum class ComposerHint { IDLE, RUNNING_QUEUE, RUNNING_STEER }
+internal enum class ComposerHint { IDLE, IDLE_PHYSICAL, RUNNING_QUEUE, RUNNING_STEER }
 
-internal fun composerHint(sessionRunning: Boolean, steerIsDefault: Boolean): ComposerHint = when {
+/**
+ * 输入框占位符该显示哪一段。
+ *
+ * [physicalKeyboard] 为真时（外接键盘 / 桌面模式）空闲文案追加「Ctrl+Enter 发送」——
+ * 软键盘的换行键与物理 Enter 在 `onKeyEvent` 里派发同一个 `Key.Enter`，事件本身分不出来源，
+ * 所以 Enter 一律换行、发送只走 Ctrl+Enter。这条规则不写出来，硬键盘用户根本不知道
+ * 该怎么发送（平板 + 外接键盘是常态场景）。
+ *
+ * 为什么只加在 IDLE 态：运行中的两段文案（RUNNING_QUEUE / RUNNING_STEER）本身已在说
+ * 「发送即插话/排队」，再拼一段会超出一行放不下（placeholder 是 maxLines = 1 + Ellipsis）。
+ */
+internal fun composerHint(
+    sessionRunning: Boolean,
+    steerIsDefault: Boolean,
+    physicalKeyboard: Boolean = false,
+): ComposerHint = when {
     // 空闲时没有可插话的轮次，设置里的「繁忙时默认行为」不该影响占位符。
-    !sessionRunning -> ComposerHint.IDLE
+    !sessionRunning -> if (physicalKeyboard) ComposerHint.IDLE_PHYSICAL else ComposerHint.IDLE
     steerIsDefault -> ComposerHint.RUNNING_STEER
     else -> ComposerHint.RUNNING_QUEUE
 }
+
+/**
+ * 当前是否接了物理键盘（外接蓝牙/USB 键盘、平板桌面模式）。
+ *
+ * 判据是 `Configuration.keyboard == KEYBOARD_QWERTY`：它表示「设备具备物理 QWERTY 键盘」，
+ * 折叠屏展开、平板桌面模式、外接键盘三种情况都归它。`KEYBOARD_NOKEYS` 是纯触摸设备（手机），
+ * `KEYBOARD_UNDEFINED` 交给 false —— 不确定时按软键盘处理，提示短一点不会错。
+ */
+internal fun hasPhysicalKeyboard(configuration: android.content.res.Configuration): Boolean =
+    configuration.keyboard == android.content.res.Configuration.KEYBOARD_QWERTY
+
+/**
+ * 这个按键事件是不是**软键盘**（IME）派发的。
+ *
+ * 判据是 Android `KeyEvent.FLAG_SOFT_KEYBOARD`（值为 2）：IME 通过
+ * `InputConnection.sendKeyEvent()` 送进来的事件都带这个 flag，外接键盘的不带。
+ *
+ * 为什么需要它：软键盘的「换行」键与外接键盘的 Enter 在 Compose `onKeyEvent` 里
+ * 派发**同一个** `Key.Enter`，`isCtrlPressed` 也可能被 IME 补成 true
+ * （某些输入法的组合键实现）。不区分来源就会把「触摸屏上按了个换行」
+ * 当成「Ctrl+Enter」误发出去。拦这道 flag 之后：
+ * 触摸屏的 Enter 一律换行；只有物理键盘的 Ctrl+Enter 才发送。
+ */
+internal fun isSoftKeyboardEvent(nativeFlags: Int): Boolean =
+    nativeFlags and android.view.KeyEvent.FLAG_SOFT_KEYBOARD != 0
 
 /**
  * 流式思考条：消息区**下方**、输入区**上方**的一条固定位置。

@@ -22,6 +22,10 @@
     <string name="no_sessions">暂无可见会话</string>
     <string name="select_session">选择一个会话</string>
     <string name="message_hint">描述你想要构建的内容</string>
+    <!-- 外接物理键盘时的追加提示：软/硬键盘的 Enter 在 onKeyEvent 里派发同一个 Key.Enter
+         （现有代码 2005-2007 行的注释已踩明这个坑），所以 Enter 一律换行、发送走 Ctrl+Enter。
+         仅物理键盘连接时才拼上这段，软键盘用户看到的是原来的短文案。 -->
+    <string name="message_hint_ctrl_enter">Ctrl+Enter 发送</string>
     <!-- 运行中把提示并进占位符（照网页版 #ta 的 placeholder），不再单独占一行 -->
     <string name="message_hint_running_steer">运行中… 发送即插话</string>
     <string name="message_hint_running_queue">运行中… 发送即排队</string>
@@ -156,6 +160,9 @@
     <string name="confirm_allow_once">确认允许一次</string>
     <string name="unsaved_text">编辑内容</string>
     <string name="session_count">%1$d 个会话</string>
+    <!-- 平板（wide）未选会话时的右侧概览面板：主机状态 + 最近会话 + 新建入口。手机端不渲染。 -->
+    <string name="session_overview">会话概览</string>
+    <string name="recent_sessions">最近会话</string>
     <string name="root_directory">授权根目录</string>
     <string name="file_actions">文件操作</string>
     <string name="connected">已连接</string>

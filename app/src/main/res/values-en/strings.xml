@@ -22,6 +22,10 @@
     <string name="no_sessions">No visible sessions</string>
     <string name="select_session">Select a session</string>
     <string name="message_hint">Describe what you want to build</string>
+    <!-- Appended only while a physical keyboard is attached: the soft keyboard\'s Return key and
+         a physical Enter both dispatch Key.Enter to onKeyEvent (see the comment in Composer),
+         so Enter always means newline and sending stays on Ctrl+Enter. -->
+    <string name="message_hint_ctrl_enter">Ctrl+Enter to send</string>
     <!-- While running, the hint moves into the placeholder (mirrors the web chat's #ta) -->
     <string name="message_hint_running_steer">Running… sends as steer</string>
     <string name="message_hint_running_queue">Running… sends as queue</string>
@@ -156,6 +160,9 @@
     <string name="confirm_allow_once">Confirm allow once</string>
     <string name="unsaved_text">Editor content</string>
     <string name="session_count">%1$d sessions</string>
+    <!-- Tablet (wide) overview pane shown when no session is selected. Not rendered on phones. -->
+    <string name="session_overview">Session overview</string>
+    <string name="recent_sessions">Recent sessions</string>
     <string name="root_directory">Authorized root</string>
     <string name="file_actions">File actions</string>
     <string name="connected">Connected</string>

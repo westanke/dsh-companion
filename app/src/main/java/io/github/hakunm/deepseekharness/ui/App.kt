@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Menu
@@ -128,6 +130,18 @@ private fun ConnectedApp(
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth >= 840.dp
+        // 平板（wide）下导航面板**默认收起**（用户方案：让会话/文件页显示区域更大）。
+        //
+        // 展开时是从左缘滑出的 264dp 抽屉，盖在内容之上（overlay，不挤压内容）——
+        // 与手机 ModalNavigationDrawer 同一套观感，只是这里常驻且用状态驱动。
+        // 收起时内容左缘留一条 48dp 的独立竖条装着开关（见下面 content 里的注释：
+        // 竖条而非浮层，浮层会压住 ChatScreen 会话列表栏的标题导致点不动）。
+        //
+        // 切 section / 切页面（wide 变化）时**自动收起**：抽屉是一次性的，
+        // 选完就该把屏幕还给内容。这个 Effect 必须放在 BoxWithConstraints 内部 ——
+        // wide 是下面才算出来的。
+        var navExpanded by remember { mutableStateOf(false) }
+        LaunchedEffect(section, wide) { navExpanded = false }
 
         // WebView 聊天页开着时，**关掉抽屉的滑动手势**。
         //
@@ -194,20 +208,31 @@ private fun ConnectedApp(
                         .padding(padding)
                         .consumeWindowInsets(padding),
                 ) {
-                    AnimatedVisibility(
-                        visible = wide,
-                        enter = fadeIn() + slideInHorizontally { -it / 3 },
-                        exit = fadeOut() + slideOutHorizontally { -it / 3 },
-                    ) {
-                        NavigationPanel(
-                            state = state,
-                            selected = section,
-                            onSelected = { section = it },
-                            onRefresh = viewModel::refreshDashboard,
-                            modifier = Modifier.width(264.dp).fillMaxHeight(),
-                        )
+                    // 平板（wide）左缘的**独立竖条**：48dp 宽，装着导航抽屉的开关。
+                    //
+                    // 为什么不再浮在内容之上：浮层版把汉堡按 `align(TopStart)` 压在内容左缘，
+                    // 正好盖住 ChatScreen 会话列表栏顶部的「会话」标题 —— 那一整片点击被上层
+                    // 吃掉，用户实测「抽屉图标和会话列表标题重复了，无法点击」。
+                    // 竖条不遮任何内容：它自己占 48dp，内容区从它右边开始，天然不重叠。
+                    //
+                    // 代价是内容区少了 48dp —— 相比常驻 264dp 面板仍省下 216dp，
+                    // 且这一条还能顺带当「有导航可开」的常驻提示。
+                    if (wide) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            modifier = Modifier.width(48.dp).fillMaxHeight(),
+                        ) {
+                            IconButton(
+                                onClick = { navExpanded = !navExpanded },
+                                modifier = Modifier.padding(top = 6.dp),
+                            ) {
+                                Icon(
+                                    if (navExpanded) Icons.Outlined.Close else Icons.Outlined.Menu,
+                                    stringResource(R.string.navigation),
+                                )
+                            }
+                        }
                     }
-                    if (wide) VerticalDivider(Modifier.fillMaxHeight(), color = MaterialTheme.colorScheme.outlineVariant)
                     AnimatedContent(
                         targetState = section,
                         modifier = Modifier.weight(1f).fillMaxHeight(),
@@ -230,7 +255,42 @@ private fun ConnectedApp(
         }
 
         if (wide) {
-            content()
+            Box(Modifier.fillMaxSize()) {
+                content()
+                // 平板导航抽屉：默认收起（见 navExpanded 的注释），
+                // 展开时以 overlay 形式盖在内容之上 —— 264dp 与手机抽屉同宽，
+                // 但这里不占布局，内容区始终是整屏。
+                AnimatedVisibility(
+                    visible = wide && navExpanded,
+                    enter = fadeIn() + slideInHorizontally { -it / 3 },
+                    exit = fadeOut() + slideOutHorizontally { -it / 3 },
+                ) {
+                    Row(Modifier.fillMaxSize()) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceContainerLow,
+                            modifier = Modifier.width(264.dp).fillMaxHeight(),
+                        ) {
+                            NavigationPanel(
+                                state = state,
+                                selected = section,
+                                onSelected = {
+                                    section = it
+                                    navExpanded = false
+                                },
+                                onRefresh = viewModel::refreshDashboard,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                        // 抽屉右侧这一条透明可点区域 = 点它收抽屉（ModalDrawer 也是这个语义）。
+                        Box(
+                            Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable { navExpanded = false },
+                        )
+                    }
+                }
+            }
         } else {
             ModalNavigationDrawer(
                 drawerState = drawerState,

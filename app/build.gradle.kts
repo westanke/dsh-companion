@@ -640,8 +640,67 @@ android {
         //      它们是会换行、更适合阅读的那份参照，与滚动的名字互补。
         //   另：`artifacts/` 起只留「必须的」（两个上游基线包）与「最新的」，
         //   已发布到 Release 的 APK 不在本地囤积（见 STATUS）。
-        versionCode = 10060
-        versionName = "2.2.35"
+        // 2.2.36 = 平板（wide）界面三处优化，全部只在 wide 分支，手机端零改动。
+        //   ① 起因是平板截图里会话列表标题大面积截断（`/media/wangke/OFF…` 被腰斩），
+        //      根因是会话列表栏宽沿用**手机抽屉的 304.dp**，原样搬到了平板上。
+        //      改成随屏宽伸缩 `sessionPaneWidth`：0.25 × 屏宽，夹在 320–440dp。
+        //      纯函数 + 单测钉边界（840dp 屏 → 320dp 下限，1920dp 屏 → 440dp 上限）。
+        //   ② 会话行标题在 wide 下从单行放宽到**两行**（手机保持单行）：
+        //      长路径标题换行比截断更可读，这是截图里最扎眼的伤。
+        //   ③ 未选会话时右侧原来只画一句居中的「选择一个会话」——
+        //      平板上那是超过一半屏幕的纯空白。改为 `SessionOverviewPane`：
+        //      主机状态 + 最近 5 个会话（点击直接选中）+ 新建会话入口。
+        //      刻意不显示「最后活跃时间」：内核 `ChatSession.updatedAt` 单位未定
+        //      （毫秒/秒），猜错就显示 1970 年 —— 锦上添花的东西宁可不做。
+        //   ④ 聊天详情页顶栏标题 wide 下同样允许两行：兜底到长 cwd 路径时不再腰斩。
+        //   ⑤ 标题兜底链（title → workspaceTitle → cwd → id 前 12 位）抽成纯函数
+        //      `sessionDisplayTitle`，会话列表与概览面板共用一份，不再各抄一遍。
+        // 2.2.37 = 平板导航抽屉默认收起 + 软/硬键盘发送键（纯 App 侧，全部只在 wide 或
+        //          物理键盘场景，手机端零改动）。
+        //   ① **导航面板默认收起**（用户方案：「设置的抽屉继续默认收起来，让会话页面
+        //      显示区域更大」）。原来 wide 分支常驻一根 264dp 的面板，白白吃掉 20% 屏宽。
+        //      改为默认收起、左缘留 48dp 汉堡按钮，点它以 overlay 形式从左侧滑出 264dp
+        //      抽屉（与手机 ModalNavigationDrawer 同一套观感，只是这里常驻且状态驱动）；
+        //      点抽屉外的透明区域、或切 section / 宽窄变化时自动收起 —— 抽屉是一次性的，
+        //      选完就该把屏幕还给内容。内容区因此从「屏宽 - 264dp」变成整屏。
+        //   ② **软/硬键盘发送键**。先说一个既有事实：软键盘的「换行」键与物理 Enter 在
+        //      `onKeyEvent` 里派发**同一个** `Key.Enter`，事件本身分不出来源（老代码注释
+        //      2005-2007 行已踩明）。所以 Enter 一律换行、发送只走 Ctrl+Enter 是底线，
+        //      不能改。这次补的是两件真问题：
+        //      · 平板 + 外接键盘是常态，点输入框却仍弹出占掉半屏的软键盘 —— 纯浪费。
+        //        检测到物理键盘（`Configuration.keyboard == KEYBOARD_QWERTY`）时，
+        //        输入框获焦即主动 hide 软键盘控制器，不依赖实验 API、不改 KeyboardOptions。
+        //      · 硬键盘用户根本不知道 Ctrl+Enter 能发送。空闲占位符追加「Ctrl+Enter 发送」
+        //        （`composerHint` 新增 IDLE_PHYSICAL 态）。只加在空闲态：运行中两段文案
+        //        本身已在说「发送即插话/排队」，再拼一段会超出占位符的一行容量。
+        // 2.2.38 = 修 v2.2.37 两个实测回归（用户报「抽屉图标和会话列表标题重复了，
+        //          无法点击」+「硬键盘回车、Ctrl+回车、Shift+回车 都是换行」）。
+        //   ① **汉堡按钮不再浮在内容之上**。v2.2.37 把它按 `align(TopStart)` 压在内容左缘，
+        //      正好盖住 ChatScreen 会话列表栏顶部的「会话」标题 —— 那一整片点击被上层吃掉。
+        //      改为内容左缘一条**独立的 48dp 竖条**（装着开关），自己占位、不遮任何内容，
+        //      内容区从它右边开始，天然不重叠。代价是内容区少 48dp，相比常驻 264dp 面板
+        //      仍省 216dp，且顺带当「有导航可开」的常驻提示。
+        //   ② **软键盘 hide 改到输入框获焦时**。v2.2.37 的 `LaunchedEffect(physicalKeyboard)`
+        //      在 Composer 组合时执行 —— 那时输入框**还没焦点**，hide 是空操作；等用户点
+        //      输入框，软键盘照弹，物理键盘的 Enter / Ctrl+Enter 全被 IME 吞掉，
+        //      `onKeyEvent` 一个事件都收不到（表现为「回车就是换行」——换行正是 IME 行为）。
+        //      改为 `BasicTextField.onFocusChanged` 监听焦点，为真即 hide。
+        //      顺带按「无用即删」删掉没调 requestFocus 的 FocusRequester。
+        // 2.2.39 = 修 Ctrl+Enter 发送（用户第三轮反馈里唯一保留的一项，本版无界面改动）。
+        //   ① **`KeyEvent.FLAG_SOFT_KEYBOARD` 来源判据**（值 2）：IME 通过
+        //      `sendKeyEvent()` 送进来的事件都带它，外接键盘的不带。于是
+        //      「触摸屏的 Enter 一律换行、只有物理键盘的 Ctrl+Enter 才发送」，
+        //      不再依赖「IME 不会补发带修饰键的事件」这种没保证的假设。
+        //      判据抽成纯函数 `isSoftKeyboardEvent(nativeFlags)` 并单测。
+        //   ② 配套保留 v2.2.38 的软键盘 hide 时机修复（组合时 → 输入框 onFocusChanged 获焦时）。
+        //   **本版不含界面改动**：曾在这里试过「会话列表也可收起」（48dp 竖条开关、
+        //      收起时把 320–440dp 全让给详情），用户实测后要求回到 v2.2.38 的界面
+        //      （会话列表常驻、不收起；一级导航仍然默认收起，那是 App.kt 的另一处）。
+        //      相应代码、字符串（session_pane_expand / session_pane_collapse）、
+        //      SessionPaneToggle 组件已全部删除，ChatScreen.kt 的 wide 分支
+        //      与 v2.2.38 逐字一致（只多一段「曾试过、已回退」的注释备查）。
+        versionCode = 10064
+        versionName = "2.2.39"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
