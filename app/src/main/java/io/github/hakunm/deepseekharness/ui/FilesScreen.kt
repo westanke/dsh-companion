@@ -94,6 +94,21 @@ import io.github.hakunm.deepseekharness.R
 import io.github.hakunm.deepseekharness.data.FileEntry
 import io.github.hakunm.deepseekharness.data.PreviewKind
 import io.github.hakunm.deepseekharness.data.previewKind
+import io.github.hakunm.deepseekharness.createEntry
+import io.github.hakunm.deepseekharness.loadDirectory
+import io.github.hakunm.deepseekharness.loadTrash
+import io.github.hakunm.deepseekharness.moveSelected
+import io.github.hakunm.deepseekharness.openEntry
+import io.github.hakunm.deepseekharness.replaceSelected
+import io.github.hakunm.deepseekharness.restoreTrash
+import io.github.hakunm.deepseekharness.selectEntryForAction
+import io.github.hakunm.deepseekharness.selectRoot
+import io.github.hakunm.deepseekharness.trashSelected
+import io.github.hakunm.deepseekharness.upload
+import io.github.hakunm.deepseekharness.downloadSelected
+import io.github.hakunm.deepseekharness.loadNextDirectoryPage
+import io.github.hakunm.deepseekharness.saveDocument
+import io.github.hakunm.deepseekharness.updateDocument
 
 @Composable
 fun FilesScreen(state: HarnessState, viewModel: HarnessViewModel, wide: Boolean) {

@@ -46,6 +46,7 @@ import io.github.hakunm.deepseekharness.HarnessViewModel
 import io.github.hakunm.deepseekharness.BuildConfig
 import io.github.hakunm.deepseekharness.R
 import io.github.hakunm.deepseekharness.data.BusySendMode
+import io.github.hakunm.deepseekharness.disconnect
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable

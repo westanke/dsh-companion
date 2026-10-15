@@ -2,6 +2,8 @@ package io.github.hakunm.deepseekharness.ui
 
 import io.github.hakunm.deepseekharness.data.ChatItemKind
 import io.github.hakunm.deepseekharness.data.LiveChatBlock
+import io.github.hakunm.deepseekharness.ui.chat.liveThinkingText
+import io.github.hakunm.deepseekharness.ui.chat.thinkBarText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

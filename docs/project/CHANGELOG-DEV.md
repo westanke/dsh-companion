@@ -3,6 +3,104 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## 2026-10-16 · 重构：清掉行数预算台账上的全部债务（纯重构，零功能变化）
+
+### 基于什么
+
+`docs/project/TECH-DEBT.md` 的行数预算（800 行/文件）上登记着两条债：
+
+| 原债务 | 原规模 | 台账里的原话 |
+|---|---|---|
+| `ui/ChatScreen.kt` | 3 619 | 「会话详情页单文件承载：消息流、输入区、思考条、工具行、文件弹层、`@` 面板、手势分发。改一处要读 3 600 行」 |
+| `HarnessViewModel.kt` | 2 277 | 「连接 + 会话 + 文件 + 插件 + 设置全在一个 ViewModel；`ChatScreen` 与它双向依赖」 |
+
+实测时又发现第三条漏网的：`data/ChatPresentation.kt` 825 行（台账基线测于 2026-10-15，
+它在那之后才长过线）。
+
+### 为什么
+
+「按域拆」是 `TECH-DEBT.md` 早就写下的清账条件，只是从没执行过。真实的痛点是两条：
+改聊天页任何一处都要在 3 600 行里定位；改 ViewModel 任何一处都要先想清楚它属于哪个域。
+**债可见且方向向下，比假装没有债更可信** —— 台账空着不是成绩，是没还。
+
+### 干了什么
+
+**一行实现都没改**，全部是「换文件」。三个巨型文件按职责边界拆开：
+
+#### `ui/ChatScreen.kt` 3 882 → 329 行 + `ui/chat/` 下 12 个文件
+
+| 文件 | 职责 |
+|---|---|
+| `ChatScreen.kt` | 入口与宽窄屏分流 + 两个列表层纯函数 |
+| `chat/ChatDetail.kt` | 详情页骨架（顶栏 + 消息流 + 挂载点） |
+| `chat/ChatSessionPane.kt` | 会话列表 / 概览 / 单行 |
+| `chat/ChatMessageItems.kt` | 消息气泡 + 助手正文 + dsh-ui 诊断行 |
+| `chat/ChatActivityRows.kt` | 终局失败行 + 折叠活动行 |
+| `chat/ChatToolDetail.kt` | 工具调用详情块 + 共用紧凑排版 |
+| `chat/ChatComposer.kt` | 输入区药丸 + 思考条 + 占位符规则 |
+| `chat/ChatSuggestions.kt` | `@` 文件补全 + `/` 命令补全 |
+| `chat/ChatAttachments.kt` | 待发附件条 + 当前任务面板 |
+| `chat/ChatApprovals.kt` | 审批面板 + 问答卡片 |
+| `chat/ChatPermissionMenu.kt` | 顶栏 `⋯` 的权限段与完整访问二次确认 |
+| `chat/ChatSessionFiles.kt` | 会话文件面板（含 HTML 结构预览） |
+| `chat/ChatSheets.kt` | 模型 / 工作区 / 新建会话三个弹层 |
+| `chat/ChatToast.kt` | Toast 与剪贴板助手（原私有 `toast`，多处共用） |
+
+#### `HarnessViewModel.kt` 2 277 → 663 行 + 8 个域文件
+
+| 文件 | 职责 |
+|---|---|
+| `HarnessViewModel.kt` | 状态容器、事件流接入、刷新调度、公共工具 |
+| `HarnessModels.kt` | `HarnessState` 与跨层流转的数据载体 |
+| `HarnessEventRules.kt` | 事件帧与输入行的纯判定（有单测盯着） |
+| `HarnessConnectionViewModel.kt` | 多主机 / 多地址的配对、探活、断开 |
+| `HarnessSessionsViewModel.kt` | 会话 CRUD、工作区、发送、会话文件面板 |
+| `HarnessInteractionsViewModel.kt` | 审批与问答 |
+| `HarnessAttachmentsViewModel.kt` | 待发附件与历史图片 |
+| `HarnessFilesViewModel.kt` | 文件浏览、编辑、上传下载与回收站 |
+| `HarnessPluginsViewModel.kt` | 插件启停与模型提供商 |
+
+域文件里的函数写成 **`HarnessViewModel` 的扩展函数**（`fun HarnessViewModel.xxx()`）而不是子类 ——
+调用点写法完全不变（`viewModel.loadDirectory()` 照样成立），所以 `ui/` 下所有界面**一行都没改**。
+
+#### `data/ChatPresentation.kt` 825 → 98 行 + 4 个文件
+
+`ChatPresentation.kt`（门面：单一出口 + 会话投影）/ `ChatModels.kt`（数据模型 + 事件帧解析）/
+`ChatHistoryMapping.kt`（逐事件映射）/ `ChatHandoff.kt`（交接图片附件）/
+`ChatToolPresentation.kt`（工具行动作短语与详情）/ `ChatJson.kt`（JSON 取值助手）。
+
+### 两处必须记录的代价
+
+1. **可见性放宽**：原先 `private` 的部分成员提升为 `internal` —— ViewModel 的
+   `mutableState` / `update` / `withClient` / `client` / `hostStore`，聊天页的组件，
+   数据层的 JSON 取值助手。`internal` 只在本 module 内可见，比 `public` 窄得多，
+   但确实比原来的 `private` 宽。**这是拆文件的必然代价，不是设计选择。**
+2. **JSON 实例改名**：`ChatPresentation.kt` 里私有的 `json` / `prettyJson` 提到
+   `data/ChatJson.kt` 并改名为 `chatJson` / `chatPrettyJson`。原因是同包的
+   `GenUiBlocks.kt` 也有一个私有 `json`，两者一旦都变成 `internal` 就会互相遮蔽 ——
+   那是「改一边、另一边悄悄换了解析配置」的典型入口，宁可名字长一点。
+
+### 测了什么
+
+| 门验 | 结果 |
+|---|---|
+| `scripts/build.sh :app:compileDebugKotlin` | ✅ 通过 |
+| `scripts/build.sh :app:testDebugUnitTest` | ✅ **27 类 / 290 用例 / 0 失败**（与拆分前逐项一致） |
+| `scripts/build.sh assembleDebug` | ✅ 通过 |
+| `scripts/build.sh docsCheck` | ✅ 8 documents / 43 tasks consistent |
+| 行数复核 | ✅ `app/src` 下**零个文件超 800 行**，最大 797 |
+
+四个测试文件（`ChatThinkBarTest` / `ComposerPillTest` / `QuestionAnswerTest` /
+`SessionPaneLayoutTest`）只**各加了两行 import** —— 因为它们调的纯函数从 `ui` 包移到了
+`ui.chat` 子包。测试的断言、名字、意图一个字没动。
+
+### 还没做的（真机）
+
+单测绿 ≠ 行为对。**这次没碰任何界面逻辑，但拆分动了 25 个文件的物理位置**，
+首次启动仍建议真机过一遍：会话列表 → 进会话 → 发消息 → 展开工具详情 → 审批 →
+问答 → 输入区 `@` 与 `/` → 会话文件面板 → 设置页。`TECH-DEBT.md` 的
+AGENTS.md §5 已写明「涉及手势、键盘、WebView 的要真机确认」，本次没做这一项。
+
 ## 2026-10-15 · v2.2.39：修 Ctrl+Enter 发送（会话列表收起已回退）
 
 用户第三轮反馈两件事：「给会话列表也加个隐藏模式」、「Ctrl+Enter 目前不是发送」。

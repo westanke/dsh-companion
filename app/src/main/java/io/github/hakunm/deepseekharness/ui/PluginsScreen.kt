@@ -45,6 +45,9 @@ import io.github.hakunm.deepseekharness.HarnessViewModel
 import io.github.hakunm.deepseekharness.R
 import io.github.hakunm.deepseekharness.data.PluginEntry
 import io.github.hakunm.deepseekharness.data.PluginInventory
+import io.github.hakunm.deepseekharness.refreshPluginInventory
+import io.github.hakunm.deepseekharness.refreshPluginInventoryWithUpdates
+import io.github.hakunm.deepseekharness.setPluginLoaded
 
 /**
  * 服务端约定的四种插件状态。

@@ -57,6 +57,10 @@ import io.github.hakunm.deepseekharness.data.CustomProviderCreate
 import io.github.hakunm.deepseekharness.data.ProviderModel
 import io.github.hakunm.deepseekharness.data.ProviderPatch
 import io.github.hakunm.deepseekharness.data.ProviderView
+import io.github.hakunm.deepseekharness.clearDiscoveredModels
+import io.github.hakunm.deepseekharness.createCustomProvider
+import io.github.hakunm.deepseekharness.discoverModels
+import io.github.hakunm.deepseekharness.updateProvider
 
 /**
  * 「模型」页：从设置页拆出来的模型供应商配置。

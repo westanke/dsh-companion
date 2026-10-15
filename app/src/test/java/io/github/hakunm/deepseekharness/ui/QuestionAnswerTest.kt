@@ -2,6 +2,8 @@ package io.github.hakunm.deepseekharness.ui
 
 import io.github.hakunm.deepseekharness.data.ChatQuestion
 import io.github.hakunm.deepseekharness.data.QuestionOption
+import io.github.hakunm.deepseekharness.ui.chat.isAnswered
+import io.github.hakunm.deepseekharness.ui.chat.buildAnswers
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

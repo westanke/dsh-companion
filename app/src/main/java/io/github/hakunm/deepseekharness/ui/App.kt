@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import io.github.hakunm.deepseekharness.HarnessState
 import io.github.hakunm.deepseekharness.HarnessViewModel
 import io.github.hakunm.deepseekharness.R
+import io.github.hakunm.deepseekharness.refreshDashboard
 import kotlinx.coroutines.launch
 
 private enum class MainSection(val label: Int) {

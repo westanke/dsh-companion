@@ -102,8 +102,11 @@ web/           ← WebView 容器（chat.html 兜底路径）
 - 台账放 `docs/project/TECH-DEBT.md`，每条含：位置、为什么是债、清账阶段。
 - **只许收紧**：条目对应的债务消失，同一提交里删掉该条目（自证非空转）。
 - **上调必须带理由**：单文件超过行数预算时，只许带理由在同一提交里上调，且必须在下一阶段拆回。
-- 当前行数预算：**800 行/文件**（基线：`ChatScreen.kt` 3 619、`HarnessViewModel.kt` 2 277 在册）。
-  > 这两个是**已登记的债**，不是许可。新增超预算文件必须先入台账再写码。
+- 当前行数预算：**800 行/文件**。
+  > 2026-10-16 起台账已清空：`app/src` 下**零个文件超预算**（最大 `ui/chat/ChatSheets.kt` 797）。
+  > 曾经的三个债（`ChatScreen.kt` 3 882 / `HarnessViewModel.kt` 2 277 / `ChatPresentation.kt` 825）
+  > 已按职责拆成 `ui/chat/` 与 `Harness*ViewModel.kt` 两组文件，清账记录见 `TECH-DEBT.md`。
+  > **新增超预算文件必须先入台账再写码** —— 台账空了不等于门禁松了。
 
 ### 4.3 兼容补丁四要素（`@patch`）
 

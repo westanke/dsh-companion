@@ -37,6 +37,7 @@ import io.github.hakunm.deepseekharness.data.splitMessageBody
 import io.github.hakunm.deepseekharness.data.todoItems
 import io.github.hakunm.deepseekharness.web.ActiveChatBridge
 import io.github.hakunm.deepseekharness.web.ChatWebBridge
+import io.github.hakunm.deepseekharness.selectSession
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull

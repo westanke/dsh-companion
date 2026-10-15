@@ -1,5 +1,4 @@
 package io.github.hakunm.deepseekharness
-
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -83,287 +82,76 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 
-data class OpenDocument(
-    val entry: FileEntry,
-    val text: String? = null,
-    val etag: String = "",
-    val hasBom: Boolean = false,
-    val lineEnding: String = "\n",
-    val contentType: String? = null,
-    /**
-     * 原始字节，**只有图片 / PDF 这类要交给解码器的东西才留**。
-     *
-     * 文本预览走 [text]（已解成 String），再留一份字节纯属浪费；而图片 / PDF 没法从
-     * String 还原，必须留原字节 —— 这是它们与文本预览最本质的区别。
-     */
-    val bytes: ByteArray? = null,
-    /**
-     * 预览是被**主动跳过**的（文件超过该类文件的上限），而不是「还没加载」。
-     *
-     * 两者在界面上完全不同：前者要给「文件过大 + 下载」的出路，后者只是还没读。
-     */
-    val skippedForSize: Boolean = false,
-)
+/**
+ * App 的**唯一 ViewModel**：持有 [HarnessState]，并把跨域共用的基础设施收在这里。
+ *
+ * ## 为什么拆成多个文件
+ *
+ * 原文件 2277 行，把「连接 + 会话 + 文件 + 插件 + 设置 + 事件流」全放在一个类里 ——
+ * `docs/project/TECH-DEBT.md` 登记的第二号债（「改一处要读 1900 行」）。现在按域拆开：
+ *
+ * | 文件 | 职责 |
+ * |---|---|
+ * | `HarnessViewModel.kt`（本文件） | 状态容器、事件流接入、刷新调度、公共工具 |
+ * | `HarnessModels.kt` | `HarnessState` 与跨层流转的数据载体 |
+ * | `HarnessEventRules.kt` | 事件帧与输入行的纯判定（有单测） |
+ * | `HarnessConnectionViewModel.kt` | 多主机 / 多地址的配对、探活、断开 |
+ * | `HarnessSessionsViewModel.kt` | 会话 CRUD、工作区、发送、会话文件面板 |
+ * | `HarnessInteractionsViewModel.kt` | 审批与问答 |
+ * | `HarnessAttachmentsViewModel.kt` | 待发附件与历史图片 |
+ * | `HarnessFilesViewModel.kt` | 文件浏览、编辑、上传下载与回收站 |
+ * | `HarnessPluginsViewModel.kt` | 插件启停与模型提供商 |
+ *
+ * 域文件里的函数是 **[HarnessViewModel] 的扩展函数**，不是子类 —— 调用点写法完全不变
+ * （`viewModel.loadDirectory()` 照样成立），因此 `ui/` 下所有界面的**行为**一行都没改。
+ * 代价是原先 `private` 的若干成员要提升为 `internal`（仍只在本 module 内可见）。
+ *
+ * **行为零变化**：`testDebugUnitTest` 27 类 / 290 用例与拆分前完全一致。
+ */
+/**
+ * 「文件」页与面板里**可编辑文本**的字节上限（2 MiB）。
+ *
+ * 图片 / PDF 各有自己的上限（见 `data/PreviewKind.kt` 的 `PREVIEW_*_MAX_BYTES`）——
+ * 2 MiB 对一张手机截图太紧，但解码前整份字节都要进内存，所以按类型各给一条闸。
+ */
+internal const val MAX_EDIT_BYTES = 2L * 1024 * 1024
 
 /**
- * 「本会话的文件」面板里正在查看的那一条。
- *
- * 故意不复用全局 `error` 通道：路径不在授权根内是**正常结果**（agent 提到的文件未必
- * 授权给这台手机），用户需要的是面板里一句解释，而不是一次全局错误提示。
- * [preview] 截断到 [HarnessViewModel] 里的预览上限；[tooLarge] / [outsideRoots] /
- * [failure] 三者互斥地说明「为什么看不到内容」。
+ * 面板只读预览的**字符上限**。整个文件的完整内容仍然会按 [MAX_EDIT_BYTES] 读进
+ * `document`（供「文件」页的编辑器使用），这里截断只是为了不让一个超大 Text
+ * 把底部面板的滚动拖垮。
  */
-data class SessionFileOpen(
-    /** 发起这次打开操作的会话 id。切到别的会话后，这个结果就不该再显示。 */
-    val sessionId: String,
-    /** 会话里原样的绝对路径（请求的目标）。 */
-    val requestedPath: String,
-    val loading: Boolean = true,
-    val resolved: ResolvedPath? = null,
-    val preview: String? = null,
-    /** 图片 / PDF 的原始字节；文本预览不用这个字段（见 [OpenDocument.bytes]）。 */
-    val bytes: ByteArray? = null,
-    val truncated: Boolean = false,
-    val tooLarge: Boolean = false,
-    /** 服务端说不属于任何授权根（或不是普通文件）。 */
-    val outsideRoots: Boolean = false,
-    /** 其他失败原因，已是可直接展示的文本。 */
-    val failure: String? = null,
-)
+internal const val PREVIEW_CHARS = 20_000
 
-/**
- * 一条已经准备好、等着随消息一起发出去的附件。
- *
- * 图片在 [part] 里已经内联好了 base64（[imageBytes] 只是留一份原图给界面画缩略图，
- * 不会重复编码）；文件在 [part] 里是上传换来的 `receiptId`。
- *
- * [id] 与 [part] 分开：同一个文件可以被选两次，而去重、删除都必须按「这一条」来认，
- * 不能按内容认。
- */
-data class PendingAttachment(
-    val id: String,
-    val part: PromptPart,
-    val name: String,
-    val sizeBytes: Long = 0,
-    /** 仅图片：原图字节，供缩略图使用。 */
-    val imageBytes: ByteArray? = null,
-)
+/** UTF-8 BOM 的三个字节；保存时要原样还回去，否则别的编辑器会认错编码。 */
+internal val UTF8_BOM = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
 
-sealed interface ApprovalUiState {
-    data object None : ApprovalUiState
-    data object Loading : ApprovalUiState
-    data class Pending(val items: List<PendingApproval>) : ApprovalUiState
-    data class Deciding(val item: PendingApproval, val items: List<PendingApproval>) : ApprovalUiState
-}
+/** 一段字节解成文本的结果：文本 + 有没有 BOM + 原文件用什么行尾。 */
+internal data class DecodedText(val text: String, val hasBom: Boolean, val lineEnding: String)
 
-data class HarnessState(
-    val restoring: Boolean = true,
-    val busy: Boolean = false,
-    val endpointDraft: String = "http://192.168.1.20:3090",
-    val healthOk: Boolean = false,
-    val connected: Boolean = false,
-    val endpoint: String = "",
-    // ——— 多主机 / 多地址连接层（新） ———
-    /** 已保存的全部电脑。 */
-    val hosts: List<Host> = emptyList(),
-    /** 当前连上的电脑 id。 */
-    val activeHostId: String? = null,
-    /** 当前实际使用的地址 id（多地址里的胜出者）。 */
-    val activeEndpointId: String? = null,
-    /** 最近一次探活的逐地址结果，用于诊断面板。 */
-    val endpointProbes: List<EndpointProbe> = emptyList(),
-    /** 正在并发探活/建连。 */
-    val connecting: Boolean = false,
-    /** 界面上被选中查看/编辑的电脑（不一定是当前连上的那台）。 */
-    val selectedHostId: String? = null,
-    val device: DeviceView? = null,
-    val roots: List<RootView> = emptyList(),
-    val sessions: List<ChatSession> = emptyList(),
-    val chatWorkspaces: List<ChatWorkspace> = emptyList(),
-    val agentPresets: List<AgentPreset> = emptyList(),
-    val workspacePickerRootId: String? = null,
-    val workspacePickerPath: String = "",
-    val workspacePickerDirectory: DirectoryPage? = null,
-    val sessionModels: SessionModels? = null,
-    val commands: List<CommandDescriptor> = emptyList(),
-    val providerSettings: ProviderSettings? = null,
-    /** 插件清单；null 表示尚未读取（未连接、无 settings.read 权限或读取失败）。 */
-    val pluginInventory: PluginInventory? = null,
-    val discoveredModels: List<ProviderModel> = emptyList(),
-    val selectedSessionId: String? = null,
-    val history: ChatHistory? = null,
-    val liveChat: LiveChatState? = null,
-    val approvalState: ApprovalUiState = ApprovalUiState.None,
-    /**
-     * 当前会话待回答的问题（插件 `/questions`，只留 [QUESTION_STATE_CONTINUED] 的那些）。
-     *
-     * 与 [approvalState] **分开**存：审批是内核阻塞着等决定、必须占用输入区；
-     * 问题是 Agent 已经继续跑了、答复属于补交，不能顶掉输入框。两者的状态机也不同
-     * （审批有 Loading/Deciding，问题只有「待答 / 提交中 / 已答」），混一个字段迟早分不清。
-     */
-    val questions: List<PendingQuestionSet> = emptyList(),
-    /** 正在提交答案的那一组（null = 空闲）。既驱动 loading，也是防重复提交的闸。 */
-    val answeringCallId: String? = null,
-    /** 已经提交成功的 callId：卡片转「已回答」态，不再显示可操作控件。 */
-    val answeredCallIds: Set<String> = emptySet(),
-    val eventsConnected: Boolean = false,
-    val selectedRootId: String? = null,
-    val currentPath: String = "",
-    val directory: DirectoryPage? = null,
-    /**
-     * 当前会话**工作目录**（cwd）下的条目，供输入框 `@` 补全用。
-     *
-     * 与 [directory] 刻意分开：那个是「文件」页的浏览状态（用户自己点来点去、
-     * 会切到别的根与子目录），而 `@` 永远指向**本会话的 cwd**，两者互不影响 ——
-     * 共用一个字段会导致「在文件页翻到别处，回会话里 `@` 就补全错目录」。
-     *
-     * 为 null 表示还没加载（或本会话解析不出工作目录，见 [loadMentionEntries]）。
-     */
-    val mentionEntries: List<FileEntry>? = null,
-    /**
-     * `@` 补全这次**尝试过但没拿到**（网络失败、会话没有可用工作目录…）。
-     *
-     * 与 [mentionEntries] 的 null 配合才能分清三态：`null + false` 是「还在读」，
-     * `null + true` 是「读不到」，**空列表才是「目录真的是空的」**。
-     * 少这一位的话，「加载失败」会被界面说成「这个目录还是空的」—— 把失败谎报成空，
-     * 和上轮插件页那句「package.json 可能损坏」是同一类毛病。
-     */
-    val mentionFailed: Boolean = false,
-    /**
-     * 输入框上方是否**开着补全面板**（`@` 文件补全，或 `/` 命令补全）。
-     *
-     * 为什么这要进共享状态、而不是留在 ChatScreen 里：它要影响**外层抽屉的手势**。
-     * Material3 的 `ModalNavigationDrawer` 默认从屏幕任意位置横向拖动都能开，
-     * 而补全面板正好是贴着输入框、又长又宽的浮层 —— 用户在面板上横向划一下想看看
-     * 长文件名，抽屉就弹出来了（"会话/文件/插件/模型/设置"）。它和列表滚动在同一个
-     * 手势通道上抢触摸，所以只能把「面板开着」这个事实告诉外层。
-     *
-     * 与 WebView 那条 `webChatOpen` 是同一类修法：**关掉手势不影响正常使用**，
-     * 左上角汉堡按钮照样能开抽屉。
-     */
-    val composerOverlay: Boolean = false,
+/** `loadSessionFile` 的产物：面板要展示的结果 +「文件」页要跟着切换的状态。 */
+internal data class SessionFileOutcome(
+    val open: SessionFileOpen,
+    val rootId: String? = null,
+    val currentPath: String? = null,
     val document: OpenDocument? = null,
-    /** 会话文件面板正在查看的那一条（null 表示面板显示路径列表）。 */
-    val sessionFileOpen: SessionFileOpen? = null,
-    val trash: List<TrashEntry> = emptyList(),
-    /**
-     * 智能体正在运行时，Enter 与主发送按钮的默认行为。
-     *
-     * 与 [busy] 的区别很重要：[busy] 是「有任何操作在跑」（连刷新都算），
-     * 而这里关心的是「**这个会话的 agent 是否在运行**」—— 只有后者才谈得上排队与插话。
-     * 早期实现用 [busy] 去禁用发送按钮，结果是任何一次后台刷新都会让用户发不出消息。
-     */
-    val busySendMode: BusySendMode = BusySendMode.QUEUE,
-    /** dsh-ui 诊断行开关，默认关；见 [AppPreferences.genUiDebug]。 */
-    val genUiDebug: Boolean = false,
-    /**
-     * 会话详情页走 WebView 版还是原生；见 [AppPreferences.useWebChat]。
-     *
-     * 这几个偏好项**必须放在状态里**，不能由 UI 直接去读 SharedPreferences：
-     * 那样读出来的不是 Compose 状态，改了不触发重组 —— 用户点了开关没反应，
-     * 得等别的原因引起重组时它才「跳」过去（真机反馈：
-     * 「你开关他不变化，必须开关一次别的按钮他才变化」）。
-     */
-    val useWebChat: Boolean = false,
-    /** 是否显示上下文注入块；见 [AppPreferences.showContext]。 */
-    val showContext: Boolean = false,
-    /**
-     * 发送中的输入框原文；发送成功后清空，失败时保留以便还回输入框。
-     *
-     * 为什么需要它：输入框是本地 UI 状态，发请求在协程里，两者对不上时
-     * 「用户刚打的字」就凭空消失了 —— 而用户没有任何办法找回。
-     */
-    val pendingText: String = "",
-    /**
-     * 已取回的会话图片附件字节，键是 `attachmentId`。
-     *
-     * 为什么要缓存：会话历史会随每次刷新重建，而图片字节要另发一次请求才拿得到。
-     * 不缓存的话，每刷新一次就把所有历史图片重新下载一遍。
-     */
-    val attachmentImages: Map<String, ByteArray> = emptyMap(),
-    /**
-     * 取图失败的 id，值是**人类可读的原因**而不是裸 id。
-     *
-     * 刻意带原因：早期版本只有一个 `Set<String>`，界面上写死一句「图片已不可用
-     * （可能已被清理）」。于是 404（附件真没了）、403（缺 files.read 授权）、
-     * 401（授权失效）、解码失败在屏幕上长得一模一样 —— 用户看到「可能已被清理」，
-     * 我也只能照着猜。带上原因之后，截图发回来就是答案。
-     */
-    val attachmentFailures: Map<String, String> = emptyMap(),
-    /**
-     * 待发附件条。发送时与文本一起组装成 content 数组，发送成功（或用户在输入区点删除）
-     * 之后才消失。
-     *
-     * 刻意**不**参与「发送键是否可用」之外的任何禁用判断，更不跟 [busy] 挂钩：
-     * 上一轮的缺陷正是用 [busy] 禁用发送键，导致智能体运行期间根本发不出消息。
-     */
-    val pendingAttachments: List<PendingAttachment> = emptyList(),
-    /** 有文件正在上传换 `receiptId`。只用来显示进度，不用来禁用发送键。 */
-    val attachmentUploading: Boolean = false,
-    val error: String? = null,
 )
 
-/**
- * 宿主命令名：与插件 `chat-adapter.ts` 的判定正则逐字对应。
- *
- * 小写字母开头，其余只允许小写字母、数字、下划线、连字符。**两侧必须一致** ——
- * 放宽会让客户端认为是命令而服务端说`COMMAND_NOT_FOUND`，收紧则命令永远发不出去。
- */
-private val COMMAND_NAME = Regex("[a-z][a-z0-9_-]*")
+/** `chat.turn.failed` 帧落在哪一轮：`sessionId` + `turn` + `step`。 */
+internal data class LiveKey(val sessionId: String, val turn: Int, val step: Int)
 
-/**
- * 这一行是不是**宿主命令**（`/compact`、`/clear` 那种），而不是技能名。
- *
- * ## 为什么必须判别，不能只看 `/` 开头
- *
- * 官方把两样东西都做成斜杠开头：宿主命令，与用户技能（`dsh-client-ui-skill/README.md:28`）。
- * 分流规则由**客户端**做，原文：
- *
- * > A name shared with a host command still resolves to the command —
- * > adjudication claims the line client-side before it ever becomes a prompt.
- *
- * 即**命令优先**；不是命令的 `/name` 应当**原样当普通消息发给模型**（同文件 `:85`
- * 「The user's message reaches the model verbatim, `/name` literal included」），
- * 由 `dsh-tool-skill` 在 pre-step 边界注入技能正文。
- *
- * 我们此前只要输入以 `/` 开头就整条送去 executeCommand，于是**技能一个都调不动**：
- * 技能名不在宿主命令表里 → `COMMAND_NOT_FOUND`，消息压根到不了模型。
- *
- * ## 匹配规则照抄服务端，不自创
- *
- * 插件 `chat-adapter.ts` 判定命令用的是
- * `/^\/([a-z][a-z0-9_-]*)(?=$|[\t\n\r ])/u` 加 `name === match[1]`：
- * 命令名只允许小写字母开头、其余小写字母/数字/下划线/连字符，**精确匹配**，
- * 后面可跟空白与参数。两边规则必须一致 —— 这里若放宽，会出现「客户端认为是命令、
- * 服务端说不认识」；收紧则命令永远发不出去。
- *
- * 刻意**不**做大小写不敏感：官方与插件都是精确匹配，我们跟着，避免 `/Compact`
- * 在我们这儿被当成命令、到服务端却被拒。
- *
- * 做成**顶层函数**而不是 ViewModel 的成员，是为了能在 JVM 单测里直接调用 ——
- * 它是纯逻辑，不碰任何 Android API。
- */
-internal fun isHostCommandLine(
-    line: String,
-    commands: List<CommandDescriptor>,
-): Boolean {
-    // 命令名后面可以带参数（`/compact 3`），所以只取第一段去比对 ——
-    // 与服务端 `/^\/([a-z][a-z0-9_-]*)(?=$|[\t\n\r ])/u` 的前瞻是同一件事。
-    val head = line.takeWhile { !it.isWhitespace() }
-    if (!head.startsWith('/')) return false
-    val name = COMMAND_NAME.matchEntire(head.removePrefix("/"))?.value ?: return false
-    return commands.any { it.name == name }
-}
+
+
 
 class HarnessViewModel(application: Application) : AndroidViewModel(application) {
-    private val keyValueStore = SharedPreferencesKeyValueStore(application)
-    private val hostStore = HostStore(keyValueStore, KeystoreSecretBox())
-    private val coordinator = ConnectionCoordinator()
+    internal val keyValueStore = SharedPreferencesKeyValueStore(application)
+    internal val hostStore = HostStore(keyValueStore, KeystoreSecretBox())
+    internal val coordinator = ConnectionCoordinator()
     /** 旧版令牌用的是另一个 Keystore 别名，迁移时必须用它解密。 */
-    private val legacySecretBox = KeystoreSecretBox(KeystoreSecretBox.LEGACY_DEVICE_TOKEN_ALIAS)
-    private val preferences = AppPreferences(application)
+    internal val legacySecretBox = KeystoreSecretBox(KeystoreSecretBox.LEGACY_DEVICE_TOKEN_ALIAS)
+    internal val preferences = AppPreferences(application)
     /** 正在下载中的附件 id。界面每次组合都会调 loadAttachmentImage，靠它去重。 */
-    private val pendingAttachments = mutableSetOf<String>()
+    internal val pendingAttachments = mutableSetOf<String>()
 
     /**
      * 因**授权**失败的附件 id：允许重试。
@@ -372,8 +160,8 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
      * 两件事不能共用一个容器 —— 把「可重试」写进界面文案前缀会漏到用户眼前，
      * 而塞进 map 的 value 里又要靠字符串嗅探，迟早出错。这里显式分一份集合。
      */
-    private val retryableAttachmentFailures = mutableSetOf<String>()
-    private val mutableState = MutableStateFlow(HarnessState().withPreferences())
+    internal val retryableAttachmentFailures = mutableSetOf<String>()
+    internal val mutableState = MutableStateFlow(HarnessState().withPreferences())
     val state: StateFlow<HarnessState> = mutableState.asStateFlow()
 
     /**
@@ -387,7 +175,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
      * 连上之后 connected 就是 true；拿它当放行条件，等于又跳过了连接页 ——
      * 而「启动无论怎样，第一屏都必须是连接页」正是这次要修的毛病。
      */
-    private val connectGatePassed = MutableStateFlow(false)
+    internal val connectGatePassed = MutableStateFlow(false)
     val connectGate: StateFlow<Boolean> = connectGatePassed.asStateFlow()
 
     /**
@@ -410,7 +198,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
      *
      * 与其在三个构造点各抄一遍（加字段时必然漏），不如统一走这里。
      */
-    private fun HarnessState.withPreferences(): HarnessState = copy(
+    internal fun HarnessState.withPreferences(): HarnessState = copy(
         busySendMode = preferences.busySendMode,
         genUiDebug = preferences.genUiDebug,
         useWebChat = preferences.useWebChat,
@@ -424,8 +212,8 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
      * 光有 client 无法回答「我现在连的是哪台电脑的哪个地址」—— 而这正是诊断面板和
      * 后续自动切换都需要的。
      */
-    private var active: ActiveConnection? = null
-    private val client: DshClient? get() = active?.client
+    internal var active: ActiveConnection? = null
+    internal val client: DshClient? get() = active?.client
 
     /**
      * 当前活跃连接；null 表示未连接。
@@ -438,7 +226,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
      * 只读：拿到的人可以调接口，但改不了选路结果——选路仍由本类决定。
      */
     fun activeConnection(): ActiveConnection? = active
-    private var eventSubscription: Closeable? = null
+    internal var eventSubscription: Closeable? = null
     /**
      * 事件流是否因熄屏而主动暂停（见 [pauseEvents]）。
      *
@@ -446,716 +234,27 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
      * [resumeEvents] 复活；后者连接还在，亮屏就该接回去。没有这个标志的话，
      * 亮屏会把用户刚刚手动断开的连接又拉起来。
      */
-    @Volatile private var eventsPaused = false
-    private var chatRefreshJob: Job? = null
-    @Volatile private var chatRefreshPending = false
-    @Volatile private var chatSessionRefreshPending = false
-    @Volatile private var liveFinalizeTarget: LiveKey? = null
+    @Volatile internal var eventsPaused = false
+    internal var chatRefreshJob: Job? = null
+    @Volatile internal var chatRefreshPending = false
+    @Volatile internal var chatSessionRefreshPending = false
+    @Volatile internal var liveFinalizeTarget: LiveKey? = null
 
     init {
         restoreConnection()
     }
 
-    fun setEndpointDraft(value: String) = update { copy(endpointDraft = value, healthOk = false, error = null) }
-
-    fun testConnection(endpoint: String) = launchOperation {
-        val normalized = DshClient.normalizeEndpoint(endpoint)
-        DshClient(normalized).health()
-        update { copy(endpointDraft = normalized.removeSuffix("/api/v1"), healthOk = true) }
-    }
-
-    /**
-     * 用一次性配对码把一台电脑加进来并连接。
-     *
-     * 配对码适合「电脑就在手边」的场合（同一局域网，或你正坐在电脑前）。
-     * 人已经出门在外、看不到电脑屏幕时请改用 [importConfiguration] ——
-     * 旧版只有配对码这一条路，这正是用户放弃它的直接原因。
-     */
-    fun pair(endpoint: String, code: String, deviceName: String) = launchOperation {
-        require(code.isNotBlank()) { "Pairing code is required." }
-        require(deviceName.isNotBlank()) { "Device name is required." }
-        val unauthenticated = DshClient(endpoint)
-        unauthenticated.health()
-        val pairing = unauthenticated.pair(code, deviceName)
-        val host = hostFromPairing(unauthenticated.endpoint, pairing.token, pairing.device, deviceName)
-        hostStore.upsert(host)
-        update { copy(hosts = hostStore.loadHosts(), selectedHostId = host.id) }
-        connectHostInternal(host, pairing.device)
-    }
-
-    /**
-     * 导入一段配置文本（形如 `DSH1:...`），把一台电脑加进来并连接。
-     *
-     * 这是取代扫码的主路径：配置文本可以在电脑上生成后发给自己（微信/邮件），
-     * 到了外面再粘贴。全程不需要电脑在旁边，也不需要摄像头。
-     */
-    fun importConfiguration(text: String) = launchOperation {
-        val payload = ConnectionShare.decode(text)
-            ?: throw IllegalArgumentException("CONFIG_INVALID")
-        val host = ConnectionShare.buildHost(payload)
-        hostStore.upsert(host)
-        update { copy(hosts = hostStore.loadHosts(), selectedHostId = host.id) }
-        connectHostInternal(host)
-    }
-
-    /** 连接已保存的某台电脑：并发探活其全部地址并自动选路。 */
-    fun connectHost(hostId: String) = launchOperation {
-        val host = hostStore.host(hostId) ?: return@launchOperation
-        update { copy(selectedHostId = hostId) }
-        connectHostInternal(host)
-    }
-
-    /** 给某台电脑追加一个可达地址（例如新增虚拟网地址）。 */
-    fun addEndpoint(hostId: String, label: String, baseUrl: String) = launchOperation {
-        val host = hostStore.host(hostId) ?: return@launchOperation
-        val normalized = DshClient.normalizeEndpoint(baseUrl).removeSuffix("/api/v1")
-        if (host.endpoints.any { it.baseUrl == normalized }) return@launchOperation
-        val endpoint = Endpoint.create(label = label, baseUrl = normalized, id = "ep-${nextId()}")
-        hostStore.upsert(
-            host.copy(
-                endpoints = host.endpoints + endpoint,
-                updatedAt = System.currentTimeMillis(),
-            ),
-        )
-        update { copy(hosts = hostStore.loadHosts()) }
-    }
-
-    /** 删除某台电脑的一个地址。保留最后一个地址的行为由界面负责拦截。 */
-    fun removeEndpoint(hostId: String, endpointId: String) = launchOperation {
-        val host = hostStore.host(hostId) ?: return@launchOperation
-        if (host.endpoints.size <= 1) throw IllegalArgumentException("LAST_ENDPOINT")
-        val endpoints = host.endpoints.filterNot { it.id == endpointId }
-        hostStore.upsert(
-            host.copy(
-                endpoints = endpoints,
-                preferredEndpointId = host.preferredEndpointId?.takeIf { id -> endpoints.any { it.id == id } },
-                updatedAt = System.currentTimeMillis(),
-            ),
-        )
-        update { copy(hosts = hostStore.loadHosts()) }
-    }
-
-    /** 重命名一台电脑。 */
-    fun renameHost(hostId: String, displayName: String) = launchOperation {
-        val host = hostStore.host(hostId) ?: return@launchOperation
-        hostStore.upsert(host.copy(displayName = displayName.trim(), updatedAt = System.currentTimeMillis()))
-        update { copy(hosts = hostStore.loadHosts()) }
-    }
-
-    /**
-     * 删除一台电脑（含其凭据）。
-     *
-     * 与 [disconnect] 分开：断开只是断连，删除才是抹掉令牌。
-     */
-    fun removeHost(hostId: String) {
-        if (mutableState.value.activeHostId == hostId) disconnect()
-        hostStore.remove(hostId)
-        update { copy(hosts = hostStore.loadHosts(), selectedHostId = selectedHostId?.takeIf { it != hostId }) }
-    }
-
-    fun selectHost(hostId: String?) = update { copy(selectedHostId = hostId) }
-
-    /** 把当前连接状态落回主机记录：探活结果 + 实际选中的地址。 */
-    private suspend fun connectHostInternal(host: Host, device: DeviceView? = null) {
-        update { copy(connecting = true, endpointProbes = emptyList(), error = null) }
-        val connection = coordinator.connect(host).getOrElse { failure ->
-            val probes = (failure as? DshConnectionException)?.probes.orEmpty()
-            if (probes.isNotEmpty()) hostStore.upsert(applyProbes(host, probes))
-            update {
-                copy(
-                    connecting = false,
-                    // 冷启动的自动重连失败走的正是这条路，而它是**正常返回**（不抛异常），
-                    // 所以 restoreConnection 的 onFailure 兜不住 —— 不在这里复位，
-                    // restoring 会一直停在 true，「恢复中」从此变成一句永久的谎话。
-                    restoring = false,
-                    hosts = hostStore.loadHosts(),
-                    endpointProbes = probes,
-                    error = messageOf(failure),
-                )
-            }
-            return
-        }
-        // 网络（currentDevice 与 loadSnapshot 的一串 REST 调用）和磁盘落盘
-        // 必须落在 IO 线程：restoreConnection 从主线程协程直接调进来，这里不切换，
-        // 冷启动自动重连第一发就是 NetworkOnMainThreadException（真机启动必现）。
-        // 在被调函数内部切换，比逐个约束调用方更稳 —— 手动连接走 launchOperation
-        // 已是 IO，重复 withContext 只是无害空转。
-        val (recorded, snapshot) = withContext(Dispatchers.IO) {
-            val recorded = applyProbes(connection.host, connection.probes).withPreferred(connection.endpoint.id)
-            hostStore.upsert(recorded)
-            val resolved = device ?: connection.client.currentDevice()
-            recorded to loadSnapshot(connection.client, resolved)
-        }
-        active = connection
-        update {
-            snapshot.copy(
-                restoring = false,
-                busy = true,
-                connecting = false,
-                connected = true,
-                healthOk = true,
-                hosts = hostStore.loadHosts(),
-                activeHostId = recorded.id,
-                activeEndpointId = connection.endpoint.id,
-                endpointProbes = connection.probes,
-            )
-        }
-        connectEvents(connection.client)
-    }
-
-    private fun applyProbes(host: Host, probes: List<EndpointProbe>): Host =
-        probes.fold(host) { acc, probe -> acc.withEndpointProbe(probe.endpointId, probe.latencyMs, probe.error) }
-
-    private fun hostFromPairing(
-        endpoint: String,
-        token: String,
-        device: DeviceView,
-        displayName: String,
-    ): Host {
-        val now = System.currentTimeMillis()
-        val baseUrl = DshClient.normalizeEndpoint(endpoint).removeSuffix("/api/v1")
-        val endpointId = "ep-paired"
-        val existing = hostStore.loadHosts().firstOrNull { it.id == "host-${device.id}" }
-        return Host(
-            id = "host-${device.id}",
-            displayName = displayName.trim().ifBlank { device.name },
-            endpoints = listOf(Endpoint.create(label = EndpointKind.infer(baseUrl).name, baseUrl = baseUrl, id = endpointId)),
-            preferredEndpointId = endpointId,
-            credential = Credential(
-                kind = CredentialKind.DEVICE_TOKEN,
-                secret = token,
-                deviceId = device.id,
-                deviceName = device.name,
-                scopes = device.scopes,
-                issuedAt = existing?.credential?.issuedAt?.takeIf { it > 0L } ?: now,
-            ),
-            createdAt = existing?.createdAt ?: now,
-            updatedAt = now,
-        )
-    }
-
-    private fun nextId(): String = java.util.UUID.randomUUID().toString().take(8)
-
-    /**
-     * 断开当前连接。
-     *
-     * 注意**不再清除已保存的主机**：旧实现把「断开」和「删除令牌」绑成一个动作，
-     * 于是网络抖一下、手点错一次，用户就得重新配对 —— 而配对又要求电脑在身边。
-     * 现在断开只断连；删主机是独立的 [removeHost]。
-     */
-    fun disconnect() {
-        eventSubscription?.close()
-        eventSubscription = null
-        // 手动断开要清掉熄屏暂停标志：否则下次亮屏 resumeEvents 会把
-        // 用户刚刚主动断开的连接又接回去 —— 那是最容易让人以为「断开没用」的 bug。
-        eventsPaused = false
-        active = null
-        mutableState.value = HarnessState(restoring = false, hosts = hostStore.loadHosts()).withPreferences()
-    }
-
     fun clearError() = update { copy(error = null) }
 
-    fun refreshDashboard() = withClient { api ->
-        val device = api.currentDevice()
-        val snapshot = loadSnapshot(api, device)
-        update {
-            snapshot.copy(
-                restoring = false,
-                busy = true,
-                selectedSessionId = selectedSessionId?.takeIf { id -> snapshot.sessions.any { it.id == id } },
-                selectedRootId = selectedRootId?.takeIf { id -> snapshot.roots.any { it.id == id } }
-                    ?: snapshot.roots.firstOrNull()?.id,
-            )
-        }
-    }
-
-    fun selectSession(id: String?) {
-        update {
-            copy(
-                selectedSessionId = id,
-                history = null,
-                liveChat = null,
-                sessionModels = null,
-                commands = emptyList(),
-                approvalState = if (id == null) ApprovalUiState.None else ApprovalUiState.Loading,
-                // 换会话就把问答状态清干净：上一组的草稿/已答标记留在界面上会张冠李戴。
-                questions = emptyList(),
-                answeringCallId = null,
-                answeredCallIds = emptySet(),
-                // `@` 补全的文件列表属于**上一个会话的工作目录**，换会话必须清掉：
-                // 不清的话，切过去的头几百毫秒里 `@` 会列出上个会话的文件，
-                // 用户手快选中就发出一条指向错误路径的消息。
-                mentionEntries = null,
-                mentionFailed = false,
-            )
-        }
-        if (id != null) {
-            refreshHistory()
-            refreshSessionModels()
-            refreshPendingApprovals()
-            refreshCommands()
-            // 进会话就顺手把工作目录的文件捞回来，等用户打 `@` 时直接可用 ——
-            // 放在这里而不是等 `@` 触发再拉：那时用户已经在等补全列表了，
-            // 多一次网络往返就是列表「慢半拍」的来源。
-            loadMentionEntries()
-        }
-    }
-
-    fun refreshHistory() = withClient { api ->
-        val id = mutableState.value.selectedSessionId ?: return@withClient
-        val history = api.history(id)
-        update { copy(history = history) }
-        // 顺手把待答问题也拉一次。这个函数只有两个调用点（切会话、顶栏那个刷新按钮），
-        // 而顶栏刷新正是用户遇到「卡片该出现却没出现」时**唯一**的自救入口 ——
-        // 把问答挂在它上面，就不必再教用户「去哪里重试」。
-        refreshPendingQuestions()
-    }
-
-    fun loadOlderHistory() = withClient { api ->
-        val id = mutableState.value.selectedSessionId ?: return@withClient
-        val current = mutableState.value.history ?: return@withClient
-        if (!current.hasMore) return@withClient
-        val beforeSeq = current.events.minOfOrNull { it.event.seq } ?: return@withClient
-        val older = api.history(id, beforeSeq)
-        update {
-            copy(history = current.copy(
-                events = (older.events + current.events).distinctBy { it.event.seq },
-                hasMore = older.hasMore,
-                projections = current.projections ?: older.projections,
-            ))
-        }
-    }
-
-    /**
-     * 打开会话里提到的一个文件（服务器绝对路径）。
-     *
-     * 分两步：先用服务端的 `roots/resolve` 把绝对路径换成「授权根 + 相对路径」
-     * （这一步客户端做不了 —— `/roots` 刻意不返回根的绝对路径），再用既有的
-     * [openEntry] 同款读取逻辑把内容取回来。
-     *
-     * 成功时顺带把「文件」页也切到这个文件（`selectedRootId` / `currentPath` /
-     * `document`），于是用户切到「文件」分区就能拿到完整编辑器（含保存），
-     * 面板里则只做只读预览。
-     */
-    fun openSessionFile(absolutePath: String) {
-        val api = client ?: return
-        val sessionId = mutableState.value.selectedSessionId ?: return
-        update { copy(sessionFileOpen = SessionFileOpen(sessionId, absolutePath)) }
-        viewModelScope.launch {
-            val outcome = runCatching { withContext(Dispatchers.IO) { loadSessionFile(api, sessionId, absolutePath) } }
-            // 用户可能在读取期间切了会话；结果只对发起它的那个会话有效。
-            if (mutableState.value.selectedSessionId != sessionId) return@launch
-            outcome
-                .onSuccess { opened ->
-                    update {
-                        copy(
-                            sessionFileOpen = opened.open,
-                            selectedRootId = opened.rootId ?: selectedRootId,
-                            currentPath = opened.currentPath ?: currentPath,
-                            document = opened.document ?: document,
-                        )
-                    }
-                }
-                .onFailure { failure ->
-                    update {
-                        copy(
-                            sessionFileOpen = SessionFileOpen(
-                                sessionId = sessionId,
-                                requestedPath = absolutePath,
-                                loading = false,
-                                // 端点不存在几乎只有一个原因：服务端插件版本过旧。
-                                // 这条提示必须可操作（「去升级插件」），否则用户会去
-                                // 反复检查自己的路径 —— 那是错误的方向。
-                                failure = if (failure is DshApiException && failure.code == "ROUTE_NOT_FOUND") {
-                                    "PLUGIN_TOO_OLD"
-                                } else {
-                                    messageOf(failure)
-                                },
-                            ),
-                        )
-                    }
-                }
-        }
-    }
-
-    /** 关闭面板里的文件详情，回到路径列表。 */
-    fun closeSessionFile() = update { copy(sessionFileOpen = null) }
-
-    private fun loadSessionFile(api: DshClient, sessionId: String, absolutePath: String): SessionFileOutcome {
-        val resolved = api.resolvePath(absolutePath)
-            ?: return SessionFileOutcome(
-                SessionFileOpen(sessionId, absolutePath, loading = false, outsideRoots = true),
-            )
-        val parent = resolved.path.substringBeforeLast('/', "")
-        if (resolved.kind == "directory") {
-            // 目录没有可预览的内容；但把「文件」页切过去，用户就能就地浏览。
-            return SessionFileOutcome(
-                open = SessionFileOpen(sessionId, absolutePath, loading = false, resolved = resolved),
-                rootId = resolved.rootId,
-                currentPath = resolved.path,
-            )
-        }
-        val entry = sessionFileEntry(api, resolved, parent)
-        // 图片 / PDF 与文本的上限不同：2 MiB 对一张手机截图太紧，但解码前整份字节要进内存，
-        // 所以按类型各给一条闸（见 data/PreviewKind.kt 的 PREVIEW_*_MAX_BYTES）。
-        val provisional = previewKind(resolved.path, resolved.contentType)
-        val cap = binaryPreviewByteLimit(provisional) ?: MAX_EDIT_BYTES
-        val tooLarge = entry.size > cap
-        val content = if (tooLarge) null else api.readFile(resolved.rootId, resolved.path)
-        val kind = previewKindOf(resolved.path, resolved.contentType, content?.bytes)
-        val binary = kind == PreviewKind.IMAGE || kind == PreviewKind.PDF
-        // 图片 / PDF 不解 UTF-8：那是白费一次解码，还会把二进制变成一屏替换字符。
-        val decoded = if (binary) null else content?.let { decodeUtf8(it.bytes) }
-        val text = decoded?.text
-        return SessionFileOutcome(
-            open = SessionFileOpen(
-                sessionId = sessionId,
-                requestedPath = absolutePath,
-                loading = false,
-                resolved = resolved,
-                preview = text?.take(PREVIEW_CHARS),
-                bytes = if (binary) content?.bytes else null,
-                truncated = text != null && text.length > PREVIEW_CHARS,
-                tooLarge = tooLarge,
-            ),
-            rootId = resolved.rootId,
-            currentPath = parent,
-            document = OpenDocument(
-                entry = entry,
-                text = text,
-                bytes = if (binary) content?.bytes else null,
-                etag = content?.etag.orEmpty(),
-                hasBom = decoded?.hasBom == true,
-                lineEnding = decoded?.lineEnding ?: "\n",
-                contentType = content?.contentType,
-            ),
-        )
-    }
-
-    /**
-     * `roots/resolve` 只说「是文件还是目录、多大、何时改」，**没有 `writable`**，
-     * 而「文件」页的保存按钮正是看这个字段。目录列表能给出权威值（顺带修正大小与时间），
-     * 所以优先取列表里的那一条；列表读不到时退回保守构造：`writable = false` ——
-     * 宁可让只读文件显示为只读，也不要放开保存按钮换一个 403。
-     */
-    private fun sessionFileEntry(api: DshClient, resolved: ResolvedPath, parent: String): FileEntry {
-        val listed = runCatching {
-            api.entries(resolved.rootId, parent).entries.firstOrNull { it.path == resolved.path }
-        }.getOrNull()
-        if (listed != null) return listed
-        return FileEntry(
-            name = resolved.path.substringAfterLast('/').ifBlank { resolved.path },
-            path = resolved.path,
-            kind = resolved.kind,
-            size = resolved.size ?: 0L,
-            modifiedAt = resolved.modifiedAt,
-            writable = false,
-        )
-    }
-
-    fun createSession(workspaceId: String, preset: String?) = withClient { api ->
-        val created = api.createSession(workspaceId, preset?.takeIf(String::isNotBlank))
-        val sessions = api.sessions()
-        val history = api.history(created.id)
-        val models = api.sessionModels(created.id)
-        val commands = api.sessionCommands(created.id)
-        update {
-            copy(
-                sessions = sessions,
-                selectedSessionId = created.id,
-                history = history,
-                sessionModels = models,
-                commands = commands,
-                approvalState = ApprovalUiState.None,
-            )
-        }
-    }
-
-    fun prepareWorkspacePicker() {
-        val rootId = mutableState.value.workspacePickerRootId
-            ?.takeIf { id -> mutableState.value.roots.any { it.id == id } }
-            ?: mutableState.value.selectedRootId
-            ?: mutableState.value.roots.firstOrNull()?.id
-        update { copy(workspacePickerRootId = rootId, workspacePickerPath = "", workspacePickerDirectory = null) }
-        if (rootId != null) loadWorkspacePickerDirectory("")
-    }
-
-    fun selectWorkspacePickerRoot(rootId: String) {
-        update { copy(workspacePickerRootId = rootId, workspacePickerPath = "", workspacePickerDirectory = null) }
-        loadWorkspacePickerDirectory("")
-    }
-
-    fun loadWorkspacePickerDirectory(path: String) = withClient { api ->
-        val rootId = mutableState.value.workspacePickerRootId ?: return@withClient
-        val normalized = path.trim('/')
-        val page = api.entries(rootId, normalized)
-        update { copy(workspacePickerPath = normalized, workspacePickerDirectory = page) }
-    }
-
-    fun createWorkspaceAndSession(rootId: String, path: String, preset: String?) = withClient { api ->
-        val workspace = api.createChatWorkspace(rootId, path.trim('/'))
-        val created = api.createSession(workspace.id, preset?.takeIf(String::isNotBlank))
-        val sessions = api.sessions()
-        val workspaces = api.chatWorkspaces()
-        update {
-            copy(
-                chatWorkspaces = workspaces,
-                sessions = sessions,
-                selectedSessionId = created.id,
-                history = api.history(created.id),
-                sessionModels = api.sessionModels(created.id),
-                commands = api.sessionCommands(created.id),
-                approvalState = ApprovalUiState.None,
-            )
-        }
-    }
-
-    fun renameWorkspace(workspaceId: String, title: String) = withClient { api ->
-        api.renameChatWorkspace(workspaceId, title)
-        update { copy(chatWorkspaces = api.chatWorkspaces(), sessions = api.sessions()) }
-    }
-
-    fun deleteWorkspace(workspaceId: String) = withClient { api ->
-        api.deleteChatWorkspace(workspaceId)
-        update { copy(chatWorkspaces = api.chatWorkspaces(), sessions = api.sessions()) }
-    }
-
-    fun renameSession(sessionId: String, title: String) = withClient { api ->
-        api.renameSession(sessionId, title)
-        update { copy(sessions = api.sessions()) }
-    }
-
-    fun forkSession(sessionId: String) = withClient { api ->
-        val forkedId = api.forkSession(sessionId)
-        update {
-            copy(
-                sessions = api.sessions(),
-                selectedSessionId = forkedId,
-                history = api.history(forkedId),
-                sessionModels = api.sessionModels(forkedId),
-                commands = api.sessionCommands(forkedId),
-                approvalState = ApprovalUiState.None,
-                liveChat = null,
-            )
-        }
-    }
-
-    fun archiveSession(sessionId: String) = withClient { api ->
-        api.archiveSession(sessionId)
-        val sessions = api.sessions()
-        update {
-            if (selectedSessionId == sessionId) {
-                copy(
-                    sessions = sessions,
-                    selectedSessionId = null,
-                    history = null,
-                    liveChat = null,
-                    sessionModels = null,
-                    commands = emptyList(),
-                    approvalState = ApprovalUiState.None,
-                )
-            } else copy(sessions = sessions)
-        }
-    }
-
-    /**
-     * 发一条消息：文本 + 待发附件一起组装成 content 数组。
-     *
-     * `/命令` 分支只在不带附件时走 —— 命令是发给宿主的一行文本，附件跟着它没有意义；
-     * 带附件时按普通消息发。
-     *
-     * 防重复提交靠的是**在调用线程上同步**「取走并清空待发附件」，**不是**靠禁用按钮：
-     * 清空之后 `canSubmit` 自然为 false，第二次点击组装出的 parts 就是空的。
-     * 之所以不能把取状态留在协程里做：`launchOperation` 会切到 IO，双击的第二次点击
-     * 完全可能抢在它前面读到同一批附件，于是同一条消息（连同同一张图）发两遍。
-     * 发送失败时把附件还回去，别让一次网络抖动吃掉用户挑好的图。
-     */
-    fun sendMessage(text: String, steer: Boolean) {
-        val api = client ?: return
-        val id = mutableState.value.selectedSessionId ?: return
-        val attachments = mutableState.value.pendingAttachments
-        val line = text.trimEnd()
-        if (attachments.isEmpty() && isHostCommandLine(line, mutableState.value.commands)) {
-            launchOperation {
-                val execution = api.executeCommand(id, line)
-                if (execution.result.kind == "error") {
-                    throw DshApiException(409, "COMMAND_FAILED", execution.result.text ?: "Command failed.")
-                }
-                update { copy(history = api.history(id), commands = api.sessionCommands(id)) }
-            }
-            return
-        }
-        val parts = buildList {
-            if (text.isNotBlank()) add(PromptPart.TextPart(text))
-            attachments.forEach { add(it.part) }
-        }
-        if (parts.isEmpty()) return
-        // 清空在这里做，但**原文记在局部变量里**：失败时才写回 [HarnessState.pendingText]。
-        // 写成「提交时就存进 state」的话，UI 监听 pendingText 会把刚提交的正文立刻塞回输入框，
-        // 用户看着就像"发了又没发" —— 比吞字还糟。
-        //
-        // 早先的版本只把附件还回去，文字直接吞了 —— 用户打了一长串字、发失败、
-        // 输入框空了，一个字都找不回来。附件能还而文字不能，本身就不讲道理。
-        update { copy(pendingAttachments = emptyList(), pendingText = "") }
-        launchOperation {
-            try {
-                api.sendMessage(id, parts, steer)
-            } catch (failure: Throwable) {
-                if (failure is CancellationException) throw failure
-                // 把附件与文字都放回输入区；期间新加的条目按 id 去重，不重复。
-                update {
-                    copy(
-                        pendingAttachments = (attachments + pendingAttachments).distinctBy { it.id },
-                        pendingText = text,
-                    )
-                }
-                notify(appString(R.string.send_failed_restore, describeSendFailure(failure)))
-                throw failure
-            }
-            chatSessionRefreshPending = true
-            scheduleChatRefresh()
-        }
-    }
-
-    /**
-     * 把发送失败翻译成一句用户看得懂的话。
-     *
-     * 直接把 `BODY_INVALID: text is required.` 甩到屏幕上，用户能做的只有 staring。
-     * 这里至少指明「是消息没发出去」以及大概的原因方向，剩下的交给下一步排查。
-     */
-    private fun describeSendFailure(failure: Throwable): String {
-        val raw = messageOf(failure)
-        return when {
-            raw.contains("401") || raw.contains("TOKEN") -> appString(R.string.send_failed_auth)
-            raw.contains("413") || raw.contains("too large") -> appString(R.string.send_failed_too_large)
-            raw.contains("BODY_INVALID") -> appString(R.string.send_failed_body)
-            else -> raw
-        }
-    }
-
-    /**
-     * 把选中的图片内联进「待发附件」。
-     *
-     * 图片不走上传端点（内核的 image part 直接带 base64），所以这里唯一要防的就是
-     * 体积：超限当场拒绝并给出可照做的提示，而不是等一个 413。
-     */
-    fun attachImage(name: String, sizeBytes: Long, mediaType: String, openInput: () -> InputStream) {
-        if (sizeBytes > ChatContentParts.MAX_IMAGE_BYTES) {
-            notify(appString(R.string.attachment_image_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_IMAGE_BYTES)))
-            return
-        }
-        viewModelScope.launch {
-            val bytes = readBytes(ChatContentParts.MAX_IMAGE_BYTES, openInput) ?: return@launch
-            if (bytes.size.toLong() > ChatContentParts.MAX_IMAGE_BYTES) {
-                notify(appString(R.string.attachment_image_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_IMAGE_BYTES)))
-                return@launch
-            }
-            val part = runCatching { ChatContentParts.imagePart(mediaType, bytes, name) }.getOrElse {
-                notify(appString(R.string.attachment_image_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_IMAGE_BYTES)))
-                return@launch
-            }
-            update {
-                copy(
-                    pendingAttachments = pendingAttachments + PendingAttachment(
-                        id = java.util.UUID.randomUUID().toString(),
-                        part = part,
-                        name = name,
-                        sizeBytes = bytes.size.toLong(),
-                        imageBytes = bytes,
-                    ),
-                )
-            }
-        }
-    }
-
-    /**
-     * 上传选中的文件，换回 `receiptId` 后放进「待发附件」。
-     *
-     * 上传是网络动作，单独一个 [attachmentUploading] 只用于显示进度；**不**参与发送键的
-     * 可用性判断，否则"选了个大文件"就等于"暂时发不出消息"，正是上一轮的毛病。
-     */
-    fun attachFile(name: String, sizeBytes: Long, openInput: () -> InputStream) {
-        val api = client ?: return
-        val sessionId = mutableState.value.selectedSessionId ?: return
-        if (sizeBytes > ChatContentParts.MAX_FILE_BYTES) {
-            notify(appString(R.string.attachment_file_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_FILE_BYTES)))
-            return
-        }
-        viewModelScope.launch {
-            update { copy(attachmentUploading = true) }
-            try {
-                val bytes = readBytes(ChatContentParts.MAX_FILE_BYTES, openInput) ?: return@launch
-                if (bytes.size.toLong() > ChatContentParts.MAX_FILE_BYTES) {
-                    notify(appString(R.string.attachment_file_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_FILE_BYTES)))
-                    return@launch
-                }
-                val uploaded = withContext(Dispatchers.IO) { api.uploadAttachment(sessionId, bytes, name) }
-                // 上传期间用户可能换了会话：附件属于发起它的那条会话，别塞到别的会话里。
-                if (mutableState.value.selectedSessionId != sessionId) return@launch
-                update {
-                    copy(
-                        pendingAttachments = pendingAttachments + PendingAttachment(
-                            id = java.util.UUID.randomUUID().toString(),
-                            part = PromptPart.FilePart(uploaded.receiptId),
-                            name = uploaded.name.ifBlank { name },
-                            sizeBytes = bytes.size.toLong(),
-                        ),
-                    )
-                }
-            } catch (failure: Throwable) {
-                if (failure is CancellationException) throw failure
-                update {
-                    copy(
-                        error = when {
-                            // 服务端的上限可能比客户端更严；这时不能引用我们自己的 24 MiB，
-                            // 否则用户会被「明明没到 24 MiB」搞糊涂。
-                            failure is DshApiException && failure.code == "TOO_LARGE" ->
-                                appString(R.string.attachment_file_rejected)
-                            // 端点不存在只有一个现实原因：服务端插件版本过旧。
-                            // 这条提示必须可操作（去升级插件），而不是甩一句 ROUTE_NOT_FOUND。
-                            failure is DshApiException && failure.code == "ROUTE_NOT_FOUND" ->
-                                appString(R.string.attachment_upload_unsupported)
-                            else -> messageOf(failure)
-                        },
-                    )
-                }
-            } finally {
-                update { copy(attachmentUploading = false) }
-            }
-        }
-    }
-
-    /** 从待发附件里删掉一条。 */
-    fun removePendingAttachment(id: String) = update {
-        copy(pendingAttachments = pendingAttachments.filterNot { it.id == id })
-    }
-
-    /** 清空待发附件（例如用户放弃了这条消息）。 */
-    fun clearPendingAttachments() = update { copy(pendingAttachments = emptyList()) }
-
-    /**
-     * 读进内存，但**最多读 limit + 1 字节**就停手（细节与理由见
-     * [ChatContentParts.readAtMost]）：一个谎报体积的文件不该把内存吃穿。
-     * 超限与否由调用方按返回长度判定。
-     */
-    private suspend fun readBytes(limit: Long, openInput: () -> InputStream): ByteArray? =
-        try {
-            withContext(Dispatchers.IO) { openInput().use { ChatContentParts.readAtMost(limit, it) } }
-        } catch (failure: Throwable) {
-            if (failure is CancellationException) throw failure
-            notify(appString(R.string.attachment_read_failed))
-            null
-        }
-
     /** 走全局错误通道（App 层会转成 snackbar）；文案在这里就已经是人话。 */
-    private fun notify(message: String) = update { copy(error = message) }
+    internal fun notify(message: String) = update { copy(error = message) }
 
     /**
      * 附件相关的提示必须是本地化文案，而构造参数 `application` 不是属性，
      * 只能经 `getApplication()` 拿。这两句是要用户照做的（「先压缩再试」），
      * 不能退化成一句 `IMAGE_TOO_LARGE`。
      */
-    private fun appString(resId: Int, vararg args: Any): String =
+    internal fun appString(resId: Int, vararg args: Any): String =
         getApplication<Application>().getString(resId, *args)
 
     /** 当前选中的会话是否正在运行（决定「排队 / 插话」有没有区别）。 */
@@ -1175,7 +274,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
      * 此时把它当成「已结束」只会多补拉一次 GET，不会漏 —— 反过来若当成还在跑，
      * 兜底就永远不触发，那才是真的漏。
      */
-    private fun isSessionRunning(sessionId: String): Boolean =
+    internal fun isSessionRunning(sessionId: String): Boolean =
         mutableState.value.sessions.firstOrNull { it.id == sessionId }?.running == true
 
     /** 改「智能体运行时」的默认提交行为，并立刻落盘（下次启动保持）。 */
@@ -1204,602 +303,6 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
     fun setGenUiDebug(enabled: Boolean) {
         preferences.genUiDebug = enabled
         update { copy(genUiDebug = enabled) }
-    }
-
-    /**
-     * 按需取回一张会话图片。
-     *
-     * **两种来源、两条读法**，前缀就是判据：
-     * - 原生附件（模型支持图片输入）：字节在服务端附件存储里，走 `readAttachment`，
-     *   必须带当前会话 id（内核要读会话事件、拿真实 ref 做完整性校验）；
-     * - 交接图片（纯文本模型发图时插件落进工作区 `.dsh-images/` 的文件）：
-     *   字节根本不在附件存储里，走官方那条「绝对路径 → 授权根」的解析与读文件，
-     *   与会话无关，所以不需要 sessionId。
-     *
-     * 幂等且可反复调用（界面在组合时直接调它）：已缓存的直接返回，正在取的会被
-     * [pendingAttachments] 挡住，取失败的连同**原因**记进 [HarnessState.attachmentFailures]
-     * 不再重试。前两条保证「一次会话里每张图最多下载一次」；记原因是因为「不再重试」
-     * 只在原因稳定时才是对的 —— 而授权过期是能被恢复的，界面提示得告诉用户去做什么。
-     */
-    fun loadAttachmentImage(attachmentId: String) {
-        if (attachmentId.isBlank()) return
-        val api = client ?: return
-        val current = mutableState.value
-        // 交接图的 id 本身就是一条服务器绝对路径；判据与 ChatPresentation 共用一份实现。
-        val handoffPath = handoffPathOf(attachmentId)
-        val sessionId = current.selectedSessionId
-        // 原生附件不在任何会话里就无从说明「这是哪个会话的图」：内核会拒绝，
-        // 早一点返回能避免发一个必然 400 的请求。交接图是工作区里的普通文件，与会话无关。
-        if (handoffPath == null && sessionId.isNullOrBlank()) return
-        if (current.attachmentImages.containsKey(attachmentId)) return
-        // 授权类失败**不永久记住**：用户重新配对之后图就该能显示，
-        // 而记住失败会让它永远停在「不可用」，除非重启 App。附件真的没了（404）才记死。
-        if (attachmentId in current.attachmentFailures && attachmentId !in retryableAttachmentFailures) return
-        if (!pendingAttachments.add(attachmentId)) return
-        viewModelScope.launch {
-            val outcome = runCatching {
-                withContext(Dispatchers.IO) {
-                    if (handoffPath != null) {
-                        readHandoffImage(api, handoffPath)
-                    } else {
-                        api.readAttachment(sessionId.orEmpty(), attachmentId)
-                    }
-                }
-            }
-            pendingAttachments.remove(attachmentId)
-            outcome
-                .onSuccess { bytes ->
-                    update {
-                        copy(
-                            attachmentImages = attachmentImages + (attachmentId to bytes),
-                            attachmentFailures = attachmentFailures - attachmentId,
-                        )
-                    }
-                    retryableAttachmentFailures.remove(attachmentId)
-                }
-                .onFailure { failure ->
-                    val reason = describeAttachmentFailure(failure)
-                    val retryable = failure.isRetryableAttachmentFailure()
-                    if (retryable) retryableAttachmentFailures.add(attachmentId)
-                    update { copy(attachmentFailures = attachmentFailures + (attachmentId to reason)) }
-                }
-        }
-    }
-
-    /**
-     * 读一张**交接图片**（纯文本模型发图时落进会话工作区 `.dsh-images/` 的那份）。
-     *
-     * 用官方那条现成的路：`resolvePath` 把服务器绝对路径解析成「授权根 + 相对路径」，
-     * 再 `readFile` 取字节 —— 与文件页预览（[loadSessionFile]）同一个端点、同一份
-     * `files.read` 授权，没有为图片另开口子。
-     *
-     * 解析不出来（路径不在任何授权根内）就按失败上报，界面会给出原因；
-     * 错误文案里带上 `PATH_OUTSIDE_ROOTS` 这个码，好让 [describeAttachmentFailure]
-     * 能把它和其它失败区分开。
-     */
-    private fun readHandoffImage(api: DshClient, path: String): ByteArray {
-        val resolved = api.resolvePath(path)
-            ?: throw DshApiException(404, "PATH_OUTSIDE_ROOTS", "PATH_OUTSIDE_ROOTS: $path")
-        return api.readFile(resolved.rootId, resolved.path).bytes
-    }
-
-    /**
-     * 这类失败在重新配对后可能自愈，因此允许重试。
-     *
-     * 判据是**病因**而不是错误码：401/403 是授权状态问题，换一次配对就好了；
-     * 404 是服务端确实没有这份字节，再试一百次也一样。
-     */
-    private fun Throwable.isRetryableAttachmentFailure(): Boolean {
-        val raw = messageOf(this)
-        return raw.contains("401") || raw.contains("403") || raw.contains("TOKEN") ||
-            raw.contains("SCOPE") || raw.contains("FORBIDDEN")
-    }
-
-    /**
-     * 把取图失败翻译成一句能照做的提示。
-     *
-     * 这几个分支对应四类完全不同的病因，用户该做的事也不同：
-     * 401 是授权过期（去重新配对）、403 是缺 `files.read` 授权、404 是附件真不在了、
-     * 其余多半是网络或解码。把它们混成一句「可能已被清理」，用户只会去清缓存 ——
-     * 而缓存不是原因。
-     */
-    private fun describeAttachmentFailure(failure: Throwable): String {
-        val raw = messageOf(failure)
-        return when {
-            raw.contains("PATH_OUTSIDE_ROOTS") || raw.contains("PATH_NOT_FOUND") ||
-                raw.contains("PATH_NOT_ABSOLUTE") -> appString(R.string.attachment_fail_outside_roots)
-
-            raw.contains("401") || raw.contains("TOKEN") -> appString(R.string.attachment_fail_auth)
-            raw.contains("403") || raw.contains("SCOPE") || raw.contains("FORBIDDEN") ->
-                appString(R.string.attachment_fail_scope)
-
-            raw.contains("404") || raw.contains("NOT_FOUND") -> appString(R.string.attachment_fail_missing)
-            else -> appString(R.string.attachment_fail_other, raw)
-        }
-    }
-
-    fun refreshCommands() = withClient { api ->
-        val id = mutableState.value.selectedSessionId ?: return@withClient
-        update { copy(commands = api.sessionCommands(id)) }
-    }
-
-    fun selectPermissionPreset(preset: String) = withClient { api ->
-        val id = mutableState.value.selectedSessionId ?: return@withClient
-        val execution = api.executeCommand(id, "/permission $preset")
-        if (execution.result.kind == "error") {
-            throw DshApiException(409, "COMMAND_FAILED", execution.result.text ?: "Permission change failed.")
-        }
-        update { copy(history = api.history(id), commands = api.sessionCommands(id)) }
-    }
-
-    fun refreshSessionModels() = withClient { api ->
-        val id = mutableState.value.selectedSessionId ?: return@withClient
-        update { copy(sessionModels = api.sessionModels(id)) }
-    }
-
-    fun selectModel(selection: ModelSelection) = withClient { api ->
-        val id = mutableState.value.selectedSessionId ?: return@withClient
-        api.selectModel(id, selection)
-        update { copy(sessionModels = api.sessionModels(id)) }
-    }
-
-    fun selectAgentPreset(agentPreset: String) = withClient { api ->
-        val id = mutableState.value.selectedSessionId ?: return@withClient
-        api.selectAgentPreset(id, agentPreset)
-        val sessions = api.sessions()
-        val models = api.sessionModels(id)
-        val commands = api.sessionCommands(id)
-        update { copy(sessions = sessions, sessionModels = models, commands = commands) }
-    }
-
-    fun refreshProviderSettings() = withClient { api ->
-        if ("settings.read" !in mutableState.value.device?.scopes.orEmpty()) return@withClient
-        update { copy(providerSettings = api.providerSettings()) }
-    }
-
-    fun refreshPluginInventory() = withClient { api ->
-        if ("settings.read" !in mutableState.value.device?.scopes.orEmpty()) return@withClient
-        update { copy(pluginInventory = api.pluginInventory()) }
-    }
-
-    /**
-     * 带版本检查地刷新插件清单（用户主动点「检查更新」时）。
-     *
-     * 单独一条路而不是给 [refreshPluginInventory] 加参数：版本检查要给每个已装包
-     * 发一次 registry 请求，清单会从毫秒级变成好几秒。默认那条必须保持轻快，
-     * 否则每次进页面都慢一下 —— 而九成的情况用户只是想看「哪个没启用」。
-     */
-    fun refreshPluginInventoryWithUpdates() = withClient { api ->
-        if ("settings.read" !in mutableState.value.device?.scopes.orEmpty()) return@withClient
-        update { copy(pluginInventory = api.pluginInventoryWithUpdates()) }
-    }
-
-    /**
-     * 启用 / 停用一个插件。
-     *
-     * 走 [launchOperation] 而不是自己起协程，图两件事：
-     * - **全局 busy 把按钮禁掉**，重复点击不会连发两次写请求 —— 这是**改 profile 的
-     *   package.json** 的操作，连点两次的后果是写两份备份、改两次 bundles；
-     * - 失败统一落进既有错误通道（`messageOf` 已按界面语言本地化，服务端那些
-     *   `PLUGIN_OFFICIAL_IMMUTABLE` / `PLUGIN_NOT_INSTALLED` 都有对应文案）。
-     *
-     * 成功后**必须重拉清单**：本地那份的 `loaded` 还是旧值，不重拉的话开关会弹回原位，
-     * 用户会以为没生效（而实际上是生效了，只是要重启 DSH 才算数）。
-     *
-     * 成功提示也走同一个通道（`notify`）：服务端恒返回 `restartRequired: true`，
-     * 这句话**必须说出来** —— 用户点完开关看到插件照旧在跑，只会以为功能坏了。
-     */
-    fun setPluginLoaded(name: String, loaded: Boolean) = withClient { api ->
-        if ("settings.write" !in mutableState.value.device?.scopes.orEmpty()) {
-            update { copy(error = appString(R.string.plugins_write_permission_required)) }
-            return@withClient
-        }
-        val result = api.setPluginLoaded(name, loaded)
-        // 重拉清单：本地那份的 loaded 还是旧值，不重拉开关会弹回原位，
-        // 用户会以为没生效（实际生效了，只是要重启 DSH 才算数）。
-        update { copy(pluginInventory = api.pluginInventory()) }
-        if (result.restartRequired) notify(appString(R.string.plugins_toggle_saved))
-    }
-
-    fun updateProvider(providerId: String, patch: ProviderPatch) = withClient { api ->
-        update { copy(providerSettings = api.updateProvider(providerId, patch), discoveredModels = emptyList()) }
-    }
-
-    fun createCustomProvider(provider: CustomProviderCreate) = withClient { api ->
-        update { copy(providerSettings = api.createCustomProvider(provider), discoveredModels = emptyList()) }
-    }
-
-    fun discoverModels(providerId: String, baseURL: String?, protocol: String?, apiKey: String?) = withClient { api ->
-        update { copy(discoveredModels = api.discoverModels(providerId, baseURL, protocol, apiKey)) }
-    }
-
-    fun clearDiscoveredModels() = update { copy(discoveredModels = emptyList()) }
-
-    fun cancelRun() = withClient { api ->
-        val id = mutableState.value.selectedSessionId ?: return@withClient
-        api.cancel(id)
-        chatSessionRefreshPending = true
-        scheduleChatRefresh()
-    }
-
-    fun refreshPendingApprovals() {
-        val api = client ?: return
-        val id = mutableState.value.selectedSessionId ?: return
-        viewModelScope.launch {
-            val result = runCatching { withContext(Dispatchers.IO) { api.pendingApprovals(id) } }
-            if (mutableState.value.selectedSessionId != id) return@launch
-            result
-                .onSuccess { approvals -> update { copy(approvalState = approvals.toApprovalState()) } }
-                .onFailure { error ->
-                    update {
-                        copy(
-                            approvalState = ApprovalUiState.None,
-                            error = if (error is DshApiException && error.code == "RATE_LIMITED") null else messageOf(error),
-                        )
-                    }
-                }
-        }
-    }
-
-    /**
-     * 取当前会话的待回答问题。
-     *
-     * **只对当前选中的会话调**，一次一个 GET。插件的 `resolveAgent` 是「resolve **or resume**」，
-     * 对冷会话调会把那边已经停下的 Agent 拉活 —— 所以这里永远只看 `selectedSessionId`，
-     * 绝不遍历 [HarnessState.sessions]，也不做任何后台轮询。
-     *
-     * 失败**刻意静默**：这条路会挂在全轮的 turn 事件上，插件版本旧（404）或一次网络抖
-     * 都会失败；把错误塞进 snackbar 就等于每轮弹一次。列表也**保留原样**不清空 ——
-     * 已经显示出来的卡片不该因为一次刷新失败就消失（清空只在换会话时发生）。
-     */
-    fun refreshPendingQuestions() {
-        val api = client ?: return
-        val id = mutableState.value.selectedSessionId ?: return
-        viewModelScope.launch {
-            val result = runCatching { withContext(Dispatchers.IO) { api.pendingQuestions(id) } }
-            // 期间用户可能已经切走：这份结果只对发起它的那个会话有效。
-            if (mutableState.value.selectedSessionId != id) return@launch
-            result.onSuccess { sets ->
-                update { copy(questions = sets.filter { it.state == QUESTION_STATE_CONTINUED }) }
-            }
-        }
-    }
-
-    /**
-     * 回答一组问题（`ask_user_question`）。
-     *
-     * 防重复提交两道闸：本地 [HarnessState.answeringCallId] 非空时直接忽略后续点击，
-     * 已经答过的 callId 也不再发；插件的 409 是最后一道防线，但不该让用户点到那一步。
-     */
-    fun answerQuestions(callId: String, answers: List<QuestionAnswer>) {
-        val api = client ?: return
-        val id = mutableState.value.selectedSessionId ?: return
-        if (mutableState.value.answeringCallId != null) return
-        if (callId in mutableState.value.answeredCallIds) return
-        viewModelScope.launch {
-            update { copy(answeringCallId = callId, error = null) }
-            val result = runCatching {
-                withContext(Dispatchers.IO) { api.answerQuestions(id, callId, answers) }
-            }
-            if (mutableState.value.selectedSessionId != id) return@launch
-            result
-                .onSuccess {
-                    update {
-                        copy(
-                            answeringCallId = null,
-                            answeredCallIds = answeredCallIds + callId,
-                        )
-                    }
-                    // 问一次服务端：答复被内核吃掉了的话，这条问题就该从列表里消失；
-                    // 还在的话卡片已经转成「已回答」，不会被误当成没答。
-                    refreshPendingQuestions()
-                }
-                .onFailure { error ->
-                    update { copy(answeringCallId = null, error = describeAnswerFailure(error)) }
-                }
-        }
-    }
-
-    /**
-     * 提交失败的人话。
-     *
-     * 插件用 409 区分两种**完全不同**的情况：答复已经在队列里（你答过了）与问题已经不作答
-     * （这条作废了）。把 code 原样甩给用户，他既看不懂也不知道该不该重试。
-     */
-    private fun describeAnswerFailure(failure: Throwable): String = when {
-        failure is DshApiException && failure.code == "QUESTION_REPLY_QUEUED" ->
-            appString(R.string.answer_already_queued)
-
-        failure is DshApiException && failure.code == "QUESTION_NOT_PENDING" ->
-            appString(R.string.answer_not_pending)
-
-        failure is DshApiException && (failure.status == 403 || failure.code.contains("FORBIDDEN") ||
-            failure.code.contains("SCOPE")) ->
-            appString(R.string.answer_no_write)
-
-        else -> appString(R.string.answer_failed, messageOf(failure))
-    }
-
-    fun decideApproval(approval: PendingApproval, allowOnce: Boolean) {
-        val api = client ?: return
-        val id = mutableState.value.selectedSessionId ?: return
-        if (approval.sessionId != id) return
-        val items = when (val current = mutableState.value.approvalState) {
-            is ApprovalUiState.Pending -> current.items
-            is ApprovalUiState.Deciding -> current.items
-            else -> listOf(approval)
-        }
-        viewModelScope.launch {
-            update { copy(approvalState = ApprovalUiState.Deciding(approval, items), error = null) }
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    api.decideApproval(id, approval.id, allowOnce)
-                    api.pendingApprovals(id) to api.sessions()
-                }
-            }.onSuccess { (approvals, sessions) ->
-                if (mutableState.value.selectedSessionId == id) {
-                    update { copy(approvalState = approvals.toApprovalState(), sessions = sessions) }
-                    chatSessionRefreshPending = true
-                    scheduleChatRefresh()
-                }
-            }.onFailure { error ->
-                if (mutableState.value.selectedSessionId == id) {
-                    update { copy(approvalState = ApprovalUiState.Pending(items), error = messageOf(error)) }
-                }
-            }
-        }
-    }
-
-    fun selectRoot(id: String) {
-        update { copy(selectedRootId = id, currentPath = "", document = null) }
-        loadDirectory("")
-    }
-
-    fun loadDirectory(path: String = mutableState.value.currentPath) = withClient { api ->
-        val root = mutableState.value.selectedRootId ?: return@withClient
-        val normalized = path.trim('/')
-        val page = api.entries(root, normalized)
-        update { copy(currentPath = normalized, directory = page, document = null) }
-    }
-
-    fun loadNextDirectoryPage() = withClient { api ->
-        val current = mutableState.value.directory ?: return@withClient
-        val cursor = current.nextCursor ?: return@withClient
-        val root = mutableState.value.selectedRootId ?: return@withClient
-        val next = api.entries(root, current.path, cursor)
-        update {
-            copy(directory = current.copy(
-                entries = (current.entries + next.entries).distinctBy { it.path },
-                nextCursor = next.nextCursor,
-            ))
-        }
-    }
-
-    /**
-     * 加载当前会话**工作目录**的条目，供输入框 `@` 补全（对齐官方「@ 调取当前工作目录
-     * 文件或文件夹」那条功能）。
-     *
-     * 为什么不直接用 [loadDirectory] 那套：那是「文件」页的浏览状态，用户会自己切根、
-     * 进子目录；`@` 必须**始终**指向本会话的 cwd，共用一个字段会导致「在文件页翻到别处，
-     * 回会话里补全出的是别的目录」。所以单独一个字段、单独一次请求。
-     *
-     * **只用两步，不走 `resolvePath`**：会话里已经有 `rootId`，而 `cwd` 本身就是
-     * 「相对授权根」的 wire 路径 —— 列举接口要的正是这两样。此前这里先把 `cwd` 送去
-     * `resolvePath`「翻译」成「根 id + 相对路径」，可那个端点**要求绝对路径输入**、
-     * 对相对路径直接 400（`PATH_NOT_ABSOLUTE`），于是第二步必然失败、补全永远列不出
-     * 文件。多绕的这一圈是纯粹的误解：服务端给的 `cwd` 从来就是相对路径。
-     *
-     * **`cwd` 为空字符串是合法值**，表示会话工作目录就是授权根本身
-     * （`path.relative(root, root) === ''`）。此前 `.takeIf { it.isNotBlank() }` 把它
-     * 当成「没有工作目录」丢掉 —— 线上那句「读不到这个会话的工作目录」就是这么来的。
-     *
-     * 拿不到时把 [HarnessUiState.mentionFailed] 置真，让界面如实说「读不到」，
-     * 而不是谎称「目录是空的」。`@` 补全出不来不影响打字与发送，所以不弹错误提示打断用户。
-     */
-    fun loadMentionEntries() = withClient { api ->
-        val sessionId = mutableState.value.selectedSessionId ?: return@withClient
-        val session = mutableState.value.sessions.firstOrNull { it.id == sessionId } ?: return@withClient
-        val page = runCatching {
-            // 空 cwd（= 授权根本身）照常列举；trim('/') 只把结尾多余的斜杠收干净。
-            withContext(Dispatchers.IO) { api.entries(session.rootId, session.cwd.trim('/')) }
-        }.getOrNull()
-        // 会话可能在请求期间被切走，回来发现已是另一个会话就别把那批文件塞进去。
-        if (mutableState.value.selectedSessionId != sessionId) return@withClient
-        update {
-            if (page == null) copy(mentionEntries = null, mentionFailed = true)
-            else copy(mentionEntries = page.entries, mentionFailed = false)
-        }
-    }
-
-    /**
-     * 把「输入框上方的补全面板开着」这个事实同步出去，供外层抽屉决定是否响应滑动手势
-     * （见 [HarnessUiState.composerOverlay]）。
-     *
-     * 由 ChatScreen 在面板出现/消失时调用。只在**值真的变了**的时候写 state ——
-     * 这个函数会在重组路径上被调到，每次无条件 update 会白白推一串快照。
-     */
-    fun setComposerOverlay(active: Boolean) {
-        if (mutableState.value.composerOverlay == active) return
-        update { copy(composerOverlay = active) }
-    }
-
-    fun openEntry(entry: FileEntry) {
-        if (entry.kind == "directory") {
-            loadDirectory(entry.path)
-            return
-        }
-        withClient { api ->
-            val root = mutableState.value.selectedRootId ?: return@withClient
-            // 图片与 PDF 有自己的字节上限：文本的 2 MiB 闸对它们太紧（一张手机截图就 3~8 MiB），
-            // 但也不能不设闸 —— 解码前整份字节都要进内存。
-            val provisional = previewKind(entry.name, null)
-            val cap = binaryPreviewByteLimit(provisional) ?: MAX_EDIT_BYTES
-            if (entry.size > cap) {
-                update {
-                    copy(
-                        document = OpenDocument(entry, skippedForSize = true),
-                        // 文本超限沿用既有的全局提示；图片 / PDF 的提示由预览面板自己给
-                        // （带「下载」出路），免得同一条信息在页面顶部与内容区各刷一遍。
-                        error = if (provisional == PreviewKind.IMAGE || provisional == PreviewKind.PDF) null
-                        else "FILE_TOO_LARGE",
-                    )
-                }
-                return@withClient
-            }
-            val content = api.readFile(root, entry.path)
-            // 拿到字节后重判一次：FileEntry 里没有 contentType，服务端 MIME 也不可靠，
-            // 所以「没有扩展名 / 扩展名是 .bin 的图片」只能靠魔数认出来。
-            val kind = previewKindOf(entry.name, content.contentType, content.bytes)
-            if (kind == PreviewKind.IMAGE || kind == PreviewKind.PDF) {
-                update {
-                    copy(
-                        document = OpenDocument(
-                            entry = entry,
-                            bytes = content.bytes,
-                            etag = content.etag,
-                            contentType = content.contentType,
-                        ),
-                        error = null,
-                    )
-                }
-                return@withClient
-            }
-            val decoded = decodeUtf8(content.bytes)
-            update {
-                copy(
-                    document = OpenDocument(
-                        entry = entry,
-                        text = decoded?.text,
-                        etag = content.etag,
-                        hasBom = decoded?.hasBom == true,
-                        lineEnding = decoded?.lineEnding ?: "\n",
-                        contentType = content.contentType,
-                    ),
-                    error = if (decoded == null) "BINARY_FILE" else null,
-                )
-            }
-        }
-    }
-
-    fun selectEntryForAction(entry: FileEntry) = update {
-        copy(document = OpenDocument(entry))
-    }
-
-    fun updateDocument(text: String) = update {
-        copy(document = document?.copy(text = text))
-    }
-
-    fun saveDocument() = withClient { api ->
-        val root = mutableState.value.selectedRootId ?: return@withClient
-        val document = mutableState.value.document ?: return@withClient
-        val text = document.text ?: return@withClient
-        val normalized = text.replace("\r\n", "\n").replace("\r", "\n")
-        val encoded = when (document.lineEnding) {
-            "\r\n" -> normalized.replace("\n", "\r\n")
-            "\r" -> normalized.replace("\n", "\r")
-            else -> normalized
-        }
-            .toByteArray(Charsets.UTF_8)
-        val bytes = if (document.hasBom) UTF8_BOM + encoded else encoded
-        val etag = api.writeFile(root, document.entry.path, bytes, document.etag)
-        update { copy(document = document.copy(etag = etag)) }
-        val page = api.entries(root, mutableState.value.currentPath)
-        update { copy(directory = page) }
-    }
-
-    fun createEntry(name: String, directory: Boolean) = withClient { api ->
-        val root = mutableState.value.selectedRootId ?: return@withClient
-        val path = childPath(mutableState.value.currentPath, name)
-        api.createEntry(root, path, directory)
-        update { copy(directory = api.entries(root, mutableState.value.currentPath)) }
-    }
-
-    fun moveSelected(destination: String) = withClient { api ->
-        val root = mutableState.value.selectedRootId ?: return@withClient
-        val document = mutableState.value.document ?: return@withClient
-        api.moveEntry(root, document.entry.path, destination.trim('/'))
-        update { copy(document = null, directory = api.entries(root, mutableState.value.currentPath)) }
-    }
-
-    fun trashSelected() = withClient { api ->
-        val root = mutableState.value.selectedRootId ?: return@withClient
-        val document = mutableState.value.document ?: return@withClient
-        api.trashEntry(root, document.entry.path)
-        update {
-            copy(document = null, directory = api.entries(root, currentPath), trash = api.trash())
-        }
-    }
-
-    fun upload(name: String, length: Long, openInput: () -> InputStream) = withClient { api ->
-        val root = mutableState.value.selectedRootId ?: return@withClient
-        api.writeFile(root, childPath(mutableState.value.currentPath, name), length, openInput)
-        update { copy(directory = api.entries(root, mutableState.value.currentPath)) }
-    }
-
-    fun replaceSelected(length: Long, openInput: () -> InputStream) = withClient { api ->
-        val root = mutableState.value.selectedRootId ?: return@withClient
-        val document = mutableState.value.document ?: return@withClient
-        val etag = document.etag.ifBlank { api.readFile(root, document.entry.path).etag }
-        api.writeFile(root, document.entry.path, length, openInput, etag)
-        openEntry(document.entry.copy(size = length))
-    }
-
-    fun downloadSelected(openOutput: () -> OutputStream) = withClient { api ->
-        val root = mutableState.value.selectedRootId ?: return@withClient
-        val entry = mutableState.value.document?.entry ?: return@withClient
-        api.downloadFile(root, entry.path, openOutput())
-    }
-
-    fun loadTrash() = withClient { api -> update { copy(trash = api.trash()) } }
-
-    fun restoreTrash(id: String) = withClient { api ->
-        api.restoreTrash(id)
-        update { copy(trash = api.trash()) }
-        loadDirectory()
-    }
-
-    /**
-     * 启动时恢复连接：读取已保存的主机（必要时先迁移旧版数据），再自动尝试最近用过的那台。
-     *
-     * 与旧实现的一个关键差别：旧版在恢复失败时执行 `store.clear()`，把令牌一并删掉。
-     * 那意味着「此刻网络不通」会被误判成「凭据失效」—— 用户回到家才发现要重新配对，
-     * 而重新配对又要求他真的在电脑前。现在连不上只保留未连接状态，主机记录不动，
-     * 由用户决定重试还是删除。
-     */
-    private fun restoreConnection() {
-        viewModelScope.launch {
-            val hosts = withContext(Dispatchers.IO) { loadOrMigrateHosts() }
-            if (hosts.isEmpty()) {
-                update { copy(restoring = false) }
-                return@launch
-            }
-            // updatedAt 会在每次探活后刷新，所以「最近活动过」近似等于「上次用过的」。
-            val target = hosts.maxByOrNull { it.updatedAt } ?: hosts.first()
-            update {
-                copy(
-                    hosts = hosts,
-                    selectedHostId = target.id,
-                    endpointDraft = target.endpoints.firstOrNull()?.baseUrl.orEmpty(),
-                    restoring = true,
-                )
-            }
-            runCatching { connectHostInternal(target) }
-                .onFailure { update { copy(restoring = false, connecting = false, error = messageOf(it)) } }
-        }
-    }
-
-    /** 读取主机列表；为空时尝试把旧版单连接数据迁进来。迁移是幂等的。 */
-    private fun loadOrMigrateHosts(): List<Host> {
-        val existing = hostStore.loadHosts()
-        if (existing.isNotEmpty()) return existing
-        return runCatching {
-            LegacyConnectionMigration.migrate(
-                storage = keyValueStore,
-                legacySecretBox = legacySecretBox,
-                hostStore = hostStore,
-            )
-            hostStore.loadHosts()
-        }.getOrDefault(emptyList())
     }
 
     /**
@@ -1847,7 +350,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         refreshPendingQuestions()
     }
 
-    private fun connectEvents(api: DshClient) {
+    internal fun connectEvents(api: DshClient) {
         eventSubscription?.close()
         eventSubscription = api.events(
             listener = { event ->
@@ -1999,7 +502,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         )
     }
 
-    private fun loadSnapshot(api: DshClient, device: DeviceView): HarnessState {
+    internal fun loadSnapshot(api: DshClient, device: DeviceView): HarnessState {
         val roots = if ("files.read" in device.scopes) api.roots() else emptyList()
         val canReadChat = "chat.read" in device.scopes
         val sessions = if (canReadChat) api.sessions() else emptyList()
@@ -2027,7 +530,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         ).withPreferences()   // 快照是整份重建的，偏好字段必须重新盖回去
     }
 
-    private fun scheduleChatRefresh() {
+    internal fun scheduleChatRefresh() {
         chatRefreshPending = true
         if (chatRefreshJob?.isActive == true) return
         chatRefreshJob = viewModelScope.launch {
@@ -2094,12 +597,12 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    private fun withClient(block: suspend (DshClient) -> Unit) {
+    internal fun withClient(block: suspend (DshClient) -> Unit) {
         val api = client ?: return
         launchOperation { block(api) }
     }
 
-    private fun launchOperation(block: suspend () -> Unit) {
+    internal fun launchOperation(block: suspend () -> Unit) {
         viewModelScope.launch {
             update { copy(busy = true, error = null) }
             runCatching { withContext(Dispatchers.IO) { block() } }
@@ -2108,7 +611,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    private fun update(transform: HarnessState.() -> HarnessState) {
+    internal fun update(transform: HarnessState.() -> HarnessState) {
         mutableState.update { current -> current.transform() }
     }
 
@@ -2120,36 +623,6 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         coordinator.close()
         super.onCleared()
     }
-
-    private data class DecodedText(val text: String, val hasBom: Boolean, val lineEnding: String)
-    private data class LiveKey(val sessionId: String, val turn: Int, val step: Int)
-
-    /** [loadSessionFile] 的产物：面板要展示的结果 +「文件」页要跟着切换的状态。 */
-    private data class SessionFileOutcome(
-        val open: SessionFileOpen,
-        val rootId: String? = null,
-        val currentPath: String? = null,
-        val document: OpenDocument? = null,
-    )
-
-    private fun decodeUtf8(bytes: ByteArray): DecodedText? {
-        val hasBom = bytes.size >= 3 && bytes.copyOfRange(0, 3).contentEquals(UTF8_BOM)
-        val content = if (hasBom) bytes.copyOfRange(3, bytes.size) else bytes
-        val decoder = Charsets.UTF_8.newDecoder()
-            .onMalformedInput(CodingErrorAction.REPORT)
-            .onUnmappableCharacter(CodingErrorAction.REPORT)
-        val text = runCatching { decoder.decode(ByteBuffer.wrap(content)).toString() }.getOrNull() ?: return null
-        if ('\u0000' in text) return null
-        val lineEnding = when {
-            "\r\n" in text -> "\r\n"
-            '\r' in text -> "\r"
-            else -> "\n"
-        }
-        return DecodedText(text, hasBom, lineEnding)
-    }
-
-    private fun childPath(parent: String, name: String): String =
-        if (parent.isBlank()) name.trim('/') else "$parent/${name.trim('/')}"
 
     /**
      * 异常 → 给人看的句子。分三层：
@@ -2163,7 +636,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
      * 3. 其余未知异常 → 保留原文，能搜能贴给开发者（与错误码表「认不出不硬猜」
      *    同一原则）。
      */
-    private fun messageOf(error: Throwable): String = when (error) {
+    internal fun messageOf(error: Throwable): String = when (error) {
         is DshApiException -> localizedError(error.code, error.message)
         is DshConnectionException -> appString(R.string.err_connect_all_unreachable)
         is SocketTimeoutException -> appString(R.string.err_network_timeout)
@@ -2182,96 +655,9 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
      * 认不出的错误码**保留原文**：编一句像模像样的话只会把人带偏，而原文还能搜、能贴给开发者。
      * 以前这里一律拼成 `CODE: English message.`，于是中文界面下也全是英文。
      */
-    private fun localizedError(code: String?, raw: String): String {
+    internal fun localizedError(code: String?, raw: String): String {
         val res = localizedErrorRes(code) ?: return raw
         return if (res == R.string.err_request_generic) appString(res, code.orEmpty()) else appString(res)
     }
 
-    private companion object {
-        const val MAX_EDIT_BYTES = 2L * 1024 * 1024
-
-        /**
-         * 面板只读预览的字符上限。整个文件的完整内容仍然会按 2 MiB 上限读进
-         * `document`（供「文件」页的编辑器使用），这里截断只是为了不让一个
-         * 超大 Text 把底部面板的滚动拖垮。
-         */
-        const val PREVIEW_CHARS = 20_000
-        val UTF8_BOM = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte())
-    }
 }
-
-private fun WorkspaceEvent.dataString(key: String): String? =
-    ((data as? JsonObject)?.get(key) as? JsonPrimitive)?.contentOrNull
-
-private fun WorkspaceEvent.dataInt(key: String): Int? =
-    ((data as? JsonObject)?.get(key) as? JsonPrimitive)?.intOrNull
-
-private fun List<PendingApproval>.toApprovalState(): ApprovalUiState =
-    if (isEmpty()) ApprovalUiState.None else ApprovalUiState.Pending(this)
-
-/**
- * 「待答问题可能变了」的事件类型（用法见 [HarnessViewModel] 的 connectEvents）。
- *
- * 刻意**不含** chat.message.delta：那是 token 级的流式增量，跟着它刷新就等于在轮询。
- * 这里列的都是每轮 / 每条消息一次的结构性事件 —— 少而准。
- */
-private val QUESTION_REFRESH_EVENTS = setOf(
-    "chat.message.committed",
-    "chat.turn.start",
-    "chat.turn.end",
-    "chat.session.status",
-    "chat.approval.requested",
-    "chat.approval.resolved",
-)
-
-/**
- * 从待答列表里摘掉一题。
- *
- * 用在插件那两帧上：`chat.userQuestions/answered`（本端或电脑端已作答）与
- * `chat.userQuestions/dismissed`（窗口关闭 / 整轮取消）。
- * 两者都是「这道题已经不用答了」的**确定性事实**，所以就地摘掉 ——
- * 而不是等下一次 `GET /questions` 回来，那只会让卡片多挂一个往返。
- *
- * 纯函数，便于单测：不改入参、callId 对不上时原样返回。
- */
-internal fun removeQuestion(
-    questions: List<PendingQuestionSet>,
-    callId: String,
-): List<PendingQuestionSet> =
-    if (questions.none { it.callId == callId }) questions
-    else questions.filterNot { it.callId == callId }
-
-/**
- * 这一帧是不是 `tool/result`（插件降级成 `chat.session.event` 的那种）。
- *
- * 为什么要单独判：插件把**所有**非特殊会话事件统一降级成 `chat.session.event`，
- * 内容被丢掉，只留 `{sessionId, eventType, seq}`（chat-adapter.ts normalizeDshEvent 末段）。
- * 一轮里这类帧非常多（每个工具调用好几帧），若「来一帧拉一次」，等于自己造了个轮询。
- *
- * 而提问超时的判定完全落在内核那条 tool/result 上：
- * 折叠器读到 `{pending:true}` 的结果才把问题从 open 改成 continued
- *（dsh-user-questions/lib/types/projection.js 的 `tool/result` 分支 + isPendingResult）。
- * 所以**这一帧到达，就是该重新拉取的确切信号** —— 不是启发式，是时序上的事实。
- */
-internal fun isToolResultFrame(eventType: String?, eventData: Any?): Boolean {
-    if (eventType != "chat.session.event") return false
-    val obj = eventData as? kotlinx.serialization.json.JsonObject ?: return false
-    return obj["eventType"]?.let { it.toString().trim('"') } == "tool/result"
-}
-
-/**
- * 收到终局失败帧后，把那个会话在本地立刻标成「不在运行」。
- *
- * 为什么不能等下一次 `GET /sessions`：服务端把会话标成 not-running 与这帧到达
- * 之间有几百毫秒，而这段时间里「停止」按钮还是亮的、输入框占位符还写着
- * 「运行中…」—— 用户看着就以为还在跑，于是继续傻等。本地先置位，
- * 等权威数据回来再用它盖一次，两头都对。
- *
- * 纯函数，便于单测：不改入参；sessionId 对不上时原样返回。
- */
-internal fun markSessionStopped(
-    sessions: List<ChatSession>,
-    sessionId: String,
-): List<ChatSession> =
-    if (sessions.none { it.id == sessionId && it.running }) sessions
-    else sessions.map { if (it.id == sessionId) it.copy(running = false) else it }

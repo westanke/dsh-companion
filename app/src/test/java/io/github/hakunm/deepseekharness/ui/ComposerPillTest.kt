@@ -1,5 +1,9 @@
 package io.github.hakunm.deepseekharness.ui
 
+import io.github.hakunm.deepseekharness.ui.chat.composerHint
+import io.github.hakunm.deepseekharness.ui.chat.ComposerHint
+import io.github.hakunm.deepseekharness.ui.chat.hasPhysicalKeyboard
+import io.github.hakunm.deepseekharness.ui.chat.isSoftKeyboardEvent
 import android.content.res.Configuration
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

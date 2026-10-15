@@ -68,6 +68,12 @@ import io.github.hakunm.deepseekharness.data.Credential
 import io.github.hakunm.deepseekharness.data.Endpoint
 import io.github.hakunm.deepseekharness.data.EndpointProbe
 import io.github.hakunm.deepseekharness.data.Host
+import io.github.hakunm.deepseekharness.connectHost
+import io.github.hakunm.deepseekharness.importConfiguration
+import io.github.hakunm.deepseekharness.pair
+import io.github.hakunm.deepseekharness.removeHost
+import io.github.hakunm.deepseekharness.setEndpointDraft
+import io.github.hakunm.deepseekharness.testConnection
 
 /**
  * 未连接时的首屏。

@@ -1,6 +1,8 @@
 package io.github.hakunm.deepseekharness.ui
 
 import io.github.hakunm.deepseekharness.data.ChatSession
+import io.github.hakunm.deepseekharness.ui.chat.sessionDisplayTitle
+import io.github.hakunm.deepseekharness.ui.chat.sessionPaneWidth
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
