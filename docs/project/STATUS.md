@@ -30,8 +30,10 @@
   - 旧钥匙已归档在同目录 `archived-unknown-password/` 下，保留不删
 - 仓库：`https://github.com/westanke/dsh-companion`、`https://gitee.com/westanke/dsh-companion`；上游 `Hakunm/dsh-android-app` 只作参考，**不推送**
 - 已打 tag：`v1.1.0` / `v1.2.0` / `v1.4.0` / `v1.9.0` / `v2.2.20` / `v2.2.23` / **`v2.2.26`** / **`v2.2.27`**（`git tag` 实测）。v2.0.0–v2.2.19 之间没有 tag
-- 真机验收：**问答卡片已端到端验证通过**（内核提问 → 插件推帧 → App 渲染 → 作答 → 答案回到内核，审计表有完整证据链）。v2.2.27 的七项修复**待本轮真机验收**。**尚未逐项验收**：图片/PDF 预览的翻页与缩放手感、工具调用详情的展开观感、长按选中/双击复制的手势边界、`dsh-ui` 卡片观感、HTML 结构预览排版、输入区 `⋯` 菜单在窄屏与各输入法下的可达性
-- 已知缺口：单测夹具 `ConnectionShareInteropTest.kt` 仍内嵌一枚**已吊销**的真实设备令牌；该文件在 `app/src` 内，是否改写夹具待定（文档侧已全部脱敏）
+- 真机验收：**问答卡片曾于 2026-10-11 端到端验证通过**（内核提问 → 插件推帧 → App 渲染 → 作答 → 答案回到内核，审计表有完整证据链）。**但 2026-10-16 验收 v2.2.40 时又出现「卡片不弹」** —— 同一个功能两次结论相反，说明它**不是稳定复现**的问题，中间发生了某个变化（插件侧或内核侧）让症状回来了；在查清之前，不要拿 10-11 那次的结论当现状（见下方「已知缺口」第一条）。v2.2.27 的七项修复**待本轮真机验收**。**尚未逐项验收**：图片/PDF 预览的翻页与缩放手感、工具调用详情的展开观感、长按选中/双击复制的手势边界、`dsh-ui` 卡片观感、HTML 结构预览排版、输入区 `⋯` 菜单在窄屏与各输入法下的可达性
+- 已知缺口：
+  - **审批 / 问答卡片在真机上仍不弹出**（2026-10-16 用户确认「历史问题了」）。这是 v2.2.40 重构**之前就有**的症状，与文件位置无关，纯逻辑部分单测仍全绿。要定位见 `PITFALLS.md` §ask_user_question 三态 与 `dsh-remote-bridge/docs/project/RETRO-question-card.md`（那份复盘的结论是：**卡片代码从头到尾都是对的**，错的是排查方法 —— 先解释现象，却没先确认现象真的发生过）。
+  - 单测夹具 `ConnectionShareInteropTest.kt` 仍内嵌一枚**已吊销**的真实设备令牌；该文件在 `app/src` 内，是否改写夹具待定（文档侧已全部脱敏）
 - 其他文档：`docs/project/CHANGELOG-DEV.md`（逐版开发日志）、`docs/project/PARITY.md`（对等矩阵）、`docs/project/webview-report.md`（WebView 线复盘）、`docs/project/webview-parity-audit.md`（原生 vs WebView 能力边界）、`docs/project/webview-port-todo.md`（移植清单）、`docs/task-14-session-audit.md`（能力缺口审计）、`README.en.md`（英文 README，已同步 2.2.27）
 - 插件仓库侧的排查复盘值得一读：`dsh-remote-bridge/docs/project/RETRO-question-card.md` —— 问答卡片「一直不显示」的排查里，**卡片代码从头到尾都是对的**，错的是排查方法（先解释现象、却没先确认现象真的发生过）
 - 阻塞项：`PARITY.md` 中仍有后续 DSH WebUI 能力未对等；`IME-001` 继续扩大不同厂商键盘实机覆盖
