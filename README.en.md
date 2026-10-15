@@ -287,7 +287,7 @@ Download from this repository's Releases (both hosts carry the same file — pic
 - Gitee (faster from mainland China): <https://gitee.com/westanke/dsh-companion/releases/latest>
 
 ```text
-DeepSeek-Harness-companion-v2.2.39.apk
+DeepSeek-Harness-companion-v2.2.40.apk
 ```
 
 Requirements:
@@ -531,15 +531,15 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.39` (`versionCode` 10064)
+- Version: `v2.2.40` (`versionCode` 10065)
 - Package: `io.github.hakunm.deepseekharness`
 - Unit tests: 27 test classes / 290 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DeepSeek-Harness-companion-v2.2.39.apk`, 2,895,422 bytes,
-  SHA-256 `7c9168c78353bfcc053d50ccc611e6d667c5d0511b3be9a8dace4951c59910a1` (kept in sync in
+- Current APK: `DeepSeek-Harness-companion-v2.2.40.apk`, 2,895,422 bytes,
+  SHA-256 `a277a38e9e6f90f69a32e9e1a86607fef4bead93ec5648ff4276aca6084c0e79` (kept in sync in
   `artifacts/SHA256SUMS.txt`)
-- Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25; v2.2.31 → v2.2.39 installs in place)
+- Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25; v2.2.31 → v2.2.40 installs in place)
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)
 - License: [GNU Affero General Public License v3.0](./LICENSE)
 - Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.3** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+)

@@ -699,8 +699,21 @@ android {
         //      相应代码、字符串（session_pane_expand / session_pane_collapse）、
         //      SessionPaneToggle 组件已全部删除，ChatScreen.kt 的 wide 分支
         //      与 v2.2.38 逐字一致（只多一段「曾试过、已回退」的注释备查）。
-        versionCode = 10064
-        versionName = "2.2.39"
+        // v2.2.40（versionCode 10065）：**纯重构，无任何界面或行为改动**。
+        //   基于什么：TECH-DEBT.md 行数台账上的三条债（ChatScreen.kt 3882 /
+        //     HarnessViewModel.kt 2277 / ChatPresentation.kt 825）全部超 800 行预算。
+        //   为什么：改聊天页任何一处要在 3600 行里定位，改 ViewModel 要先想清属于哪个域。
+        //   干了什么：按职责边界拆成 ui/chat/ 下 12 个文件 + Harness*ViewModel.kt 8 个
+        //     域文件 + data/ChatPresentation 5 个文件。ViewModel 域函数写成
+        //     `HarnessViewModel` 的**扩展函数**而非子类，调用点写法完全不变，
+        //     所以 ui/ 下所有界面一行都没改；每个函数实现逐字保留。
+        //   代价：原 private 的部分成员提升为 internal（同 module 可见，比 public 窄）；
+        //     JSON 实例改名 chatJson/chatPrettyJson 避免与 GenUiBlocks 的私有 json 遮蔽。
+        //   测了什么：testDebugUnitTest 27 类 / 290 用例 / 0 失败（与拆分前逐项一致）、
+        //     assembleDebug 通过、docsCheck 8 文档 43 任务一致、app/src 零文件超 800 行。
+        //   未做：真机验收 —— 本版就是为此出的包，**不发布**。
+        versionCode = 10065
+        versionName = "2.2.40"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
