@@ -578,14 +578,11 @@ internal fun ChatDetail(
                 }
             }
         }
-        // 思考条：消息区**下方**、输入区**上方**的那一条固定位置（网页版 #thinkbar 的位置）。
-        // 有思考才渲染，没有时整条不存在 —— 不用 AnimatedVisibility 收起，
-        // 那会留下一条带边框的空缝，在输入区上方永久挡着一行。
-        ChatThinkBar(liveThinking)
-        // 生成合成内容标识（v2.2.41）：常驻，不进消息列表。放在思考条**之后**——
-        // 两者都在「消息区下方 / 输入区上方」这一条窄带里，标识必须紧贴输入框（用户产生
-        // AI 内容的地方），否则被思考条挤到上面去就离生成动作远了。
-        AiGeneratedNotice()
+        // 状态条：思考条与「内容由 AI 生成」标识**合并成同一条**（用户要求，2026-10-17）。
+        // 原来两个是并排的两行，思考一来就把标识挤到上面去，那一栏就散了。
+        // 现在：有思考内容时显示思考（可展开），没有思考时才显示标识 —— 两者共用同一条窄带，
+        // 位置固定在消息区下方、输入区上方。
+        ChatStatusBar(liveThinking)
         when (val approvals = state.approvalState) {
             ApprovalUiState.None -> Composer(
                 value = message,

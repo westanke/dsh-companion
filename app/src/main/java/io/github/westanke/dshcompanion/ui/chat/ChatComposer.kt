@@ -553,6 +553,30 @@ internal fun isSoftKeyboardEvent(nativeFlags: Int): Boolean =
  */
 
 /**
+ * 状态条：**思考条与「内容由 AI 生成」标识合并成同一条**（用户要求，2026-10-17）。
+ *
+ * 原来两者是并排的两行（思考条 + 标识条），思考一来就把标识挤到上面去，那一栏就散了。
+ * 现在合成一条：**有思考内容时显示思考**（可展开），**没有思考时才显示标识**。
+ *
+ * 为什么这样合并而不是「标识常驻、思考叠上去」：
+ * 那一栏只有一行多的空间，两条各占一行必然互相挤压；而思考只在流式期间存在，
+ * 标识却是常驻的合规提示 —— 让「短生命周期的运行状态」让位给「常驻标识」不划算，
+ * 反过来才对：思考在时用户看思考（标识在上一屏的输入框旁仍能看到），不在时标识补位。
+ *
+ * 位置仍然固定在消息区**下方**、输入区**上方**（网页版 `#thinkbar` 的位置）：
+ * 它是「运行状态 / 标识」而不是「会话内容」，进 LazyColumn 会随消息滚走。
+ */
+@Composable
+internal fun ChatStatusBar(liveThinking: String) {
+    val thinking = thinkBarText(liveThinking)
+    if (thinking.isNotEmpty()) {
+        ChatThinkBar(liveThinking)
+    } else {
+        AiGeneratedNotice()
+    }
+}
+
+/**
  * 生成合成内容标识条（《人工智能生成合成内容标识办法》第四条：应当在生成合成内容或者
  * 交互场景界面中添加、可以被用户明显感知到的**显式标识**）。
  *
@@ -562,6 +586,8 @@ internal fun isSoftKeyboardEvent(nativeFlags: Int): Boolean =
  * - 输入框是用户产生 AI 内容的地方，标识贴在它正上方，看到与生成之间没有心智隔断；
  * - 尺寸走 `labelSmall` + `onSurfaceVariant`，刻意弱于正文 —— 这是常驻合规提示，
  *   不是正文的一部分，抢注意力会干扰长会话阅读。
+ *
+ * 现在由 [ChatStatusBar] 按「有无思考」在它和思考条之间切换（2026-10-17 合并）。
  *
  * 为什么只有一行、不做成弹窗或一次性浮层：
  * 第四条的措辞是「界面中添加…提示标识」，常驻优于一次性提示；弹窗类方案会打断会话，
