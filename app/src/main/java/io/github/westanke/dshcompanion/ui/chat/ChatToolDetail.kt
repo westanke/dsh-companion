@@ -407,6 +407,9 @@ internal fun ToolTextBlock(label: String, text: String, isError: Boolean, maxHei
 
     val context = LocalContext.current
 
+    // 组合期取文案，复制 toast 才能跟随界面语言（回调里 context.getString 不会随重组刷新）
+    val copiedHint = stringResource(R.string.copied)
+
     val accent = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant
 
     Surface(
@@ -453,7 +456,7 @@ internal fun ToolTextBlock(label: String, text: String, isError: Boolean, maxHei
 
                             clipboard.setPrimaryClip(ClipData.newPlainText("tool-detail", text))
 
-                            toast(context, context.getString(R.string.copied))
+                            toast(context, copiedHint)
 
                         }
 

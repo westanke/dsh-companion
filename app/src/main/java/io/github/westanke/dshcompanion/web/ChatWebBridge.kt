@@ -201,15 +201,42 @@ class ChatWebBridge(
         Toast.makeText(appContext, message, Toast.LENGTH_SHORT).show()
     }
 
-    /** 发送成功/失败的震动反馈。 */
+    /**
+     * 发送成功/失败的震动反馈。
+     *
+     * 为什么要按 SDK 分级：VibratorManager 是 API 31、VibrationEffect.createPredefined
+     * 是 API 29，而 minSdk 是 26——直接调在 26~28 的机器上会 NoSuchMethodError。
+     * 这里 31+ 走 VibratorManager（配合 EFFECT_TICK，触觉引擎可用时是细腻 tick），
+     * 26~30 退回老式 Vibrator + 固定短时长。整段包 runCatching，个别无振动器设备静默降级。
+     */
     @JavascriptInterface
+    @Suppress("DEPRECATION") // API 26~30 只能用已废弃的 getSystemService(VIBRATOR_SERVICE)
     fun haptic() {
         runCatching {
-            val vm = appContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE)
-                as? android.os.VibratorManager
-            vm?.defaultVibrator?.vibrate(
-                android.os.VibrationEffect.createPredefined(android.os.VibrationEffect.EFFECT_TICK)
-            )
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                val manager = appContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE)
+                    as? android.os.VibratorManager
+                val vibrator = manager?.defaultVibrator ?: return@runCatching
+                if (vibrator.hasVibrator()) {
+                    vibrator.vibrate(
+                        android.os.VibrationEffect.createPredefined(
+                            android.os.VibrationEffect.EFFECT_TICK
+                        )
+                    )
+                }
+            } else {
+                // API 26~30：此时 VibrationEffect(26) 已可用，只是 VibratorManager(31) 还没有
+                @Suppress("DEPRECATION")
+                val vibrator = appContext.getSystemService(Context.VIBRATOR_SERVICE)
+                    as? android.os.Vibrator
+                if (vibrator?.hasVibrator() == true) {
+                    vibrator.vibrate(
+                        android.os.VibrationEffect.createOneShot(
+                            20, android.os.VibrationEffect.DEFAULT_AMPLITUDE
+                        )
+                    )
+                }
+            }
         }
     }
 
@@ -290,8 +317,15 @@ class ChatWebBridge(
         }
     }
 
-    /** 供 Activity 的 onActivityResult 调用：记下用户选中的 uri。 */
-    fun onPicked(uri: android.net.Uri?) {
+    /**
+     * 供 Activity 的 onActivityResult 调用：记下用户选中的 uri。
+     *
+     * 刻意用 internal 而非 public：这个方法**不该暴露给 JS**。注册进 WebView 的对象里，
+     * 只有带 @JavascriptInterface 的方法才对页面可见；public 但无注解的方法既会被 lint
+     * 标 JavascriptInterface，也是真实的攻击面（低版本/反射）。同模块的
+     * ActiveChatBridge / MainActivity 仍能调到 internal。
+     */
+    internal fun onPicked(uri: android.net.Uri?) {
         pendingUri = uri
     }
 

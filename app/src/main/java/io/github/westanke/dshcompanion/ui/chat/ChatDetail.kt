@@ -287,7 +287,15 @@ internal fun ChatDetail(
     // 所以这里换成分流处理：服务端路径交给 roots/resolve（复用已测过的链路），
     // http(s) 交系统浏览器，其余明确告知不支持，绝不猜。
     val context = LocalContext.current
-    val linkHandler = remember(context) {
+    // 提示文案在组合期取（跟随界面语言重组），handler 依赖这些字符串而非 context：
+    // 切语言时字符串变化 → handler 重建，回调里不会用到旧 Configuration 的语言。
+    val linkOpenFailed = stringResource(R.string.link_open_failed)
+    val linkRelativePath = stringResource(R.string.link_relative_path)
+    val linkAnchorUnsupported = stringResource(R.string.link_anchor_unsupported)
+    val linkSchemeUnsupported = stringResource(R.string.link_scheme_unsupported)
+    val linkHandler = remember(
+        linkOpenFailed, linkRelativePath, linkAnchorUnsupported, linkSchemeUnsupported
+    ) {
         object : UriHandler {
             override fun openUri(uri: String) {
                 when (val target = ChatLinkTarget.classify(uri)) {
@@ -297,7 +305,7 @@ internal fun ChatDetail(
                         val opened = runCatching {
                             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(target.url)))
                         }.isSuccess
-                        if (!opened) toast(context, context.getString(R.string.link_open_failed))
+                        if (!opened) toast(context, linkOpenFailed)
                     }
 
                     is ChatLinkTarget.Unsupported -> toast(
@@ -306,11 +314,11 @@ internal fun ChatDetail(
                             // 相对路径无法定位是有意为之：服务端只接受绝对路径，
                             // 猜一个基准目录可能打开**另一个**文件。
                             ChatLinkTarget.Reason.RELATIVE_PATH, ChatLinkTarget.Reason.EMPTY ->
-                                context.getString(R.string.link_relative_path)
+                                linkRelativePath
                             ChatLinkTarget.Reason.ANCHOR ->
-                                context.getString(R.string.link_anchor_unsupported)
+                                linkAnchorUnsupported
                             ChatLinkTarget.Reason.UNKNOWN_SCHEME ->
-                                context.getString(R.string.link_scheme_unsupported)
+                                linkSchemeUnsupported
                         },
                     )
                 }

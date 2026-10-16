@@ -267,6 +267,9 @@ internal fun ChatItem(
 
     val copyable = item.body.isNotBlank()
 
+    // 组合期取文案，双击 toast 才能跟随界面语言（回调里 context.getString 不会随重组刷新）
+    val copiedHint = stringResource(R.string.copied)
+
     Box(
 
         Modifier
@@ -289,7 +292,7 @@ internal fun ChatItem(
 
                             clipboard.setPrimaryClip(ClipData.newPlainText("message", item.body))
 
-                            toast(context, context.getString(R.string.copied))
+                            toast(context, copiedHint)
 
                         },
 
@@ -559,6 +562,9 @@ internal fun GenUiDebugLine(diagnosis: GenUiDiagnosis) {
 
     val context = LocalContext.current
 
+    // 组合期取文案，长按 toast 才能跟随界面语言
+    val copiedHint = stringResource(R.string.copied)
+
     Column(
 
         Modifier
@@ -573,7 +579,7 @@ internal fun GenUiDebugLine(diagnosis: GenUiDiagnosis) {
 
                 clipboard.setPrimaryClip(ClipData.newPlainText("genui-debug", diagnosis.details))
 
-                toast(context, context.getString(R.string.copied))
+                toast(context, copiedHint)
 
             }),
 

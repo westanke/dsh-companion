@@ -23,6 +23,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import io.github.westanke.dshcompanion.ApprovalUiState
 import io.github.westanke.dshcompanion.HarnessState
@@ -70,7 +71,9 @@ fun ChatWebScreen(
     val dark = isSystemInDarkTheme()
     val session = state.sessions.firstOrNull { it.id == state.selectedSessionId }
 
-    val bridge = remember {
+    // 显式写出类型：remember 的泛型实参若让编译器推断，lint 的 JavascriptInterface
+    // 检查拿不到具体类、只看到类型变量 T，会误报「接口方法都没加 @JavascriptInterface」。
+    val bridge: ChatWebBridge = remember {
         ChatWebBridge(context, viewModel) {
             viewModel.selectSession(null)
         }
@@ -165,6 +168,11 @@ fun ChatWebScreen(
                     isVerticalScrollBarEnabled = true
                     isHorizontalScrollBarEnabled = false
                     overScrollMode = android.view.View.OVER_SCROLL_NEVER
+                    // lint 误报：该检查无法穿过 AndroidView 的 factory lambda 解析外部变量
+                    // bridge 的具体类型，把它当泛型 T。bridge 实为 ChatWebBridge（上面已显式标注），
+                    // 其暴露给 JS 的方法逐个带 @JavascriptInterface（request/poll/copy/openLink/
+                    // close/toast/haptic/pickFile/takeAttachment/pageReady），无注解的 onPicked 已降 internal。
+                    @SuppressLint("JavascriptInterface")
                     addJavascriptInterface(bridge, "DshBridge")
                     // 没有它的话，页面里的 JS 报错与 console.log 全都静默 ——
                     // 页面白屏时既看不到原因，也没法从 logcat 里捞线索。
@@ -270,12 +278,18 @@ fun ChatWebScreen(
     //  → key 变化 → 整个 effect 重跑 → 再发一次 init → 页面把命令、历史、审批
     //  重新拉一遍。症状就是「发完消息，诊断栏里 init 已收到/开始拉取/历史已载入
     //  连着出现三次」。running 只是要交给页面的一个初值，用另一条 effect 推即可。
+    // 组合期取本地化文案，供下面 LaunchedEffect（非 Composable 上下文）闭包引用，
+    // 这样切换界面语言时随重组刷新，而不是用不跟踪 Configuration 的 context.getString。
+    val webNoConnection = stringResource(R.string.web_no_connection)
+    val webReadOnlyScope = stringResource(R.string.web_read_only_scope)
     LaunchedEffect(
         state.selectedSessionId,
         state.activeEndpointId,
         state.activeHostId,
         web,
         pageReady,
+        webNoConnection,
+        webReadOnlyScope,
     ) {
         val id = state.selectedSessionId ?: return@LaunchedEffect
         // 没连上时**照样发 init**，只是 tell 页 why。
@@ -291,11 +305,13 @@ fun ChatWebScreen(
         // 用局部变量而不是把 when 写进 .put(...) 的实参里：
         // when 作为函数实参时解析器会把紧随其后的 "}," 吞进 when 体，直接编译不过。
         //
-        // 取值走 `context.getString` 而不是 `stringResource`：这一段在 LaunchedEffect 里，
-        // **不是 Composable 上下文**，用后者会直接编译失败（已经踩过一次）。
+        // 提示文案在下面的组合期用 stringResource 预取（webNoConnection / webReadOnlyScope）：
+        // 这一段在 LaunchedEffect 里、**不是 Composable 上下文**，不能直接调 stringResource，
+        // 也不该用 context.getString（切语言时不会随重组刷新，lint 也会报
+        // LocalContextGetResourceValueCall）。引用组合期捕获的字符串即可。
         val warn = when {
-            conn == null -> context.getString(R.string.web_no_connection)
-            "chat.write" !in scopes -> context.getString(R.string.web_read_only_scope)
+            conn == null -> webNoConnection
+            "chat.write" !in scopes -> webReadOnlyScope
             else -> ""
         }
 

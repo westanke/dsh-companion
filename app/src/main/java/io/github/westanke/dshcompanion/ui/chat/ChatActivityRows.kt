@@ -245,11 +245,15 @@ internal fun TurnFailureRow(failure: ChatTurnFailure) {
 
         // 兜底那条要带上错误码，否则「操作没能完成」等于没说。
 
-        localizedRes == R.string.err_request_generic -> context.getString(localizedRes, failure.code.orEmpty())
+        localizedRes == R.string.err_request_generic -> stringResource(localizedRes, failure.code.orEmpty())
 
         else -> stringResource(localizedRes)
 
     }
+
+    // 在组合期取字符串（而非回调里用 context.getString）：这样切换界面语言时
+    // 长按 toast 才会跟随重组刷新，否则一直用旧 Configuration 下的语言。
+    val copiedHint = stringResource(R.string.copied)
 
     Column(
 
@@ -281,7 +285,7 @@ internal fun TurnFailureRow(failure: ChatTurnFailure) {
 
                     )
 
-                    toast(context, context.getString(R.string.copied))
+                    toast(context, copiedHint)
 
                 },
 
