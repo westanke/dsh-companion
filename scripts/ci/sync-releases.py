@@ -12,9 +12,9 @@
 - 单个 Release/资产失败不中止全局，最后以退出码汇总。
 
 环境变量：
-  GITHUB_TOKEN       必需，GITHUB_TOKEN secret（contents: write）
-  GITHUB_REPOSITORY  必需，owner/repo
-  DRY_RUN=1          只打印不写
+  GH_TOKEN / GITHUB_TOKEN  必需（优先 GH_TOKEN），GITHUB_TOKEN secret（contents: write）
+  GITHUB_REPOSITORY        必需，owner/repo（runner 自动注入）
+  DRY_RUN=1                只打印不写
 """
 import json
 import os
@@ -27,7 +27,7 @@ GITEE_REPO = "westanke/dsh-companion"
 ALLOWED_SUFFIX = (".apk", ".txt", ".md")
 MAX_ASSET_BYTES = 2 * 1024 * 1024 * 1024  # GitHub 单文件上限 2 GiB
 
-TOKEN = os.environ.get("GITHUB_TOKEN", "")
+TOKEN = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
 REPO = os.environ.get("GITHUB_REPOSITORY", "")
 DRY_RUN = os.environ.get("DRY_RUN") == "1"
 

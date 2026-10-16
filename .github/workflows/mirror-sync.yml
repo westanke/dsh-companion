@@ -7,7 +7,10 @@ name: 从 Gitee 同步镜像
 #   1) refs（全部分支与 tag，push --mirror，主源删除也跟随删除）
 #   2) Release（正文 + APK/SHA256SUMS/RELEASE_NOTES，幂等补缺，源码包由 GitHub 自动生成）
 #
-# 防递归：GITHUB_TOKEN 发起的 push 不会再次触发 workflow（GitHub 官方行为）。
+# 自举说明：本文件首次进入一个空仓时（经 Contents API 引导提交），仓库里还没有
+# scripts/ci/ 下的脚本，所以 mirror job 的首次同步逻辑内嵌于此；push --mirror
+# 完成后，Gitee 版（调用 scripts/ci/mirror-push.sh 的版本）即成为权威，本内嵌段
+# 只是它的等价副本。GITHUB_TOKEN 发起的 push 不会递归触发 workflow（GitHub 官方行为）。
 on:
   schedule:
     - cron: '17 */3 * * *'   # 每 3 小时一次（UTC，避开整点）
@@ -25,9 +28,36 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - name: 推送镜像（Gitee 主 → AtomGit 备 → GitHub 从）
-        run: bash scripts/ci/mirror-push.sh
+      - name: 推送镜像（Gitee 主 → AtomGit 备 → GitHub 从，内嵌自举版）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          WORK="$(mktemp -d)"
+          trap 'rm -rf "$WORK"' EXIT
+          SRC_LABEL=""
+          SRC_URL=""
+          for entry in \
+            "Gitee|https://gitee.com/westanke/dsh-companion.git" \
+            "AtomGit|https://atomgit.com/westanke163/dsh-companion.git"; do
+            label="${entry%%|*}"; url="${entry#*|}"
+            echo "探测源站：$label"
+            if git ls-remote --heads "$url" >/dev/null 2>&1; then
+              SRC_LABEL="$label"; SRC_URL="$url"
+              echo "$label 可达，选作本次同步源"
+              break
+            fi
+            echo "$label 不可达，尝试下一个源"
+          done
+          if [ -z "$SRC_URL" ]; then
+            echo "::error::Gitee 与 AtomGit 均不可达，本次跳过"
+            exit 1
+          fi
+          git clone --mirror "$SRC_URL" "$WORK/mirror.git"
+          cd "$WORK/mirror.git"
+          git remote set-url --push origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push --mirror origin
+          echo "✅ 镜像完成（源：$SRC_LABEL）"
 
   releases:
     needs: mirror              # 必须先有 tag，否则 GitHub 会乱造 tag
@@ -39,4 +69,11 @@ jobs:
         with:
           python-version: '3.11'
       - name: 回填 Release 与发布资产
-        run: python3 scripts/ci/sync-releases.py
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f scripts/ci/sync-releases.py ]; then
+            python3 scripts/ci/sync-releases.py
+          else
+            echo "scripts/ci/sync-releases.py 尚不在当前提交（自举竞态），等下一轮定时同步即可"
+          fi
