@@ -53,14 +53,20 @@
     略有差异，指向的 commit 相同，无实际影响）。AtomGit 只镜像代码，不承担 Release。
   - **GitHub = 镜像从站**：旧仓存在 v2.2.35 之后**历史重写分叉**（两边 11 个提交树对象两两相同、hash 不同；
     试过 `git merge origin/main` 爆 47 个冲突，`git merge --abort` 已回退无残留），手工合并/推送此路不通，
-    加上本机到 `github.com:443` 长期被阻断。用户拍板：**删除旧仓、从 Gitee 导入重建**（GitHub Importer
-    保留真实 commit hash），此后不再手工推 GitHub。
+    加上本机到 `github.com:443` 长期被阻断。用户拍板：**删除旧仓重建为镜像从站**，此后不再手工推 GitHub。
+    重建实路（GitHub Import API 已 410/404 废弃、网页 Importer 在本机网络卡 availability 检查）：
+    ① 建空仓；② 经 Contents API（api.github.com 可达）提交引导版 `mirror-sync.yml`；
+    ③ workflow 在 GitHub runner 上从 Gitee `clone --mirror` 再 `push --mirror` 覆盖空仓——
+    普通 git 传输**保留真实 commit hash**，重建后 GitHub main 与 Gitee 同为 `df6dcc5`（19 tag 齐全）。
   - **自动同步机制**：`.github/workflows/mirror-sync.yml` 每 3 小时（UTC `17 */3 * * *`）+ 手动触发，
-    两个 job：① `scripts/ci/mirror-push.sh` 在 runner 上从 Gitee（不可达则回退 AtomGit）`git clone --mirror`
-    后 `git push --mirror` 到本仓——refs 全量对齐，主源删分支/tag 从站跟随删除；GITHUB_TOKEN 推送不会
-    递归触发 workflow。② `scripts/ci/sync-releases.py` 幂等把 Gitee Release 正文与三类资产
-    （APK / SHA256SUMS.txt / RELEASE_NOTES，源码包不搬，GitHub 自动生成）补到 GitHub，已存在即跳过，
-    已用 `DRY_RUN=1` 本地干跑验证（v2.2.41 三个资产含中文文件名识别正确）。
+    两个 job：① 内嵌自举段（等价 `scripts/ci/mirror-push.sh`）在 runner 上从 Gitee（不可达则回退 AtomGit）
+    `git clone --mirror` 后 `git push --mirror` 到本仓——refs 全量对齐，主源删分支/tag 从站跟随删除。
+    推送凭证用仓库 secret **`MIRROR_PAT`**（带 `repo` + `workflow` scope 的 OAuth/PAT）——GITHUB_TOKEN
+    按安全设计不能增改 workflow 文件，而 mirror 必然写入历史里的 `.github/workflows/*.yml`（实测全 ref 被拒）。
+    ② `scripts/ci/sync-releases.py` 幂等把 Gitee Release 正文与三类资产
+    （APK / SHA256SUMS.txt / RELEASE_NOTES，源码包不搬，GitHub 自动生成）补到 GitHub，已存在即跳过。
+    **GitHub 资产名强制 ASCII**：GitHub uploads 不支持非 ASCII 资产名（实测中文百分号编码被丢弃、raw 报 400），
+    故 GitHub 侧 APK 名为 `DSH-companion-vX.Y.Z.apk`（Gitee 侧保留 `DSH伴侣-…` 中文名，Release 标题/正文不受影响）。
   - **本地推送**：`bash scripts/push-all.sh` 只推 Gitee + AtomGit（`PUSH_TAGS=1` 推标签，
     `INCLUDE_GITHUB=1` 才会顺带试 GitHub）；远端命名用 `bash scripts/setup-remotes.sh` 幂等整理。
   - 历史教训留档：历史重写分叉的来龙去脉与「merge 提交触发镜像脚本 422」见 `PITFALLS.md` 对应条目；

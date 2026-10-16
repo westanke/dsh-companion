@@ -248,6 +248,21 @@ merge 爆 47 个冲突），直接删仓再用 **GitHub Importer 从 Gitee 导�
 
 **铁律**：不要在本地对 GitHub 反复试推或用 REST 脚本补哈希；从站的唯一事实来源是 Gitee。
 
+**重建/同步实施时踩过的三个坑（2026-10-16 实测）**：
+
+1. **空仓引导的鸡生蛋**：`push --mirror` 的工作流要靠 `scripts/ci/*.sh`，但新空仓第一次
+   只有引导 yml，没有脚本 → `No such file or directory`（exit 127）。解法：引导版 yml 的
+   mirror job **内嵌**同步逻辑（与脚本等价）；mirror 覆盖后真实历史里的文件才出现。
+   GitHub Import REST API 已废弃（404 指向网页 Importer），网页 Importer 在被墙网络下卡
+   "Couldn't check availability"——所以别走 Importer，走「Contents API 引导 + workflow 自举」。
+2. **GITHUB_TOKEN 不能写 workflow 文件**：job 级 `permissions` 没有 `workflows` 键（写了
+   解析报 `Unexpected value 'workflows'`）；`push --mirror` 每个含历史 `.github/workflows/*.yml`
+   的 ref 都被拒。必须用仓库 secret **`MIRROR_PAT`**（带 `repo` + `workflow` scope）。
+3. **GitHub uploads 拒绝非 ASCII 资产名**：百分号编码的中文被整段丢弃（`probe-中文.txt`
+   → `probe-.txt`）、raw UTF-8 报 400、不认 `Content-Disposition`。Release **标题/正文**可中文，
+   但**资产文件名**必须 ASCII；同步脚本 `ascii_asset_name()` 做映射并自愈残缺名。
+   Gitee 侧资产名保留中文，两站不同名但内容哈希一致。
+
 ---
 
 ### AtomGit 账号名与 API 版本

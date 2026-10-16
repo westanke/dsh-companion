@@ -16,13 +16,23 @@
 
 1. **AtomGit 建仓并全量推送**：`westanke163/dsh-companion`（AtomGit 账号名是 westanke163，
    与 Gitee/GitHub 的 westanke 不同），main + 19 个 tag 全量推送，与 Gitee 逐 ref 比对 SHA 一致。
-2. **删除 GitHub 旧仓并从 Gitee 导入重建**：GitHub Importer 保留**真实 commit hash**，
-   31 个提交欠账与历史分叉随删仓一笔勾销，不再需要线性化、不需要 `--force`。
+2. **删除 GitHub 旧仓并重建为镜像**：31 个提交欠账与历史分叉随删仓一笔勾销，不再需要线性化、
+   不需要 `--force`。重建实路：GitHub Import REST API 已废弃（404 指向网页 Importer），网页 Importer
+   在本机网络下卡 "Couldn't check availability"；最终走「建空仓 → Contents API 提交引导版
+   mirror-sync.yml（api.github.com 不受 github.com:443 阻断影响）→ workflow 在 runner 上
+   clone --mirror Gitee 并 push --mirror 覆盖」，普通 git 传输保留**真实 commit hash**，
+   重建后 GitHub main 与 Gitee 同为 `df6dcc5`、19 个 tag 齐全。
 3. **自动同步工作流** `.github/workflows/mirror-sync.yml`（每 3 小时 + 手动 `workflow_dispatch`）：
-   - `scripts/ci/mirror-push.sh`：runner 上 `git clone --mirror` Gitee（不通回退 AtomGit），
-     再 `git push --mirror` 到本仓——refs 全量对齐，含删除面；GITHUB_TOKEN 推送不递归触发 workflow；
+   - mirror job：引导版内嵌自举段（与 `scripts/ci/mirror-push.sh` 等价），runner 上
+     `git clone --mirror` Gitee（不通回退 AtomGit），再 `git push --mirror` 到本仓——refs 全量对齐，
+     含删除面。推送凭证必须用仓库 secret `MIRROR_PAT`（`repo` + `workflow` scope）：GITHUB_TOKEN
+     按设计不能增改 workflow 文件，实测每个含 `.github/workflows/android.yml` 的 ref 都被拒；
    - `scripts/ci/sync-releases.py`：Gitee Release 正文与三类资产（APK / SHA256SUMS.txt /
      RELEASE_NOTES，不搬 GitHub 会自动生成的 zip/tar.gz）幂等补到 GitHub，已存在即跳过。
+     GitHub 资产名 ASCII 化（`DSH伴侣-companion-vX.Y.Z.apk` → `DSH-companion-vX.Y.Z.apk`），
+     因 uploads 实测不支持非 ASCII 资产名；带残缺名（中文被吃）资产的自愈删除逻辑。
+   - 顺手修了 Android CI 的既有故障：`setup-android@v3` 默认装旧 `tools` 包在新 runner 上失败，
+     显式声明 `platform-tools platforms;android-36 build-tools;36.0.0`。
 4. **本地推送工具**：`scripts/push-all.sh`（默认只推 Gitee + AtomGit，`PUSH_TAGS=1` 推标签，
    `INCLUDE_GITHUB=1` 才试 GitHub，`FORCE=1` 才走 `--force-with-lease`）；
    `scripts/setup-remotes.sh` 幂等整理远端命名（origin=GitHub / gitee / atomgit，upstream 只读不动）。
@@ -35,6 +45,12 @@
 - `sync-releases.py` 用 `DRY_RUN=1` 本地实跑：18 个旧 Release 全部识别为已存在、资产已存在；
   v2.2.41 正确创建并识别三个资产（含中文名 `DSH伴侣-companion-v2.2.41.apk`，2,895,430 字节，
   下载计数与 Gitee 一致）；干跑曾暴露一个 DRY_RUN 占位 bug（创建分支 gh=None），已修并复验。
+- 重建后三端对账：GitHub `main` 与本地/Gitee/AtomGit 同为 `df6dcc5…`，19 个 tag 齐全；
+  19 个 Release 全部回填，v2.2.41 APK 从 GitHub 下载回读 2,895,430 字节、
+  SHA-256 `5317b009…f957` 与 Gitee/本地三处一致（资产名为 ASCII 的 `DSH-companion-v2.2.41.apk`）。
+- 踩坑三连均在本文件/PITFALLS 留档：①空仓引导提交没有脚本（job 内嵌自举）；
+  ②GITHUB_TOKEN 不能写 workflow 文件（改 secret `MIRROR_PAT`）；
+  ③GitHub uploads 拒绝非 ASCII 资产名（ASCII 化 + 自愈）。
 - App 侧零改动，无版本号变化。
 
 ## 2026-10-16 · v2.2.41（补）：生成合成内容显式标识（AI 标识条）
