@@ -153,6 +153,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownTypography
+import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import io.github.westanke.dshcompanion.HarnessState
 import io.github.westanke.dshcompanion.HarnessViewModel
 import io.github.westanke.dshcompanion.ApprovalUiState
@@ -478,6 +479,7 @@ internal fun AssistantBody(
                 content = body,
 
                 typography = compactMarkdownTypography(),
+                flavour = GFMFlavourDescriptor(),
 
                 // 代码块的高亮 / 语言标签 / 复制键都在这份组件里（同目录 ChatCodeBlock.kt）：
                 // 不传 components 时用的是渲染库自己的代码块，既没有高亮，复制也不给提示。
@@ -519,6 +521,7 @@ internal fun AssistantBody(
                     content = segment.text,
 
                     typography = compactMarkdownTypography(),
+                flavour = GFMFlavourDescriptor(),
 
                     components = chatMarkdownComponents,
 
@@ -541,6 +544,7 @@ internal fun AssistantBody(
                             content = "```json\n${segment.json}\n```",
 
                             typography = compactMarkdownTypography(),
+                flavour = GFMFlavourDescriptor(),
 
                             components = chatMarkdownComponents,
 

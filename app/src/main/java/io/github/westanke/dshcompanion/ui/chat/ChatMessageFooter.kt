@@ -57,9 +57,10 @@ internal fun ChatMessageFooter(
         Text(
             label,
             // `bottom` 不能省：消息流本身只有 5dp 间距，时间戳若无底距会与**下一条消息**贴在一起 ——
-            // 真机反馈「执行了命令下面显示的时间与下一条消息重叠」。加 6dp 后：
-            // 与正文 3dp、与下一条 11dp，层级就分得开了。
-            modifier = Modifier.fillMaxWidth().padding(top = 3.dp, bottom = 6.dp, start = 4.dp, end = 4.dp),
+            // 真机反馈「执行了命令下面显示的时间与下一条消息重叠」。
+            // 6dp 那一版用户第二次反馈「时间还是重叠」，加到 10dp：与正文 3dp、与下一条 15dp，
+            // 层级一眼分得开；同时把消息流本身从 5dp 放到 8dp（见 ChatDetail 的 LazyColumn）。
+            modifier = Modifier.fillMaxWidth().padding(top = 3.dp, bottom = 10.dp, start = 4.dp, end = 4.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelSmall,
             // 跟随气泡那一侧：用户消息在右、助手在左 —— 时间戳跑到对侧会看着像别人的。

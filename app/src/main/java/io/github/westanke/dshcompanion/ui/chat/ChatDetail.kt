@@ -466,7 +466,8 @@ internal fun ChatDetail(
             state = listState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 9.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
+            // 8dp：5dp 时正文 / 表格 / 时间戳三者挤在一起 —— 真机反馈「时间还是重叠」的观感来源之一。
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (state.history?.hasMore == true) {
                 item {

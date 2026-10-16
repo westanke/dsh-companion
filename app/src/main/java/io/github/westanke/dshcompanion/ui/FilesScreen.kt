@@ -87,6 +87,7 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownTypography
+import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import io.github.westanke.dshcompanion.HarnessState
 import io.github.westanke.dshcompanion.HarnessViewModel
 import io.github.westanke.dshcompanion.OpenDocument
@@ -557,6 +558,7 @@ private fun EditorPane(
                 Markdown(
                     content = document.text,
                     typography = fileMarkdownTypography(textScale),
+                    flavour = GFMFlavourDescriptor(),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }

@@ -158,6 +158,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownTypography
+import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import io.github.westanke.dshcompanion.HarnessState
 import io.github.westanke.dshcompanion.HarnessViewModel
 import io.github.westanke.dshcompanion.ApprovalUiState
@@ -585,6 +586,7 @@ internal fun ActivityRow(item: ChatDisplayItem) {
                     content = item.body,
 
                     typography = compactMarkdownTypography(),
+                flavour = GFMFlavourDescriptor(),
 
                     modifier = Modifier.padding(start = 27.dp, end = 6.dp, bottom = 8.dp),
 

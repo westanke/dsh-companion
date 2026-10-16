@@ -158,6 +158,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownTypography
+import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 import io.github.westanke.dshcompanion.HarnessState
 import io.github.westanke.dshcompanion.HarnessViewModel
 import io.github.westanke.dshcompanion.ApprovalUiState
@@ -506,6 +507,7 @@ internal fun SessionFileDetail(open: SessionFileOpen, onBack: () -> Unit, onDown
                         PreviewKind.MARKDOWN -> Markdown(
                             content = preview,
                             typography = compactMarkdownTypography(),
+                flavour = GFMFlavourDescriptor(),
                             modifier = Modifier.fillMaxWidth(),
                         )
 

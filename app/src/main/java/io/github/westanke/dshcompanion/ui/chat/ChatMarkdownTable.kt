@@ -1,15 +1,13 @@
 package io.github.westanke.dshcompanion.ui.chat
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -18,31 +16,25 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 /**
- * Markdown 表格的**纵向卡片**渲染。
+ * Markdown 表格渲染：**两列**（左字段名、右值），右列自然折行。
  *
- * ## 为什么要自己渲染（真机反馈）
+ * ## 为什么不是「一列一个字段的竖排卡片」
  *
- * 渲染库 `com.mikepenz.markdown` 自带的表格是**横向滚动 + 固定列宽**的（内部
- * `tableMaxWidth` / `widthIn` 那一套）：手机上表格一宽，右侧就被**截断**，看不到也划不顺。
- * 用户原话是「渲染的表格直接截断，应该自动换行」。
+ * 第一版就是竖排卡片（每个字段单独一张卡、字段名与值上下排）。真机反馈「**表格没可读性了**」：
+ * 竖排卡片把「阶段 / 做什么 / 目的」这种**多字段行**拆成三截，读一行要在三张卡之间跳，
+ * 而且每张卡自带背景与圆角，视觉噪音比原来的表格还大。
  *
- * 该库的 `MarkdownComponents` 是开放接口（有 `getTable()`），所以不必换库、也不必 fork ——
- * 覆盖 `table` 这一项即可。
+ * 对照 Whaleness（`dsh-study/实施-2026-10-17/截图/图2-whaleness.jpg`）后改成现在这样：
+ * **每行数据一行**，左边字段名（窄列、固定宽）、右边值（**宽列、自然折行**），
+ * 字段与字段之间用细分隔线隔开 —— 与网页端表格的阅读顺序一致，长值也不会被切掉。
  *
- * ## 为什么选「纵向卡片」而不是「加横向滚动」
+ * ## 表格为什么能出现（第一版的隐藏坑）
  *
- * 横滑在手机上对**多列表格**是不友好的读法：每次只能看到两三列，还得一边滑一边记列名。
- * 纵向卡片把每一行数据拆成「字段名 + 值」的键值对，**长值自然折行**，滑一下就能读完整行 ——
- * 这正是「自动换行」要的效果。
- *
- * 代价是行与行之间不再横向对齐；对排查型表格（配置项、参数说明、对比）来说，
- * 读得完比看得齐更重要。
- *
- * ## 解析为什么用文本而不是 AST
- *
- * `model.content` 里能直接拿到这段 Markdown 的原文，按 `|` 切分即可；
- * 走 AST 要处理 `org.intellij.markdown` 的节点类型，而这套解析规则**可以单测** ——
- * 分隔行、空单元格、列数不齐、转义竖线都是边界。
+ * 渲染库 `com.mikepenz.markdown` 默认用 **CommonMark** flavour —— 它**不解析 GFM 表格**，
+ * 所以 `MarkdownComponents.table` 这个回调**根本不会被调用**，表格会被当成普通段落渲染
+ * （表现就是「阶段 / 做什么 / 目的」竖排密排、没有表格结构）。
+ * 修法：给 `Markdown(...)` 传 `flavour = GFMFlavourDescriptor()`，
+ * 表格节点才会被解析出来，本组件才会接上。
  */
 internal data class MarkdownTable(
     val header: List<String>,
@@ -50,7 +42,7 @@ internal data class MarkdownTable(
 )
 
 /**
- * 从一段 Markdown 里解析表格；**不是表格就返回 null**（调用方回落到库的默认渲染）。
+ * 从一段 Markdown 里解析表格；**不是表格就返回 null**（调用方回落到默认渲染）。
  *
  * 只认「以 `|` 开头且以 `|` 结尾」的行，其余一律忽略 —— 这样不管传进来的是整段消息
  * 还是只有表格的片段，都能正确工作。
@@ -112,50 +104,55 @@ private fun splitTableRow(line: String): List<String> {
 private fun isSeparatorRow(cells: List<String>): Boolean =
     cells.isNotEmpty() && cells.all { it.matches(Regex("^:?-{1,}:?$")) }
 
+/** 字段名列的宽度上限：超过就省略（右侧的值才是重点）。 */
+private val LABEL_MAX_WIDTH = 108.dp
+
 /**
- * 纵向卡片表格：一行数据一张卡片，卡片内是「字段名 + 值」。
+ * 一行数据一行：左边字段名、右边值。
  *
- * 值这一侧**刻意不设 `maxLines`**：Compose 的 `Text` 默认就是自动折行的，
+ * 右侧的值**刻意不设 `maxLines`**：Compose 的 `Text` 默认就是自动折行的，
  * 而默认渲染之所以截断，正是因为库那边给了固定列宽 —— 这里从根上去掉那个约束。
  */
 @Composable
 internal fun ChatMarkdownTable(table: MarkdownTable, modifier: Modifier = Modifier) {
-    Column(
+    // 每行一张 Surface 而不是 Card：Whaleness 那边也是「一块浅底 + 细分隔线」，
+    // 不需要圆角浮起的效果（那是表单控件的感觉，不是阅读材料）。
+    Surface(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(5.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = MaterialTheme.shapes.small,
     ) {
-        table.rows.forEach { row ->
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                    row.forEachIndexed { index, cell ->
-                        if (index > 0) {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 5.dp),
-                                color = MaterialTheme.colorScheme.outlineVariant,
-                            )
-                        }
-                        // 字段名取表头；行比表头短时（理论上 normalizeColumns 已补齐）用序号兜底。
-                        val name = table.header.getOrNull(index) ?: "#${index + 1}"
-                        Row(verticalAlignment = Alignment.Top) {
-                            Text(
-                                name.ifBlank { "#${index + 1}" },
-                                modifier = Modifier.width(96.dp).padding(end = 8.dp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                overflow = TextOverflow.Ellipsis,
-                                maxLines = 2,
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                            Text(
-                                cell.ifBlank { "—" },
-                                modifier = Modifier.weight(1f),
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+            table.rows.forEachIndexed { rowIndex, row ->
+                if (rowIndex > 0) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 6.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                    )
+                }
+                row.forEachIndexed { columnIndex, cell ->
+                    if (columnIndex > 0) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 6.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.Top) {
+                        Text(
+                            table.header.getOrNull(columnIndex) ?: "#${columnIndex + 1}",
+                            modifier = Modifier
+                                .widthIn(max = LABEL_MAX_WIDTH)
+                                .padding(end = 10.dp, top = 2.dp, bottom = 6.dp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                        Text(
+                            cell.ifBlank { "—" },
+                            modifier = Modifier.weight(1f).padding(top = 2.dp, bottom = 6.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
                     }
                 }
             }
