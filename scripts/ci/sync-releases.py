@@ -106,10 +106,19 @@ def ascii_asset_name(name):
 
 def broken_variants(target):
     """同一文件被错误上传后在 GitHub 留下的残缺名（历史坑自愈用）。
-    如 DSH.-companion-v2.2.41.apk：中文被吃后可能残留孤立分隔符。"""
+
+    实测规律：GitHub uploads 吃掉非 ASCII 字符后，会把原连字符渲染成「点-连字符」
+    孤立序列。正确名 DSH-companion-v2.2.41.apk 的残缺形态为
+    DSH.-companion-v2.2.41.apk（首段的 '-' 变 '.-'）。返回候选残缺名集合。"""
     import re
     base, dot, ext = target.rpartition(".")
-    return {base.replace("-", ".-") + dot + ext} if dot else set()
+    if not dot:
+        return set()
+    variants = set()
+    # 每个 '-' 位置插入一个前导点，覆盖服务端可能的任意落点
+    for m in re.finditer(r"-", base):
+        variants.add(base[:m.start()] + ".-" + base[m.start() + 1:] + "." + ext)
+    return variants
 
 
 def main():
