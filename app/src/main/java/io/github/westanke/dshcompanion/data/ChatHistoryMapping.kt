@@ -88,6 +88,7 @@ private fun turnEndItem(event: SessionEvent): ChatDisplayItem? {
         id = "${event.seq}-turn-failure",
         seq = event.seq,
         kind = ChatItemKind.FAILURE,
+        time = event.time,
         failure = failure,
     )
 }
@@ -118,6 +119,7 @@ private fun userItems(event: SessionEvent): List<ChatDisplayItem> {
             id = "${event.seq}-user",
             seq = event.seq,
             kind = ChatItemKind.USER,
+            time = event.time,
             body = body,
             attachments = attachments,
         ))
@@ -126,6 +128,7 @@ private fun userItems(event: SessionEvent): List<ChatDisplayItem> {
         id = "${event.seq}-context",
         seq = event.seq,
         kind = ChatItemKind.CONTEXT,
+        time = event.time,
         title = contextLabel(source),
         body = body,
         attachments = attachments,
@@ -136,7 +139,7 @@ private fun assistantItems(event: SessionEvent): List<ChatDisplayItem> {
     val message = outer.objectValue("message") ?: outer
     val content = message["content"]
     val blocks = content as? JsonArray ?: return contentText(content).takeIf(String::isNotBlank)?.let {
-        listOf(ChatDisplayItem("${event.seq}-assistant", event.seq, ChatItemKind.ASSISTANT, body = it))
+        listOf(ChatDisplayItem("${event.seq}-assistant", event.seq, ChatItemKind.ASSISTANT, time = event.time, body = it))
     }.orEmpty()
     val result = mutableListOf<ChatDisplayItem>()
     val prose = mutableListOf<String>()
@@ -146,6 +149,7 @@ private fun assistantItems(event: SessionEvent): List<ChatDisplayItem> {
             id = "${event.seq}-assistant-${result.size}",
             seq = event.seq,
             kind = ChatItemKind.ASSISTANT,
+            time = event.time,
             body = prose.joinToString("\n\n"),
         )
         prose.clear()
@@ -161,6 +165,7 @@ private fun assistantItems(event: SessionEvent): List<ChatDisplayItem> {
                         id = "${event.seq}-reasoning-${result.size}",
                         seq = event.seq,
                         kind = ChatItemKind.REASONING,
+                        time = event.time,
                         body = reasoning,
                     )
                 }

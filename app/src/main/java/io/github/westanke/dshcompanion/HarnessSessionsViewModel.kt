@@ -11,6 +11,9 @@ import io.github.westanke.dshcompanion.data.CommandDescriptor
 import io.github.westanke.dshcompanion.data.CustomProviderCreate
 import io.github.westanke.dshcompanion.data.localizedErrorRes
 import io.github.westanke.dshcompanion.data.DeviceView
+import io.github.westanke.dshcompanion.data.displayItems
+import io.github.westanke.dshcompanion.data.retryableUserText
+import io.github.westanke.dshcompanion.data.supportsArchiveListing
 import io.github.westanke.dshcompanion.data.DirectoryPage
 import io.github.westanke.dshcompanion.data.DshApiException
 import io.github.westanke.dshcompanion.data.DshClient
@@ -114,6 +117,9 @@ internal fun HarnessViewModel.refreshDashboard() = withClient { api ->
 }
 
 internal fun HarnessViewModel.selectSession(id: String?) {
+    // 换会话 = 换上下文：在飞的历史/模型/命令请求的结果从此作废，
+    // 否则它们回来会把**新**会话的状态覆盖成旧会话的（界面显示 B 标题、内容是 A）。
+    requestGate.invalidate()
     update {
         copy(
             selectedSessionId = id,
@@ -126,6 +132,10 @@ internal fun HarnessViewModel.selectSession(id: String?) {
             questions = emptyList(),
             answeringCallId = null,
             answeredCallIds = emptySet(),
+            // 序号序列是**每个会话各自**的：不清掉，A 的最后一个序号会拿去比 B 的第一条事件，
+            // 断档检测必然误判（还会连带触发一次没必要的全量重取）。
+            lastEventSeq = null,
+            baselineCursor = null,
             // `@` 补全的文件列表属于**上一个会话的工作目录**，换会话必须清掉：
             // 不清的话，切过去的头几百毫秒里 `@` 会列出上个会话的文件，
             // 用户手快选中就发出一条指向错误路径的消息。
@@ -369,8 +379,15 @@ internal fun HarnessViewModel.renameSession(sessionId: String, title: String) = 
     update { copy(sessions = api.sessions()) }
 }
 
-internal fun HarnessViewModel.forkSession(sessionId: String) = withClient { api ->
-    val forkedId = api.forkSession(sessionId)
+/**
+ * 分叉会话。
+ *
+ * `atSeq` 省略 = 由内核在「最近一个完成的边界」分叉；给定 `atSeq` = 在**该事件序号处**分叉
+ * （语义取自 OpenAPI：`Forks the session at the latest completed boundary, or at the supplied
+ * event sequence`）。
+ */
+internal fun HarnessViewModel.forkSession(sessionId: String, atSeq: Int? = null) = withClient { api ->
+    val forkedId = api.forkSession(sessionId, atSeq)
     update {
         copy(
             sessions = api.sessions(),
@@ -381,6 +398,21 @@ internal fun HarnessViewModel.forkSession(sessionId: String) = withClient { api 
             approvalState = ApprovalUiState.None,
             liveChat = null,
         )
+    }
+}
+
+/**
+ * 拉取**已归档**会话（归档视图的入口动作）。
+ *
+ * 两道闸：① 能力位不支持就直接返回（老 bridge 会忽略 `archived` 参数并返回未归档列表，
+ * 那样展示出来的「没有归档会话」是假结论）；② 每次进视图都重拉，不做本地缓存 ——
+ * 归档状态可能在电脑端被改过，缓存会让手机端长期显示过期结果。
+ */
+internal fun HarnessViewModel.loadArchivedSessions() {
+    if (!supportsArchiveListing(mutableState.value.bridgeCapabilities)) return
+    withClient { api ->
+        val archived = api.sessions(archived = true)
+        update { copy(archivedSessions = archived) }
     }
 }
 
@@ -414,6 +446,21 @@ internal fun HarnessViewModel.archiveSession(sessionId: String) = withClient { a
  * 完全可能抢在它前面读到同一批附件，于是同一条消息（连同同一张图）发两遍。
  * 发送失败时把附件还回去，别让一次网络抖动吃掉用户挑好的图。
  */
+/**
+ * 重试上一轮：把**最后一条用户消息**原样再发一次。
+ *
+ * 为什么不是「这条失败行对应的那条消息」：`ChatTurnFailure` 里没有 turn/seq
+ * （内核只给失败摘要），拿不到精确归属；而失败行永远紧跟在触发它的用户消息之后，
+ * 所以「最后一条用户消息」就是它。判据与排除条件见 `data/ChatRetry.kt`。
+ *
+ * 找不到（历史上没有带正文的用户消息）时**什么都不做**：这是用户主动点的动作，
+ * 报一个他看不懂的错反而更糟。
+ */
+internal fun HarnessViewModel.retryLastUserMessage() {
+    val text = retryableUserText(mutableState.value.history?.displayItems().orEmpty()) ?: return
+    sendMessage(text, steer = false)
+}
+
 internal fun HarnessViewModel.sendMessage(text: String, steer: Boolean) {
     val api = client ?: return
     val id = mutableState.value.selectedSessionId ?: return

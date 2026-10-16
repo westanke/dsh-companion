@@ -2,6 +2,13 @@ package io.github.westanke.dshcompanion
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.westanke.dshcompanion.data.baselineBehind
+import io.github.westanke.dshcompanion.data.seqVerdict
+import io.github.westanke.dshcompanion.data.EventDebouncer
+import io.github.westanke.dshcompanion.data.SeqVerdict
+import io.github.westanke.dshcompanion.data.RequestGate
+import io.github.westanke.dshcompanion.data.InterfaceStyle
+import io.github.westanke.dshcompanion.data.parseBridgeCapabilities
 import io.github.westanke.dshcompanion.data.QUESTION_STATE_CONTINUED
 import io.github.westanke.dshcompanion.data.ChatContentParts
 import io.github.westanke.dshcompanion.data.ChatHistory
@@ -203,6 +210,11 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         genUiDebug = preferences.genUiDebug,
         useWebChat = preferences.useWebChat,
         showContext = preferences.showContext,
+        // 外观三项同样必须在这里盖 —— 漏了它们，用户切一次连接
+        // 就会看到主题被打回「跟随系统」、字号被打回 1.0（与上面那段注释同一个坑）。
+        interfaceStyle = preferences.interfaceStyle,
+        fontScale = preferences.fontScale,
+        fontFollowsSystem = preferences.fontFollowsSystem,
     )
 
     /**
@@ -213,6 +225,23 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
      * 后续自动切换都需要的。
      */
     internal var active: ActiveConnection? = null
+    /**
+     * 请求代际闸门：换会话 / 换主机 / 断开时作废在飞请求的结果。
+     * 它挡的是「旧会话的响应回来覆盖新会话状态」这类**静默错乱**（详见 `data/RequestGate.kt`）。
+     */
+    internal val requestGate = RequestGate()
+    /**
+     * 目录刷新的**去抖**闸门。
+     *
+     * 旧实现是「每来一帧 `file.*` 就发一次 `entries()` 请求」。事件是逐个到的，
+     * 而内核批量改写文件（构建产物、格式化多个文件、同步一批文件）时会连着发很多帧 ——
+     * 于是一个本该「事件驱动的界面」变成了**事件驱动的轮询风暴**：手机连发几十个目录请求，
+     * 服务端逐个应答，电量与流量都白烧。
+     *
+     * 窗口取 500ms（比 history 那一路的 400ms 略长）：目录变化没那么紧急，
+     * 而用户正在浏览时多看半秒旧列表完全无感。语义与取舍见 `data/EventDebouncer.kt`。
+     */
+    internal val directoryDebouncer = EventDebouncer(viewModelScope, 500L) { loadDirectory() }
     internal val client: DshClient? get() = active?.client
 
     /**
@@ -306,6 +335,45 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
     }
 
     /**
+     * 改界面明暗风格；立刻生效（主题在 App 顶层读状态，改完下一帧就是新配色）。
+     *
+     * 与「语言」不同：语言要重建 Activity 才彻底生效（系统 Locale 是进程级配置），
+     * 所以那条留在设置页用 AppCompatDelegate 走；明暗与字号都是纯 Compose 状态。
+     */
+    fun setInterfaceStyle(style: InterfaceStyle) {
+        preferences.interfaceStyle = style
+        update { copy(interfaceStyle = style) }
+    }
+
+    /** 改应用内字号倍数；立刻生效，取值由偏好层收敛到 0.8–1.5。 */
+    fun setFontScale(scale: Float) {
+        preferences.fontScale = scale
+        update { copy(fontScale = preferences.fontScale) }
+    }
+
+    /**
+     * 字号是否完全跟随系统。
+     *
+     * 打开时**不清空**用户已调过的倍数：来回切换应当能回到原来那档，
+     * 而不是每次都要重新拖一遍滑块（滑块位置读的就是那个被保留的值）。
+     */
+    fun setFontFollowsSystem(enabled: Boolean) {
+        preferences.fontFollowsSystem = enabled
+        update { copy(fontFollowsSystem = enabled) }
+    }
+
+    /**
+     * 记下「用户已经主动选过界面语言」。
+     *
+     * 真正的语言切换仍由 UI 层的 `setAppLanguage` 走 `AppCompatDelegate`
+     * （它要重建 Activity 才彻底生效，不是 Compose 状态）。这里只落一个标志，
+     * 让下次冷启动**不要再**替用户做决定 —— 否则「跟随系统」会被打回中文。
+     */
+    fun markLanguageChosen() {
+        preferences.languageChosen = true
+    }
+
+    /**
      * 熄屏暂停事件流；亮屏恢复（用户定下的策略：**熄屏=断连，亮屏=实时**）。
      *
      * 为什么不是断开连接：`disconnect()` 会把 `active` 一起清掉，亮屏后得重新
@@ -369,9 +437,61 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
                         //  history —— 那是 v2.2.29 修掉的耗电主因，详见该函数 KDoc。）
                         scheduleChatRefresh()
                     }
+                } else if (event.type == "connection.ready") {
+                    // 服务端连上就自报版本与能力位。读到就存：缺关键能力时界面要**明说**，
+                    // 因为「卡片不弹」与「本来就没有待审批」在屏幕上完全一样（真踩过，见 PITFALLS）。
+                    parseBridgeCapabilities(event.data)?.let { reported ->
+                        update {
+                            copy(
+                                bridgeVersion = reported.bridgeVersion ?: bridgeVersion,
+                                bridgeCapabilities = reported.capabilities,
+                            )
+                        }
+                    }
                 } else if (event.type.startsWith("chat.")) {
                     val sessionId = event.dataString("sessionId")
+                    // ——— 断档检测（2026-10-17）———
+                    //
+                    // WS 是「订阅之后才收得到」，REST 历史是「发请求那一刻的快照」——
+                    // 两者的时间差里发生的事件**谁都管不着**，除非客户端能自己发现「我漏了一段」。
+                    // 判据、以及「为什么重复和倒退不算断档」，见 `data/ChatSeqMonitor.kt`。
+                    //
+                    // 只对**当前会话**计数：别的会话有自己的序号序列，混在一起必然误判。
+                    val incomingSeq = event.dataInt("seq")
+                    if (incomingSeq != null && sessionId == mutableState.value.selectedSessionId) {
+                        if (seqVerdict(mutableState.value.lastEventSeq, incomingSeq) == SeqVerdict.Resync) {
+                            // 重取历史。`scheduleChatRefresh` 自带 400ms 去抖 + 单飞，
+                            // 连续跳号也只会合并成一次。
+                            chatSessionRefreshPending = true
+                            scheduleChatRefresh()
+                        }
+                        update { copy(lastEventSeq = incomingSeq) }
+                    }
                     when (event.type) {
+                        // 订阅基线：服务端告诉我们「这条订阅从哪个持久 seq 开始接增量」。
+                        // 本地历史落后于它 ⇒「拉历史」与「订阅」之间的窗口**真漏了**事件，重取一次。
+                        "chat.session.snapshot" -> {
+                            val cursor = event.dataInt("cursor")
+                            if (cursor != null && sessionId != null) {
+                                update { copy(baselineCursor = cursor) }
+                                if (sessionId == mutableState.value.selectedSessionId) {
+                                    val localMax = mutableState.value.history?.events?.maxOfOrNull { it.event.seq }
+                                    if (baselineBehind(localMax, cursor)) {
+                                        chatSessionRefreshPending = true
+                                        scheduleChatRefresh()
+                                    }
+                                }
+                            }
+                        }
+                        // 交付物（内核 `present` 工具）：卡片数据在**历史**里，收到这条就刷新一次，
+                        // 新交付物立刻出现在会话文件卡片里。此前这个事件名客户端不认识 ——
+                        // 数据一直在历史里原样透传，只是要等下一次消息完成才顺带刷到。
+                        "chat.deliverables.presented" -> {
+                            if (sessionId == mutableState.value.selectedSessionId) {
+                                chatSessionRefreshPending = true
+                                scheduleChatRefresh()
+                            }
+                        }
                         "chat.message.committed" -> {
                             if (sessionId != null && sessionId == mutableState.value.selectedSessionId) {
                                 if (event.dataString("role") == "assistant") {
@@ -487,7 +607,9 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
                         }
                     }
                 }
-                if (event.type.startsWith("file.")) loadDirectory()
+                // 去抖，不是直接 loadDirectory()：一次批量改写会推来几十帧，
+                // 逐帧请求就是自己造的轮询风暴（见 directoryDebouncer 的说明）。
+                if (event.type.startsWith("file.")) directoryDebouncer.trigger()
             },
             connection = { connected ->
                 update { copy(eventsConnected = connected) }
@@ -602,11 +724,23 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         launchOperation { block(api) }
     }
 
+    /**
+     * 跑一个异步操作，回来时先过**代际检查**。
+     *
+     * 领号必须在这一行（调用点），**不能**挪进协程里：协程启动本身有延迟，
+     * 若在延迟之后才领号，「发出请求 → 用户立刻切换」这段窗口里领到的会是**新**代际，
+     * 结果就被当成有效写回去了 —— 而它恰恰是我们要挡的那种情况。
+     *
+     * 换代之后 `busy = false` 也一并跳过：那个标志属于**新**请求，
+     * 旧请求清它会让转圈提前消失（用户以为加载完了，其实新请求还在跑）。
+     */
     internal fun launchOperation(block: suspend () -> Unit) {
+        val token = requestGate.current
         viewModelScope.launch {
             update { copy(busy = true, error = null) }
-            runCatching { withContext(Dispatchers.IO) { block() } }
-                .onFailure { update { copy(error = messageOf(it)) } }
+            val result = runCatching { withContext(Dispatchers.IO) { block() } }
+            if (!requestGate.isCurrent(token)) return@launch
+            result.onFailure { update { copy(error = messageOf(it)) } }
             update { copy(busy = false) }
         }
     }
@@ -617,6 +751,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
 
     override fun onCleared() {
         chatRefreshJob?.cancel()
+        directoryDebouncer.cancel()
         eventSubscription?.close()
         // 协调层自带后台 scope 来跑阻塞式健康检查（协程取消打不断 OkHttp 的阻塞调用），
         // 不显式关闭的话，探活期间挂死的调用会一直占着 IO 线程直到 OkHttp 自身超时。

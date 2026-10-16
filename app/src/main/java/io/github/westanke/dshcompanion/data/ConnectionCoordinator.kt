@@ -61,10 +61,38 @@ private fun describeThrowable(error: Throwable): String {
  *
  * 本类不 import 任何 `android.*`，可直接在 JVM 单测里跑。
  */
+/**
+ * 一次探活的测量结果（见 [ConnectionCoordinator] 的 `measureOverride`）。
+ *
+ * 刻意是 **public** 而不是 internal：[ConnectionCoordinator] 是 public 类，
+ * 构造参数的类型不能比它更窄（Kotlin 会直接拒绝「public 函数暴露 internal 类型参数」）。
+ */
+sealed interface ProbeOutcome {
+    data class Success(val millis: Long) : ProbeOutcome
+    data class Failure(val detail: String) : ProbeOutcome
+}
+
 class ConnectionCoordinator(
     private val clientFactory: (baseUrl: String, token: String?) -> DshClient = { url, token -> DshClient(url, token) },
     private val probeTimeoutMs: Long = 1500L,
+    /**
+     * **测量方式的接缝**（B 批，2026-10-17）。
+     *
+     * 默认 `null` = 真发一次 `health()` 并量墙钟耗时。测试可以注入受控实现，
+     * 于是「哪个地址更快」由测试说了算，而不再取决于跑测试时机器有多忙。
+     *
+     * 这条接缝的收益是具体的：`TECH-DEBT.md` 的 **DEBT-007** 记着那条容差断言
+     * （局域网 300ms vs 虚拟网 220ms，容差 1.5×）在带 Gradle 编译负载时**偶发翻车、单跑即绿** ——
+     * 因为 `System.nanoTime()` 量到的是真实耗时，负载一高就飘过边界。
+     *
+     * **接缝的边界**：它只替换「怎么测这一次」。超时（[probeTimeoutMs]）、
+     * 关闭（[close]/[closedSignal]）与取消语义**仍然由本类负责** —— 那些是「保证不挂死」的部分，
+     * 不该被测试替身绕过（绕过了就等于把最有价值的保护测没了）。
+     */
+    measureOverride: (suspend (DshClient) -> ProbeOutcome)? = null,
 ) : Closeable {
+    /** 实际的测量实现：默认墙钟探活，测试可注入受控实现。 */
+    private val measure: suspend (DshClient) -> ProbeOutcome = measureOverride ?: ::probeWithWallClock
     /**
      * 专门用来跑探活那一次真正的 HTTP 调用的后台 scope（[Dispatchers.IO]，`SupervisorJob` 保证
      * 单个地址失败不影响其他地址）。
@@ -176,6 +204,20 @@ class ConnectionCoordinator(
             return EndpointProbe.failure(endpoint.id, describeThrowable(error))
         }
 
+        return when (val outcome = measure(client)) {
+            is ProbeOutcome.Success -> EndpointProbe.success(endpoint.id, outcome.millis)
+            is ProbeOutcome.Failure -> EndpointProbe.failure(endpoint.id, outcome.detail)
+        }
+    }
+
+    /**
+     * 默认测量：真发一次 `health()`，量墙钟耗时。
+     *
+     * 这段是**逐字搬过来的**原实现（连同它踩过的两个坑）：超时只设 `Deferred.await()` 的 deadline
+     * （协程取消打不断阻塞的 OkHttp 调用），并且等待时同时监听 [closedSignal]。
+     * 它现在只是从 [probe] 里挪出来、包成 [ProbeOutcome]，语义一字未改。
+     */
+    private suspend fun probeWithWallClock(client: DshClient): ProbeOutcome {
         val startedAt = System.nanoTime()
         val call = probeScope.async { client.health() }
         val health = try {
@@ -185,13 +227,13 @@ class ConnectionCoordinator(
             throw cancellation
         } catch (error: Throwable) {
             call.cancel()
-            return EndpointProbe.failure(endpoint.id, describeThrowable(error))
+            return ProbeOutcome.Failure(describeThrowable(error))
         }
         if (health == null) {
             call.cancel()
-            return EndpointProbe.failure(endpoint.id, "timeout after ${probeTimeoutMs}ms")
+            return ProbeOutcome.Failure("timeout after ${probeTimeoutMs}ms")
         }
-        return EndpointProbe.success(endpoint.id, (System.nanoTime() - startedAt) / 1_000_000)
+        return ProbeOutcome.Success((System.nanoTime() - startedAt) / 1_000_000)
     }
 
     /**

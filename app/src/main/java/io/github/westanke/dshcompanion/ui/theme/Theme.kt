@@ -130,18 +130,32 @@ private val AppTypography = Typography(
     labelSmall = Baseline.labelSmall.copy(letterSpacing = 0.sp),
 )
 
+/**
+ * 应用主题。
+ *
+ * - [darkTheme] 由调用方决定，而不是在这里直接读 `isSystemInDarkTheme()`：
+ *   设置里新增了「跟随系统 / 浅色 / 深色」三档，配色必须由那条偏好驱动。
+ *   参数给了**默认值**，于是老的调用点（测试、预览）不传也仍然可用。
+ * - [fontScale] 是应用内字号倍数（1f = 空操作），见 [AppFontScale]。
+ */
 @Composable
-fun DeepSeekHarnessTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) DarkColors else LightColors,
-        typography = AppTypography,
-        shapes = Shapes(
-            extraSmall = RoundedCornerShape(4.dp),
-            small = RoundedCornerShape(6.dp),
-            medium = RoundedCornerShape(8.dp),
-            large = RoundedCornerShape(8.dp),
-            extraLarge = RoundedCornerShape(8.dp),
-        ),
-        content = content,
-    )
+fun DeepSeekHarnessTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    fontScale: Float = 1f,
+    content: @Composable () -> Unit,
+) {
+    AppFontScale(fontScale) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) DarkColors else LightColors,
+            typography = AppTypography,
+            shapes = Shapes(
+                extraSmall = RoundedCornerShape(4.dp),
+                small = RoundedCornerShape(6.dp),
+                medium = RoundedCornerShape(8.dp),
+                large = RoundedCornerShape(8.dp),
+                extraLarge = RoundedCornerShape(8.dp),
+            ),
+            content = content,
+        )
+    }
 }

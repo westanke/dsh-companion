@@ -136,8 +136,9 @@ class ConnectionCoordinatorTest {
     @Test
     fun connectPrefersLanWithinLatencyToleranceEvenWhenSlightlySlower() = runBlocking {
         // 局域网 300ms vs 虚拟网 220ms：300 <= 220 * 1.5 = 330，局域网归入同档后优先。
-        val lan = address(health(delayMs = 300))
-        val virtualNet = address(health(delayMs = 220))
+        // 延迟**由注入的测量给出**，不再真等 300/220ms —— 见 fixedLatency 的说明（DEBT-007）。
+        val lan = address(health())
+        val virtualNet = address(health())
         val host = host(
             listOf(
                 endpoint("lan", lan, EndpointKind.LAN),
@@ -145,7 +146,11 @@ class ConnectionCoordinatorTest {
             ),
         )
 
-        val connection = coordinator(timeoutMs = 2_000, readTimeoutMs = 3_000).connect(host).getOrThrow()
+        val connection = coordinator(
+            timeoutMs = 2_000,
+            readTimeoutMs = 3_000,
+            measure = fixedLatency(mapOf(lan to 300L, virtualNet to 220L)),
+        ).connect(host).getOrThrow()
 
         assertEquals("局域网在容差内应胜出（同网段更稳、不耗虚拟网流量）", "lan", connection.endpoint.id)
         // 选路必须复用契约里的 rank，不允许另写一套排序。
@@ -158,8 +163,8 @@ class ConnectionCoordinatorTest {
     @Test
     fun connectFallsBackToTheFasterAddressWhenTheLanIsTooSlow() = runBlocking {
         // 局域网 500ms vs 虚拟网 200ms：500 > 200 * 1.5 = 300，容差不再覆盖，快的胜出。
-        val lan = address(health(delayMs = 500))
-        val virtualNet = address(health(delayMs = 200))
+        val lan = address(health())
+        val virtualNet = address(health())
         val host = host(
             listOf(
                 endpoint("lan", lan, EndpointKind.LAN),
@@ -167,7 +172,11 @@ class ConnectionCoordinatorTest {
             ),
         )
 
-        val connection = coordinator(timeoutMs = 2_000, readTimeoutMs = 3_000).connect(host).getOrThrow()
+        val connection = coordinator(
+            timeoutMs = 2_000,
+            readTimeoutMs = 3_000,
+            measure = fixedLatency(mapOf(lan to 500L, virtualNet to 200L)),
+        ).connect(host).getOrThrow()
 
         assertEquals("lan", "lan") // 保持地址 id 语义清晰
         assertEquals("vnet", connection.endpoint.id)
@@ -175,8 +184,8 @@ class ConnectionCoordinatorTest {
 
     @Test
     fun connectPicksTheLowestLatencyAddressWhenNoLanQualifies() = runBlocking {
-        val slow = address(health(delayMs = 300))
-        val fast = address(health(delayMs = 120))
+        val slow = address(health())
+        val fast = address(health())
         val host = host(
             listOf(
                 endpoint("slow", slow, EndpointKind.WAN),
@@ -184,7 +193,11 @@ class ConnectionCoordinatorTest {
             ),
         )
 
-        val connection = coordinator(timeoutMs = 2_000, readTimeoutMs = 3_000).connect(host).getOrThrow()
+        val connection = coordinator(
+            timeoutMs = 2_000,
+            readTimeoutMs = 3_000,
+            measure = fixedLatency(mapOf(slow to 300L, fast to 120L)),
+        ).connect(host).getOrThrow()
 
         assertEquals("fast", connection.endpoint.id)
     }
@@ -364,13 +377,34 @@ class ConnectionCoordinatorTest {
 
     // ---------------------------------------------------------------- 夹具
 
-    private fun coordinator(timeoutMs: Long = 1_500, readTimeoutMs: Long = 2_000) = ConnectionCoordinator(
+    private fun coordinator(
+        timeoutMs: Long = 1_500,
+        readTimeoutMs: Long = 2_000,
+        measure: (suspend (DshClient) -> ProbeOutcome)? = null,
+    ) = ConnectionCoordinator(
         clientFactory = { url, token ->
             factoryCalls += url to token
             factoryOverrides[url]?.invoke() ?: DshClient(url, token, newHttpClient(readTimeoutMs))
         },
         probeTimeoutMs = timeoutMs,
+        measureOverride = measure,
     )
+
+    /**
+     * 受控延迟：按地址前缀给固定耗时。
+     *
+     * 为什么需要它：`MockResponse.setBodyDelay` 造的是**真实等待**，而选路比较的是
+     * `System.nanoTime()` 量到的**真实耗时** —— 机器上有 Gradle 编译负载时，两次探活的实测值
+     * 会一起飘，容差边界（局域网 300ms vs 虚拟网 220ms × 1.5 = 330ms）就会翻。
+     * `TECH-DEBT.md` 的 **DEBT-007** 记的就是这条：偶发红、单跑即绿。
+     *
+     * 注入之后，「谁更快」由测试说了算，断言只考察**选路规则本身**（它才是这个用例要测的东西）。
+     */
+    private fun fixedLatency(byUrl: Map<String, Long>): suspend (DshClient) -> ProbeOutcome = { client ->
+        val millis = byUrl.entries.firstOrNull { client.endpoint.startsWith(it.key) }?.value
+        if (millis == null) ProbeOutcome.Failure("no latency configured for ${client.endpoint}")
+        else ProbeOutcome.Success(millis)
+    }
 
     private fun newHttpClient(readTimeoutMs: Long): OkHttpClient =
         OkHttpClient.Builder()

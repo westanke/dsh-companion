@@ -521,6 +521,42 @@ per-release comments in `app/build.gradle.kts`), but that is "fix what someone h
 on-device pass. The interface layer (pairing, connection, sessions, files, plugin inventory, session
 deliverables) was exercised end to end against a local DSH WebUI during development.
 
+### 15. Hardening pass: session-page comfort, file cards and reliability (**unreleased**)
+
+> This batch is **not released yet** — the changes live in the working tree. What follows is what a user
+> can actually notice.
+
+- **Messages read better**: code blocks gain language labels, a copy button and highlighting;
+  thinking / tool / context rows collapse into one group with a **duration summary**; each message
+  carries a timestamp (clock time today, date for older ones). Long-press text selection is untouched —
+  the new entry points deliberately avoid the long-press gesture.
+- **Images open and save to your gallery**; files in the session file panel can be downloaded.
+- **Failures can be retried**: a "Retry" button appears next to the error row (not shown for failures
+  where retrying is pointless, such as a signed-out account).
+- **Fork from a specific message**: each user message offers "Fork here", which creates and switches to
+  a new session behind a confirmation dialog.
+- **Archived sessions are visible**: the panel can switch to "Archived". **Restoring is not supported** —
+  do it from the desktop WebUI: whether the kernel exposes an un-archive call cannot be confirmed from
+  the client side, so we do not ship a button that might not work.
+- **File cards are live**: a file the agent explicitly presents shows up in the session file panel
+  **immediately**, instead of waiting for the next message.
+- **Session stats and trajectory** (two new entries in the top-bar `⋯` menu): "Session stats" reports
+  turns / assistant messages / tool calls / total events / up-to; "Trajectory" lays the history out as a
+  per-turn timeline where **tapping a node reveals the raw event JSON** — for answering "why was this
+  step slow, what did it actually call".
+  **Token usage and context pressure are not shown**: the kernel exposes no usage data, and we will
+  **not pass off a character-count estimate as one** (the error can be several-fold and would mislead
+  your sense of the remaining budget).
+- **Appearance is adjustable**: the settings page offers an interface style and a separate font scale
+  (which can also follow the system).
+- **Two changes you feel but do not see**: switching sessions no longer "flashes and jumps back"
+  (a stale response can no longer overwrite the new session); after a reconnect, approval and question
+  cards still arrive, and the server now guarantees that a fresh connection learns about everything
+  still pending.
+- This batch **needs the matching server plugin** (the sibling `dsh-remote-bridge` repo carries the
+  corresponding changes: capability bits, the subscription baseline, gap detection, interaction replay,
+  file-card events). Versions are per-repo — see each `CHANGELOG-DEV.md`.
+
 ## Build from source
 
 Use JDK 17 and Android SDK 36:
@@ -545,7 +581,7 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 - Version: `v2.2.41` (`versionCode` 10066)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
-- Unit tests: 27 test classes / 290 cases at the last run (0 failures). The counts move with the code, so
+- Unit tests: 44 test classes / 410 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
 - Current APK: `DSH伴侣-companion-v2.2.41.apk`, 2,895,430 bytes,

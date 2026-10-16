@@ -84,6 +84,18 @@ data class ChatDisplayItem(
     val id: String,
     val seq: Int,
     val kind: ChatItemKind,
+    /**
+     * 这条事件在主机侧的发生时间（毫秒；来自 `SessionEvent.time`）。
+     *
+     * 为什么现在才补：会话页要把「上下文 / 思考 / 工具调用」折成一个过程组，
+     * 而组标题最有价值的那一段是「耗时 X 分 Y 秒」—— 那需要组内首尾两项的时间。
+     * 此前模型里根本没有时间字段，于是摘要只能显示计数（对比对象 Whaleness
+     * 的组标题两者都有）。
+     *
+     * **流式项为 null**：`LiveChatState.displayItems()` 造出来的临时块没有时间戳，
+     * 这是诚实的缺失而不是 0 —— 0 会让「耗时」算出一个荒谬的值。
+     */
+    val time: Long? = null,
     val title: String? = null,
     val body: String = "",
     val streaming: Boolean = false,

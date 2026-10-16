@@ -197,6 +197,8 @@ internal fun HarnessViewModel.selectHost(hostId: String?) = update { copy(select
 
 /** 把当前连接状态落回主机记录：探活结果 + 实际选中的地址。 */
 internal suspend fun HarnessViewModel.connectHostInternal(host: Host, device: DeviceView? = null) {
+    // 连到另一台电脑是彻底的上下文切换：上一台的响应一条都不该再写进来。
+    requestGate.invalidate()
     update { copy(connecting = true, endpointProbes = emptyList(), error = null) }
     val connection = coordinator.connect(host).getOrElse { failure ->
         val probes = (failure as? DshConnectionException)?.probes.orEmpty()
@@ -284,6 +286,8 @@ internal fun HarnessViewModel.nextId(): String = java.util.UUID.randomUUID().toS
  * 现在断开只断连；删主机是独立的 [removeHost]。
  */
 internal fun HarnessViewModel.disconnect() {
+    // 断开同样作废在飞请求：否则断线后回来的响应会往「已断开」的状态里填内容。
+    requestGate.invalidate()
     eventSubscription?.close()
     eventSubscription = null
     // 手动断开要清掉熄屏暂停标志：否则下次亮屏 resumeEvents 会把

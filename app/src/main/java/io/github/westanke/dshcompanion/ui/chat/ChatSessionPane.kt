@@ -177,6 +177,8 @@ import io.github.westanke.dshcompanion.data.LiveChatBlock
 import io.github.westanke.dshcompanion.data.ChatLinkTarget
 import io.github.westanke.dshcompanion.data.ChatQuestion
 import io.github.westanke.dshcompanion.data.ChatSession
+import io.github.westanke.dshcompanion.data.supportsArchiveListing
+import io.github.westanke.dshcompanion.loadArchivedSessions
 import io.github.westanke.dshcompanion.data.ChatWorkspace
 import io.github.westanke.dshcompanion.data.AgentPreset
 import io.github.westanke.dshcompanion.data.BusySendMode
@@ -246,6 +248,11 @@ internal fun SessionPane(
     modifier: Modifier,
     wide: Boolean = false,
 ) {
+    // 归档视图是个**独立入口**（不是过滤器）：归档会话能打开、但没有重命名/分叉/归档菜单 ——
+    // 那些动作对已归档会话要么无意义，要么本插件不支持（恢复归档，见 API.md）。
+    var showArchived by remember { mutableStateOf(false) }
+    val canListArchived = supportsArchiveListing(state.bridgeCapabilities)
+    val listedSessions = if (showArchived) state.archivedSessions else state.sessions
     Column(modifier.padding(horizontal = 14.dp)) {
         Row(
             Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 10.dp),
@@ -259,6 +266,16 @@ internal fun SessionPane(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
+            }
+            if (canListArchived) {
+                // 只读设备也能看归档：这个入口不写任何东西。文案在两种视图间切换，
+                // 用户一眼知道当前在看哪一份列表。
+                TextButton(onClick = {
+                    showArchived = !showArchived
+                    if (showArchived) viewModel.loadArchivedSessions()
+                }) {
+                    Text(stringResource(if (showArchived) R.string.show_active_sessions else R.string.show_archived_sessions))
+                }
             }
             if ("chat.write" in state.device?.scopes.orEmpty()) {
                 IconButton(onClick = onManageWorkspaces, enabled = !state.busy) {
@@ -275,10 +292,20 @@ internal fun SessionPane(
                 }
             }
         }
-        if (state.sessions.isEmpty()) {
+        if (showArchived) {
+            // 必须**明说**本插件不能恢复归档：否则用户会找恢复按钮，
+            // 找不到就以为是我们漏做了（内核是否提供 unarchive 从本仓不可证）。
+            Text(
+                stringResource(R.string.archived_sessions_hint),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        if (listedSessions.isEmpty()) {
             EmptyState(
                 Icons.Outlined.ChatBubbleOutline,
-                stringResource(R.string.no_sessions),
+                stringResource(if (showArchived) R.string.archived_empty else R.string.no_sessions),
                 Modifier.weight(1f).fillMaxWidth(),
             )
         } else {
@@ -286,7 +313,15 @@ internal fun SessionPane(
                 Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 24.dp),
             ) {
-                items(state.sessions, key = { it.id }) { session ->
+                items(listedSessions, key = { it.id }) { session ->
+                    if (showArchived) {
+                        ArchivedSessionRow(
+                            session = session,
+                            selected = state.selectedSessionId == session.id,
+                            enabled = !state.busy,
+                            onClick = { viewModel.selectSession(session.id) },
+                        )
+                    } else {
                     SessionRow(
                         session = session,
                         selected = state.selectedSessionId == session.id,
@@ -297,6 +332,7 @@ internal fun SessionPane(
                         onArchive = { viewModel.archiveSession(session.id) },
                         wide = wide,
                     )
+                    }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f))
                 }
             }
@@ -527,4 +563,45 @@ internal fun SessionRow(
         },
         dismissButton = { TextButton(onClick = { archiveOpen = false }) { Text(stringResource(R.string.close)) } },
     )
+}
+
+/**
+ * 归档视图里的一行。
+ *
+ * 刻意**不复用** [SessionRow]：那条行的菜单（重命名 / 分叉 / 归档）对已归档会话
+ * 要么无意义（再归档一次），要么本插件不支持（取消归档），复用只会让用户点到无效项。
+ * 这里只保留「能打开」这一个动作 —— 归档只是隐藏，会话本身仍然可用。
+ */
+@Composable
+private fun ArchivedSessionRow(
+    session: ChatSession,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Outlined.ChatBubbleOutline,
+                null,
+                modifier = Modifier.size(17.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                sessionDisplayTitle(session),
+                modifier = Modifier.padding(start = 9.dp).weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
 }

@@ -34,10 +34,13 @@
 | DOC-002 | done | README 扩展为 6 张用户提供的真实手机截图，补充文件浏览和新建工作区界面，并按发布要求删除截图来源说明 |
 | LICENSE-001 | done | 项目自身许可证从 MIT 切换为 AGPL-3.0-only，并保留上游图标与 Markdown 渲染器原许可证告知 |
 | WORKSPACE-001 | done | App 可查看、重命名和移除 DSH 工作区；移除时明确不会删除服务器目录或文件 |
-| SESSION-001 | done | App 会话子项可重命名、分叉和归档；分叉后进入新会话，归档后从默认列表隐藏 |
+| SESSION-001 | done | App 会话子项可重命名、分叉和归档；分叉后进入新会话，归档后从默认列表隐藏。**2026-10-17 扩展**：另可从某条用户消息按 `atSeq` 分叉（入口在时间戳行，不占长按）；面板可切到「已归档」查看与打开（归档**恢复**不做 —— 内核能力不可证） |
 | IME-001 | in-progress | `Scaffold` 消费已应用的系统 inset，聊天窗口只补剩余 IME inset；输入框在不同厂商键盘上均贴近键盘上沿且列表保留可滚动空间。**2.2.2 已用 `Modifier.imePadding()` 修掉边到边模式下键盘遮挡输入框的主体问题**；不同厂商键盘的覆盖仍未做（未真机验收） |
-| PARITY-001 | in-progress | `PARITY.md` 所列 DSH WebUI 能力全部完成或有明确版本计划（`PARITY.md` 随 2.2.20 文档刷新同步更新） |
+| PARITY-001 | in-progress | `PARITY.md` 所列 DSH WebUI 能力全部完成或有明确版本计划。**2026-10-17 对账**：矩阵新增 4 行（服务端能力探测 / 交付物文件卡片 / 会话统计 / 轨迹），更新 4 行（实时事件、分叉、审批与提问、归档） |
 | TEST-001 | done | 单元测试、Compose UI、lint、Release 签名、真机/模拟器端到端通过 |
+| PARITY-002 | done | **A 批（对标补强）**：图片点击查看与存相册、代码/JSON 高亮、滚动期冻结、过程分组与耗时摘要、失败重试、消息时间戳、`atSeq` 分叉、已归档列表、字号缩放与外观设置合并。**归档恢复明确不做**（内核是否提供 unarchive 不可证）。门验 42 类 / 406 用例 0 失败 |
+| QUALITY-001 | done | **B 批（工程质量）**：架构守卫单测（含 800 行预算机检，三次拦下真实超预算文件）、请求代际隔离（`RequestGate`）、事件去抖（`EventDebouncer`）、投影缓存（`ChatVisibleItems`）、Clock/Transport 接缝（`ConnectionCoordinator.measureOverride`，清 DEBT-007）。**真机 DeviceTest 待设备** |
+| TRAJECTORY-001 | done | **轨迹页**：`data/Trajectory.kt`（按轮次分组、未知类型保留、耗时只在时间戳单调时给值）+ `ui/chat/ChatTrajectorySheet.kt`（时间轴 + 点节点展开原始 JSON） |
 | CI-001 | done | GitHub Actions 在不持有正式签名密钥时通过 Debug 门禁，同时任何 Release 打包仍必须提供项目专用签名 |
 | REL-001 | done | `dsh-android-app` v1.0.0 用户文档、版本展示、正式签名 APK、独立 Git 仓库和 `v1.0.0` 标签完成 |
 | REL-002 | done | 创建 GitHub 公开仓库并推送源码；参考高关注 DSH 项目重构中英双语 README，加入真实脱敏截图并发布含正式签名 APK 的 v1.0.0 Release |

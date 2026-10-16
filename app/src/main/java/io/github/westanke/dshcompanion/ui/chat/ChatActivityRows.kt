@@ -223,7 +223,7 @@ import java.io.InputStream
  * 从 `ChatMessageItems.kt` 拆出，实现逐字未改。
  */
 @Composable
-internal fun TurnFailureRow(failure: ChatTurnFailure) {
+internal fun TurnFailureRow(failure: ChatTurnFailure, onRetry: (() -> Unit)? = null) {
 
     val context = LocalContext.current
 
@@ -352,6 +352,28 @@ internal fun TurnFailureRow(failure: ChatTurnFailure) {
                 style = MaterialTheme.typography.bodySmall,
 
             )
+
+        }
+
+        // 重试：只有**可重试**的失败才给按钮（登出停止这类重试必然再失败一次，
+        // 调用方传 null 就不显示）。按钮自己消费点击，不碰外层的长按复制。
+        onRetry?.let { retry ->
+
+            TextButton(
+
+                onClick = retry,
+
+                modifier = Modifier.padding(top = 2.dp),
+
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+
+            ) {
+
+                Icon(Icons.Outlined.Refresh, null, modifier = Modifier.size(15.dp))
+
+                Text(stringResource(R.string.retry), modifier = Modifier.padding(start = 4.dp))
+
+            }
 
         }
 

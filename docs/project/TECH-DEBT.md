@@ -21,7 +21,7 @@
 |---|---|---|
 | `ui/chat/ChatSheets.kt` | 797 | 模型 / 工作区 / 新建会话三个弹层（从 `ChatScreen.kt` 拆出） |
 | `ui/FilesScreen.kt` | 764 | 「文件」页（本次未动，本就未超预算） |
-| `ui/chat/ChatMessageItems.kt` | 748 | 消息气泡与助手正文（从 `ChatScreen.kt` 拆出） |
+| `ui/chat/ChatMessageItems.kt` | 730 | 消息气泡与助手正文（从 `ChatScreen.kt` 拆出；2026-10-17 把图片查看器搬去 `ChatImageViewer.kt` 后又瘦了 24 行） |
 
 > 新增超预算文件必须**先入本表再写码**。这是硬门槛，不是建议。
 
@@ -58,8 +58,19 @@
 | DEBT-001 | 网页版与原生双实现并存 | `app/src/main/assets/chat.html`（2 476 行）+ `ui/chat/` | 网页版是兜底资产，真机验证过；先完成原生反向移植 | 原生功能覆盖 `PARITY.md` 全项且网页版使用率归零 |
 | DEBT-002 | README 双站无自动对账 | `README.md` / `README.en.md` | `docsCheck` 只覆盖 `docs/project/`；Kotlin/Gradle 侧无 README 解析器 | 扩展 `docsCheck` 增加 README 版本号/测试数一致性检查 |
 | DEBT-003 | 无 lint baseline / 静态检查配置 | 仓库根 | 当前 `lintDebug` 在 CI 跑但无 baseline，warning 数不宜当门禁 | 建立 `lint-baseline.xml` 后把新增 warning 当门禁 |
-| DEBT-004 | 无 `@patch` 补丁登记表自动化 | 全仓 | 四要素制度已立（`AGENTS.md` §4.3），尚无脚本生成登记表 | `docsCheck` 扩展：扫 `// @patch` 块校验四要素齐全 + `test` 指向的测试真实存在 |
-| DEBT-005 | 行数预算不进 CI | 仓库根 | Kotlin 侧没有等价于上游 `architecture.test.ts` 的行数检查器；靠本文件手工台账 | 写一个 Gradle 任务扫 `app/src/**/*.kt` 的行数，超 800 视为构建失败 |
+| DEBT-004 | ~~无 `@patch` 补丁登记表自动化~~ **已由单测兑现** | 全仓 | **2026-10-17 起由 `ArchitectureGuardTest` 的 `@patch` 扫描顶住**：五字段齐全 + `test` 指向的测试类真实存在 + id kebab-case 且唯一，随 `testDebugUnitTest` 进 CI | 把同一套校验搬进 `docsCheck`，与文档一致性门禁合流 |
+| DEBT-005 | ~~行数预算不进 CI~~ **已由单测兑现** | 仓库根 | **2026-10-17 起由 `ArchitectureGuardTest` 第 1 条顶住**：扫 `app/src/main/java` 全部 `.kt`，超 800 行即失败，豁免须在本表登记且记录行数 ≥ 实际 | 同上：搬进 `docsCheck` |
+| DEBT-006 | WebView 桥自持第二个网络边界 | `web/ChatWebBridge.kt:75` | WebView 桥要转发「任意方法 + 任意路径 + 任意 JSON」，与 `DshClient` 的强类型 API 对不上，故自持一份 `OkHttpClient`（凭据仍从 `ActiveConnection` 取）。**这条以前只活在代码注释里，2026-10-17 由 `ArchitectureGuardTest` 第 4 条抓出来并在此立账** | 给 `DshClient` 加通用转发入口（任意方法/路径/JSON，含令牌注入与超时），`ChatWebBridge` 改用它，然后删掉 `ArchitectureGuardTest` 里的白名单项与本条目 |
+
+
+> **DEBT-006 是「登记的债」，不是「允许」**：`ArchitectureGuardTest` 的白名单里写着它，
+> 意为「这条偏离已知、有主、有清账条件」；再出现第三个自建客户端的文件会直接判红。
+> 白名单是**显式**的，新增一项必须同时补齐本表条目 —— 只改白名单不改台账，等于把违规洗白。
+> **DEBT-007 已于 2026-10-17 清账**（当天立、当天清）：`ConnectionCoordinator` 加了
+> `measureOverride` 接缝，三个依赖精确延迟比较的用例改为注入受控测量 ——
+> 「谁更快」不再取决于跑测试时机器多忙。它留下的教训仍然成立：
+> **flaky 测试比没有测试更坏**，它教会人「红了先重跑一次」，于是真的回归也会被重跑掩盖。
+> 立账时它没有白名单，也没有长期挂着 —— 这是台账制度想要的样子。
 
 ## 账怎么记
 

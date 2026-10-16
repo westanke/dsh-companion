@@ -62,6 +62,8 @@ import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Build
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.List
 import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Check
@@ -123,6 +125,9 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import io.github.westanke.dshcompanion.data.ChatDisplayEntry
+import io.github.westanke.dshcompanion.data.groupChatDisplay
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -164,6 +169,8 @@ import io.github.westanke.dshcompanion.ApprovalUiState
 import io.github.westanke.dshcompanion.PendingAttachment
 import io.github.westanke.dshcompanion.R
 import io.github.westanke.dshcompanion.SessionFileOpen
+import io.github.westanke.dshcompanion.retryLastUserMessage
+import io.github.westanke.dshcompanion.forkSession
 import io.github.westanke.dshcompanion.data.ChatContentParts
 import io.github.westanke.dshcompanion.data.ChatAttachment
 import io.github.westanke.dshcompanion.data.ChatTurnFailure
@@ -206,6 +213,7 @@ import io.github.westanke.dshcompanion.data.SessionFileRefs
 import io.github.westanke.dshcompanion.data.deliverables
 import io.github.westanke.dshcompanion.data.TodoItem
 import io.github.westanke.dshcompanion.data.displayItems
+import io.github.westanke.dshcompanion.data.visibleHistoryItems
 import io.github.westanke.dshcompanion.data.permissionSelect
 import io.github.westanke.dshcompanion.data.todoItems
 import java.io.InputStream
@@ -252,6 +260,10 @@ internal fun ChatDetail(
         }
         return
     }
+    // 待确认的分叉点由**这一层**持有：消息流里同时只可能有一个待确认的分叉，
+    // 让每条消息各持一个对话框状态，只会让它们互相看不见。
+    var forkAtSeq by remember { mutableStateOf<Int?>(null) }
+
     // 输入框内容存在 ViewModel 而不是本地 state：发送失败时要把原文还回来，
     // 而「失败」这个事只有 ViewModel 知道。本地 remember 一旦被 message = "" 清掉就找不回了。
     var message by remember(selected.id) { mutableStateOf(state.pendingText) }
@@ -260,6 +272,16 @@ internal fun ChatDetail(
     // 后者会让用户正在输入的字被发送成功后的清空覆盖掉，敲一半的字会凭空蒸发。
     LaunchedEffect(state.pendingText) {
         if (state.pendingText.isNotBlank()) message = state.pendingText
+    }
+    // 分叉的确认框拆到 ChatForkDialog.kt（同一个原因：行数预算）。文案也只有那一处。
+    forkAtSeq?.let { seq ->
+        ChatForkDialog(
+            onDismiss = { forkAtSeq = null },
+            onConfirm = {
+                forkAtSeq = null
+                state.selectedSessionId?.let { viewModel.forkSession(it, seq) }
+            },
+        )
     }
     // 输入框上方的补全面板（`@` 文件 / `/` 命令）开着时，**关掉外层抽屉的横向滑动手势**。
     //
@@ -277,6 +299,8 @@ internal fun ChatDetail(
     }
     var modelSheet by remember(selected.id) { mutableStateOf(false) }
     var filesSheet by remember(selected.id) { mutableStateOf(false) }
+    var statsSheet by remember(selected.id) { mutableStateOf(false) }
+    var trajectorySheet by remember(selected.id) { mutableStateOf(false) }
     var tasksExpanded by rememberSaveable(selected.id) { mutableStateOf(true) }
 
     // Markdown 里的链接会被注解成 `LinkAnnotation.Url`，由 Compose 的 Text 通过
@@ -342,12 +366,36 @@ internal fun ChatDetail(
     //    会在每条消息之间插一排折叠块，把正文挤得七零八落。
     //    开关在设置页（AppPreferences.showContext），默认关。
     val showContext = state.showContext
-    val historyItems = state.history?.displayItems().orEmpty()
-        .filter { it.kind != ChatItemKind.REASONING }
-        .filter { showContext || it.kind != ChatItemKind.CONTEXT }
+    // 投影结果按 (history, showContext) 缓存 —— `displayItems()` 是**逐事件映射的纯函数**，
+    // 而这一行每次重组都会跑到：流式期间每秒几十帧，每帧都要把几百条历史事件重新映射一遍
+    // 再跑两次 filter，纯属白烧 CPU。`state.history` 是整份替换的对象（只有刷新才换），
+    // 所以引用相等就是「没变」的可靠判据。
+    //
+    // `liveItems` 刻意**不**缓存：它每一帧都会变（append 出的是新对象），加了也是每帧失效的
+    // 假优化；而它只有当前 step 的那几个块，成本本来就小。
+    //
+    // 过滤口径本身在 data/ChatVisibleItems.kt —— 抽出去之后有单测盯着，不再只靠肉眼。
+    val historyItems = remember(state.history, showContext) {
+        visibleHistoryItems(state.history, showContext)
+    }
     val displayItems = historyItems + liveItems
-    val todos = state.history?.todoItems().orEmpty()
+
+    val todos = remember(state.history) { state.history?.todoItems().orEmpty() }
     val listState = rememberLazyListState()
+
+    // 滚动期间冻结渲染快照（症状、做法与 80ms 窗口的取舍都在 ChatScrollFreeze.kt 里）。
+    val scrolling = listState.isScrollInProgress
+    val visibleItems = rememberFrozenItems(displayItems, scrolling)
+
+    // 把扁平项折成「消息 + 过程组」两类。理由与规则见 ChatProcessGroup.kt 顶部注释。
+    //
+    // `remember(visibleItems)`：分组是 O(n) 的纯函数，而 visibleItems 在流式期间
+    // 每帧都会换成一个新 list —— 不 remember 的话每帧都要重算一遍分组，
+    // 那正是「为了省重组反而更慢」的经典翻车。时间从 item 自己身上取
+    // （ChatDisplayItem.time，历史项有、流式项为 null → 该组不显示耗时段）。
+    val displayEntries = remember(visibleItems) {
+        groupChatDisplay(visibleItems) { it.time }
+    }
     // 用户是否在底部附近——只在底部时才自动滚动，否则不打扰翻历史。
     //
     // 用 `derivedStateOf` 而不是 `LaunchedEffect` + `mutableStateOf`：
@@ -398,6 +446,8 @@ internal fun ChatDetail(
                 onBack = onBack,
                 onOpenFiles = { filesSheet = true },
                 onModelClick = { modelSheet = true },
+                onOpenStats = { statsSheet = true },
+                onOpenTrajectory = { trajectorySheet = true },
                 permission = state.history?.permissionSelect(),
                 permissionEnabled = canWrite && !state.busy,
                 onPermissionSelect = viewModel::selectPermissionPreset,
@@ -434,9 +484,11 @@ internal fun ChatDetail(
                     )
                 }
             }
-            items(displayItems, key = { it.id }) { item ->
-                ChatItem(
-                    item = item,
+            // 渲染用 displayEntries（由 visibleItems 折出，滚动中那份冻结快照），
+            // **不是** displayItems：数据源每帧都在变，而滚动期间我们刻意不改列表内容。
+            items(displayEntries, key = { entry -> displayEntryKey(entry) }) { entry ->
+                ChatDisplayEntryRow(
+                    entry = entry,
                     images = state.attachmentImages,
                     failures = state.attachmentFailures,
                     onLoadImage = viewModel::loadAttachmentImage,
@@ -444,6 +496,8 @@ internal fun ChatDetail(
                     // 走同一条 send 通道，模型看到的就是一条普通的 user 消息。
                     onAnswer = { answer -> viewModel.sendMessage(answer, steer = false) },
                     genUiDebug = state.genUiDebug,
+                    onRetry = viewModel::retryLastUserMessage,
+                    onForkAt = { seq -> forkAtSeq = seq },
                 )
             }
         }
@@ -463,7 +517,8 @@ internal fun ChatDetail(
         //
         // 点了按钮不用手动把 isAtBottom 改回 true —— 它现在是 derivedStateOf（不可写），
         // 而 animateScrollToItem 滚到底之后 isAtBottom 自己就变 true、按钮自动消失。
-        val scrolling = listState.isScrollInProgress
+        // （`scrolling` 已在列表上方提前定义 —— 那里要用它冻结流式快照，
+        //   同一个值不要在这里重新读一遍，否则两处判据将来会漂移。）
         // 半透明 + 滚动中隐去。用 animateFloatAsState 驱动 alpha 而不是
         // AnimatedVisibility：这个位置在 BoxScope/ColumnScope 混排里，
         // AnimatedVisibility 的两个重载（顶层 vs ColumnScope）会被解析歧义卡住
@@ -569,6 +624,8 @@ internal fun ChatDetail(
         }
     }
     if (modelSheet) ModelSheet(state, viewModel) { modelSheet = false }
+    if (statsSheet) ChatStatsSheet(state) { statsSheet = false }
+    if (trajectorySheet) ChatTrajectorySheet(state) { trajectorySheet = false }
     if (filesSheet) {
         SessionFilesSheet(state, viewModel) {
             filesSheet = false
@@ -577,157 +634,3 @@ internal fun ChatDetail(
     }
 }
 
-@Composable
-internal fun ConversationHeader(
-    session: ChatSession,
-    state: HarnessState,
-    viewModel: HarnessViewModel,
-    onBack: (() -> Unit)?,
-    onOpenFiles: () -> Unit,
-    onModelClick: () -> Unit,
-    permission: PermissionSelect?,
-    permissionEnabled: Boolean,
-    onPermissionSelect: (String) -> Unit,
-    canSteer: Boolean,
-    onSteer: () -> Unit,
-    wide: Boolean = false,
-) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (onBack != null) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back)) }
-        }
-        Column(Modifier.weight(1f).padding(start = if (onBack == null) 10.dp else 2.dp)) {
-            // 标题在窄屏（手机）永远单行；平板（wide）下允许两行 —— 兜底到长 cwd 路径时
-            // 不会在顶栏被腰斩，短标题（用户起的名字）依然只占一行，布局无感。
-            Text(
-                sessionDisplayTitle(session),
-                maxLines = if (wide) 2 else 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.titleMedium,
-            )
-            StatusLabel(
-                if (state.eventsConnected) stringResource(R.string.online) else stringResource(R.string.offline),
-                state.eventsConnected,
-            )
-            if (session.pendingInteraction == "approval") ApprovalStatusLabel(Modifier.padding(top = 2.dp))
-        }
-        IconButton(onClick = onOpenFiles) {
-            Icon(Icons.Outlined.FolderOpen, stringResource(R.string.session_files))
-        }
-        IconButton(onClick = viewModel::refreshHistory, enabled = !state.busy) {
-            Icon(Icons.Outlined.Refresh, stringResource(R.string.refresh))
-        }
-        AnimatedVisibility(session.running, enter = fadeIn(), exit = fadeOut()) {
-            IconButton(
-                onClick = viewModel::cancelRun,
-                enabled = "chat.write" in state.device?.scopes.orEmpty(),
-            ) {
-                Icon(Icons.Outlined.Cancel, stringResource(R.string.cancel_run), tint = MaterialTheme.colorScheme.error)
-            }
-        }
-        // ⋯ 菜单（网页版 chat.html:283 的 #more，位置一样：标题右边、停止键旁边）。
-        //
-        // 输入区压成**一行药丸**后，模型 / 权限 / 插话这些入口在输入区里没有位置了，
-        // 所以整体搬到这里。它们只是**换了容器，不是换了语义** ——
-        // 模型仍走既有的 ModelSheet（智能体切换本来就在那个面板里，不重复做），
-        // 权限仍是只读 / 工作区写入 / 完整访问三档 + 完整访问二次确认，
-        // 插话仍是固定的 steer 提交（不受设置里「繁忙时默认行为」影响）。
-        var moreOpen by remember { mutableStateOf(false) }
-        var confirmFullAccess by remember { mutableStateOf(false) }
-        val currentModel = state.sessionModels?.current
-        val agentName = state.agentPresets.find { it.id == session.agentPreset }?.name ?: session.agentPreset
-        val modelSummary = listOfNotNull(agentName, currentModel?.provider, currentModel?.model)
-            .joinToString(" · ")
-        Box {
-            IconButton(onClick = { moreOpen = true }) {
-                Icon(Icons.Outlined.MoreVert, stringResource(R.string.more_actions))
-            }
-            DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(stringResource(R.string.model))
-                            if (modelSummary.isNotBlank()) {
-                                Text(
-                                    modelSummary,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.labelSmall,
-                                )
-                            }
-                        }
-                    },
-                    onClick = {
-                        moreOpen = false
-                        onModelClick()
-                    },
-                    enabled = state.sessionModels != null && state.sessionModels.routable,
-                    leadingIcon = { Icon(Icons.Outlined.ModelTraining, null) },
-                )
-                permission?.takeIf { it.options.isNotEmpty() }?.let { permissionValue ->
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    PermissionMenuItems(
-                        value = permissionValue,
-                        enabled = permissionEnabled,
-                        onSelect = { selected ->
-                            moreOpen = false
-                            onPermissionSelect(selected)
-                        },
-                        onRequestFullAccess = {
-                            moreOpen = false
-                            confirmFullAccess = true
-                        },
-                    )
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                DropdownMenuItem(
-                    text = {
-                        Column {
-                            Text(stringResource(R.string.steer))
-                            Text(
-                                stringResource(R.string.busy_send_mode_steer_desc),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                        }
-                    },
-                    onClick = {
-                        moreOpen = false
-                        onSteer()
-                    },
-                    enabled = canSteer,
-                    leadingIcon = { Icon(Icons.Outlined.SubdirectoryArrowRight, null) },
-                )
-            }
-        }
-        // 完整访问的二次确认：与原来挂在输入区那个按钮上的对话框是同一套要求 ——
-        // 必须勾选 acknowledged，确认键才会亮。
-        if (confirmFullAccess) {
-            FullAccessConfirmDialog(
-                onDismiss = { confirmFullAccess = false },
-                onConfirm = {
-                    confirmFullAccess = false
-                    onPermissionSelect("danger-full-access")
-                },
-            )
-        }
-    }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-}
-
-/**
- * 「本会话的文件」面板。
- *
- * 刻意做成一个**独立面板**，不去动消息气泡的渲染（那块一千多行，风险与收益不匹配）：
- * 列表由 [SessionFileRefs] 从已加载的会话历史里提取，点一条就交给
- * [HarnessViewModel.openSessionFile] 把内容取回来。
- *
- * 为什么非要服务端帮一下：会话事件里是**服务器绝对路径**，而 `/roots` 刻意不返回根的
- * 绝对路径，客户端手上永远缺这一环，只能由 `roots/resolve` 完成这次转换。
- */

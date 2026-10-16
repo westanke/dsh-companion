@@ -591,6 +591,15 @@ internal fun AiGeneratedNotice() {
 internal fun ChatThinkBar(raw: String) {
     val text = thinkBarText(raw)
     if (text.isEmpty()) return
+    // 默认只露**尾部一行**；点一下展开全文。
+    //
+    // 为什么值得加展开：只显示尾部 140 字符时，用户想知道「它到底在想什么」
+    // 是做不到的（前面全被截掉）。对比对象 Whaleness 的思考块是可折叠的固定
+    // "Think" 行 —— 我们这条更需要展开，因为我们的摘要本身就是正文的尾巴。
+    //
+    // 折叠态用 rememberSaveable：这条在流式期间随每个 token 重组，
+    // 用 remember 会在这类高频重组里丢掉展开态（用户刚点开就又合上）。
+    var expanded by rememberSaveable { mutableStateOf(false) }
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -598,7 +607,10 @@ internal fun ChatThinkBar(raw: String) {
         Column {
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(7.dp),
             ) {
@@ -614,6 +626,28 @@ internal fun ChatThinkBar(raw: String) {
                     style = MaterialTheme.typography.labelMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+                Icon(
+                    Icons.Outlined.ExpandMore,
+                    // contentDescription 留空：整行本身可点，且旁边就是思考正文，
+                    // 再报一次「展开」只会让 TalkBack 多说一遍废话。
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (expanded) {
+                Text(
+                    raw.trim(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // 高度上限 + 内部滚动：思考可能很长，任由它撑开会把
+                        // 整个输入区顶出屏幕（这条面板贴在输入区上方）。
+                        .heightIn(max = 240.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(start = 14.dp, end = 14.dp, bottom = 10.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
                 )
             }
         }

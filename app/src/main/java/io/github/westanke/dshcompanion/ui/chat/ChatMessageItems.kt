@@ -3,7 +3,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.widget.Toast
@@ -17,7 +16,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
@@ -38,7 +36,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -131,10 +128,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -242,6 +237,22 @@ internal fun ChatItem(
     onAnswer: (String) -> Unit = {},
 
     genUiDebug: Boolean = false,
+
+    /**
+
+     * 「重试上一轮」；null = 不显示重试按钮（例如登出停止的失败，重试必然再失败一次）。
+
+     */
+
+    onRetry: (() -> Unit)? = null,
+
+    /**
+
+     * 「从这条消息分叉」；null = 不给入口。只有**用户消息**会真正显示（见 `data/ChatForkPoint.kt`）。
+
+     */
+
+    onForkAt: ((Int) -> Unit)? = null,
 
 ) {
 
@@ -394,11 +405,17 @@ internal fun ChatItem(
 
         // 终局失败：宁可多一个分支，也不要让这条消息落进 else 变成一行空的活动行。
 
-        ChatItemKind.FAILURE -> item.failure?.let { TurnFailureRow(it) }
+        // 登出停止（stopped）不给重试按钮：那一轮的失败原因是账号登出，重试只是白跑一趟。
+        ChatItemKind.FAILURE -> item.failure?.let { failure ->
+            TurnFailureRow(failure, onRetry = if (failure.stopped) null else onRetry)
+        }
 
         else -> ActivityRow(item)
 
     }
+
+    // 时间戳与「从这条分叉」都在这一行里（拆到 ChatMessageFooter.kt 是为了守住 800 行预算）。
+    ChatMessageFooter(item = item, onForkAt = onForkAt)
 
     } // SelectionContainer：长按选词，双击（外层 Box）复制整条
 
@@ -462,6 +479,11 @@ internal fun AssistantBody(
 
                 typography = compactMarkdownTypography(),
 
+                // 代码块的高亮 / 语言标签 / 复制键都在这份组件里（同目录 ChatCodeBlock.kt）：
+                // 不传 components 时用的是渲染库自己的代码块，既没有高亮，复制也不给提示。
+
+                components = chatMarkdownComponents,
+
                 modifier = Modifier
 
                     .fillMaxWidth()
@@ -498,6 +520,8 @@ internal fun AssistantBody(
 
                     typography = compactMarkdownTypography(),
 
+                    components = chatMarkdownComponents,
+
                     modifier = Modifier.fillMaxWidth(),
 
                 )
@@ -517,6 +541,8 @@ internal fun AssistantBody(
                             content = "```json\n${segment.json}\n```",
 
                             typography = compactMarkdownTypography(),
+
+                            components = chatMarkdownComponents,
 
                             modifier = Modifier.fillMaxWidth(),
 
@@ -629,9 +655,11 @@ internal fun GenUiDebugLine(diagnosis: GenUiDiagnosis) {
 
  *
 
- * 解码失败（字节取到了但不是有效图片）单独区分：那说明数据有问题，与网络无关，
+ * 成功那一档（解码、点开全屏、保存到相册）搬去了 `ChatImageViewer.kt` 的 [ChatImageThumbnail]：
 
- * 提示也不该让用户去重试网络。
+ * 那里保留了同一套判定 —— 字节取到了但**不是有效图片**时单独给一句提示，因为那说明
+
+ * 数据有问题、与网络无关，不该让用户去重试网络。
 
  */
 
@@ -669,41 +697,11 @@ internal fun MessageAttachments(
 
             when {
 
-                bytes != null -> {
+                // 「取到字节了」这一档整块交给 ChatImageViewer.kt：解码、尺寸上限、点开全屏、
+                // 保存到相册全是「一张图片」自己的事。留在这里的只有与本条附件有关的判定 ——
+                // 加载中还是失败（谁都还没有字节，根因不在图片）。
 
-                    val bitmap = remember(bytes) {
-
-                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-
-                    }
-
-                    if (bitmap == null) {
-
-                        AttachmentNotice(stringResource(R.string.attachment_undecodable))
-
-                    } else {
-
-                        Image(
-
-                            bitmap = bitmap.asImageBitmap(),
-
-                            contentDescription = attachment.name,
-
-                            contentScale = ContentScale.Fit,
-
-                            modifier = Modifier
-
-                                .widthIn(max = 260.dp)
-
-                                .heightIn(max = 340.dp)
-
-                                .clip(MaterialTheme.shapes.medium),
-
-                        )
-
-                    }
-
-                }
+                bytes != null -> ChatImageThumbnail(attachment.name, bytes)
 
 
 

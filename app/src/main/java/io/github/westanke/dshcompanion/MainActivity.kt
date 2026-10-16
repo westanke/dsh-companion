@@ -10,6 +10,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.core.os.LocaleListCompat
 import io.github.westanke.dshcompanion.ui.DeepSeekHarnessApp
@@ -43,7 +46,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        if (AppCompatDelegate.getApplicationLocales().isEmpty) {
+        // 首次启动默认中文；**用户选过语言之后绝不再插手**。
+        //
+        // 判据只能是「选过没有」，不能是 `getApplicationLocales().isEmpty` ——
+        // 「跟随系统」在系统 API 里同样是空列表，用空列表当判据会把用户
+        // 选的跟随系统每次启动打回中文（详见 AppPreferences.languageChosen 的注释）。
+        if (!viewModel.preferences.languageChosen) {
             AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("zh-CN"))
         }
         super.onCreate(savedInstanceState)
@@ -58,7 +66,18 @@ class MainActivity : AppCompatActivity() {
         )
         enableEdgeToEdge()
         setContent {
-            DeepSeekHarnessTheme {
+            // 主题的两项外观偏好放在**最外层**读：
+            // 它们要同时作用于连接页、会话页与设置页，任何一处漏包都会出现
+            // 「设置页是深色、退到连接页变浅色」这种半截状态。
+            //
+            // 读 state（而不是 viewModel.preferences）是关键：偏好本身不是 Compose 状态，
+            // 直接读它改了不会触发重组 —— 那正是「点了开关没反应」的经典坑
+            // （见 AGENTS.md §4.1 与 PITFALLS.md §Compose 状态与 SharedPreferences）。
+            val state by viewModel.state.collectAsState()
+            DeepSeekHarnessTheme(
+                darkTheme = state.interfaceStyle.isDark(isSystemInDarkTheme()),
+                fontScale = state.effectiveFontScale,
+            ) {
                 DeepSeekHarnessApp(viewModel)
             }
         }

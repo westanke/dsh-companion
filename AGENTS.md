@@ -31,7 +31,9 @@
 
 - **定位**：DeepSeek Harness 的 Android **原生客户端**（Kotlin + Jetpack Compose + Material 3）。
 - **上游**：`Hakunm/dsh-android-app`（AGPL-3.0）的 fork，保留完整提交历史。
-- **与谁配**：服务端插件 `dsh-remote-bridge`（AGPL-3.0，≥ 2.3.3）。**App 不自带任何 DSH 能力。**
+- **与谁配**：服务端插件 `dsh-remote-bridge`（AGPL-3.0，**≥ 2.3.7**；与 README 双站的安装要求一致）。
+  **App 不自带任何 DSH 能力。** 客户端会解析 `connection.ready` 的能力位做运行时探测
+  （见 `data/BridgeCapabilities.kt`），因此「最低版本」只是**安装门槛**，不是功能判据。
 - **不做什么**：不跑内核、不代理官方 WebUI、不打包 Ubuntu。把 DSH 搬进手机是另一条路线（DSHA 系），
   与我们**互斥不互补**——详见 `docs/project/decisions/` 与 `dsh-study/` 下的对比研究。
 - **三端拓扑（2026-10-16 起）**：Gitee 主站 + AtomGit 备站（本地 `bash scripts/push-all.sh` 推这两个），
@@ -94,6 +96,10 @@ web/           ← WebView 容器（chat.html 兜底路径）
 ```
 
 - **`DshClient` 是唯一网络边界**，阻塞 IO 只在 `Dispatchers.IO`。
+  已知例外（**登记在 `TECH-DEBT.md` DEBT-006，并由 `ArchitectureGuardTest` 盯着**）：
+  `web/ChatWebBridge.kt` 为 WebView 桥自持一份 OkHttp 客户端 —— 它要转发
+  「任意方法 + 任意路径 + 任意 JSON」，与 `DshClient` 的强类型 API 对不上。
+  清账路径：给 `DshClient` 加通用转发入口后，删掉该例外、`TECH-DEBT.md` 条目与测试白名单项。
 - Compose 表现层**不得**自己发网络请求或读 `SharedPreferences` 当状态（那会导致「点了开关不动」，
   见 `PITFALLS.md` §Compose 状态与 SharedPreferences）。
 - 会话展示走 `ChatPresentation` 单一出口：只输出用户/助手正文、推理摘要、上下文注入来源、工具摘要；
@@ -134,7 +140,7 @@ web/           ← WebView 容器（chat.html 兜底路径）
 
 | 层 | 命令 | 说明 |
 |---|---|---|
-| 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 25 类 / 273 用例（随代码变化，勿当常量） |
+| 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 44 类 / 410 用例（随代码变化，勿当常量） |
 | 文档 | `scripts/build.sh docsCheck` | 8 文档 / ROADMAP 任务 / STATUS 引用一致性 |
 | 真机 | 人工 | **单测绿 ≠ 行为对**。涉及手势、键盘、WebView、耗电、断流的一律要真机确认 |
 
@@ -174,6 +180,8 @@ web/           ← WebView 容器（chat.html 兜底路径）
 - `并发写者与未提交改动`
 - `GitHub 443 阻断与镜像从站`
 - `AtomGit 账号名与 API 版本`
+- `长文本正则与重复分组`
+- `过期响应覆盖新上下文`
 
 > 新坑位：名字加进上面清单 + 原文写进 `PITFALLS.md` 并补 `### 同名` 锚点。
 
@@ -185,10 +193,15 @@ web/           ← WebView 容器（chat.html 兜底路径）
 
 | 借鉴项 | 原样 | 本项目的裁剪 |
 |---|---|---|
-| 补丁四要素 | `@patch` for/why/until/test，脚本生成登记表 | 保留四要素；登记表暂不入 CI（等 `docsCheck` 扩展），先靠人工与 PR 审查 |
-| 债务台账只许收紧 | `architecture.test.ts` 强制（环/行数/模块状态） | 改 `TECH-DEBT.md` + 行数预算 800；**暂不进 CI**（Kotlin 侧无等价解析器），先立账 |
+| 补丁四要素 | `@patch` for/why/until/test，脚本生成登记表 | 保留四要素；**2026-10-17 起由 `ArchitectureGuardTest` 机检**（五字段齐全 + `test` 指向的测试真实存在），随 `testDebugUnitTest` 进 CI；尚未并入 `docsCheck` |
+| 债务台账只许收紧 | `architecture.test.ts` 强制（环/行数/模块状态） | 改 `TECH-DEBT.md` + 行数预算 800；**2026-10-17 起由 `ArchitectureGuardTest` 扫行数兑现**（超预算须在台账登记）—— 原以为「Kotlin 侧无等价解析器」，实测**文本匹配就够** |
 | 文档路由表 | 13 条场景路由 | 收敛为第 0 节一张表 |
 | 坑位索引 | 67 条 | 11 条起步，按需增长 |
 
 **刻意没抄的**：CDP 探针体系（22 个）——本项目没有 WebUI 宿主，无处安放。
-**本项目特有的三条**：README 双站漂移对账、bridge 版本基线两处一致、端口 3090 归属。
+**本项目特有的三条**：Bridge 版本基线两处一致、熄屏断流与亮屏接回、WebView 与原生双实现。
+
+> **共有三条的措辞与 `dsh-remote-bridge/AGENTS.md` 保持一致**：
+> README 双站漂移、端口 3090 归属、对外表述三态。
+> 2026-10-17 对账时发现：两边原本对「哪三条共有」的表述**两两不同**，
+> 且本文件把 `README 双站漂移` 同时算进了「共有」与「特有」—— 那次已统一，改一处记得改另一处。

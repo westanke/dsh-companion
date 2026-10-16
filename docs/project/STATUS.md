@@ -1,6 +1,102 @@
 # 当前状态
 
-- 日期：2026-10-16
+- 日期：2026-10-17
+- **在途（质量收尾，未升版本号）**：**测试数字一致性并入常设门禁** —— 新 `TestCountsTest`：
+  README 中/英 + AGENTS §5 三处声明的类数与用例数必须相同，且**用例数 == 源码 `@Test` 注解数**
+  （静态计数，不依赖正在写入的 XML）。**首跑如期变红**（新测试自己让 409 → 410），
+  同步三处后转绿 —— 这条门禁要的就是「加测试必须同步文档」。
+  门验：**44 类 / 410 用例 / 0 失败**。
+- **在途（质量收尾，未升版本号）**：**中英 strings 一致性并入常设门禁** ——
+  新 `StringResourcesTest`（键集合双向一致 + **占位符一致** + 下限断言；用 XML 解析器读资源）。
+  占位符那条防的是**崩溃**（英文少一个 `%1$s` → `MissingFormatArgumentException`），不只是显示问题。
+  门验：**44 类 / 410 用例 / 0 失败**。
+- **在途（质量收尾，未升版本号）**：**坑位索引一致性并入常设门禁** —— `ArchitectureGuardTest`
+  新增一条测试（索引 ↔ `PITFALLS.md` 正文**双向**一致 + **下限断言**防解析失败被当成"一致" +
+  按措辞而非编号找小节）。门验：**44 类 / 410 用例 / 0 失败**。
+- **在途（B 批，未升版本号）**：**Clock/Transport 接缝** —— `ConnectionCoordinator` 加
+  `measureOverride`（默认墙钟，测试注入受控测量）；原逻辑**逐字搬进** `probeWithWallClock`，
+  超时/关闭/取消语义**仍归协调器**（接缝只替换「怎么测」，不替换「怎么保证不挂死」）。
+  三个依赖精确延迟比较的用例改用 `fixedLatency`，两个真实行为用例保持真实延迟。
+  **DEBT-007 当天立、当天清**。门验：**44 类 / 410 用例 / 0 失败**（用例数不变）。
+- **在途（Whaleness 舒适度，未升版本号）**：**轨迹页 UI** —— 新 `ui/chat/ChatTrajectorySheet.kt`
+  （按轮次时间轴 + 点节点展开**原始 JSON**，复用 `ChatCodeBlock` 高亮）+ 数据层补 `raw` 与
+  `shortDuration` + ⋯ 菜单入口。**只做「原始」一栏**：竞品的多 Tab 需要按工具类型解析载荷，
+  而「参数/结果/Schema 挂在哪个字段」本仓**不可证**。**第三次被行数守卫抓到**
+  （ChatDetail 810 → 拆出 `ChatHeader.kt`：163 行顶栏 → ChatDetail 636 / ChatHeader 214）。
+  门验：**44 类 / 410 用例 / 0 失败**。
+- **在途（Whaleness 舒适度，未升版本号）**：**轨迹页数据层** —— 新 `data/Trajectory.kt`
+  （`trajectoryOf` 按轮次分组、组内按 seq 排序；`Other` 类型**不丢弃**；耗时**只在时间戳单调时**给值）。
+  UI 留下一轮。顺手记下 **DEBT-007**：`ConnectionCoordinatorTest` 的延迟容差用例是 flaky
+  （实测延迟受机器负载影响），清账路径 = B 批的 Clock/Transport 接缝。
+  门验：**44 类 / 410 用例 / 0 失败**。
+- **在途（C 批，未升版本号）**：**交付物实时到达** —— `connectEvents` 认出
+  `chat.deliverables.presented`（姊妹仓同轮补的正式事件名）并触发一次刷新，
+  文件卡片不再等下一次消息完成才更新。**无单测**（ViewModel 层无测试基建，如实记录）。
+- **在途（C 批，未升版本号）**：**会话统计（执行维度）** —— 新 `data/SessionStats.kt`
+  （轮次 / 助手消息 / 工具调用 / 事件总数 / 数据截至 `#seq`，判据与 `ChatHistoryMapping` 同源）
+  + `ui/chat/ChatStatsSheet.kt`（会话页 ⋯ 菜单入口）。
+  **上下文用量环没做**：内核 usage **不可证**（`node_modules` 下没有内核包），
+  没有数据就不画环；也**不给字符数估算**（误差成倍，一个不可靠的数字比没有更坏）。
+  门验：**44 类 / 410 用例 / 0 失败**。
+- **在途（C 批，未升版本号）**：**断档检测与 resync** —— 新 `data/ChatSeqMonitor.kt`
+  （`seqVerdict` 跳号判定 + `baselineBehind` 基线比较）+ `HarnessState.lastEventSeq/baselineCursor`
+  + `connectEvents` 统一过闸（命中即 `scheduleChatRefresh()`，自带去抖与单飞）。
+  消费姊妹仓同轮的 `chat.session.snapshot`。**换会话必须清空序号**（不同会话序列不同，混比必然误判）。
+  判据只认**严格跳号**：重复与倒退交给去重（判太紧会让每次重连都全量重取）。
+  门验：**44 类 / 410 用例 / 0 失败**。
+- **在途（B 批，未升版本号）**：**历史投影缓存** —— 新 `data/ChatVisibleItems.kt`
+  （可测核心 `visibleItemsOf`）+ `ChatDetail` 用 `remember(state.history, showContext)` 缓存投影。
+  核过的真问题：投影是**逐事件映射的纯函数**，却在 Composable 体内每帧重跑（流式期间每秒几十帧）。
+  `liveItems` 刻意不缓存（每帧都变，加了是假优化）。**第二次被行数守卫抓到超预算**
+  （ChatDetail 797→越过 800），拆出 `ui/chat/ChatScrollFreeze.kt` → 781。
+  门验：**44 类 / 410 用例 / 0 失败**。
+- **在途（B 批，未升版本号）**：**事件去抖** —— 新 `data/EventDebouncer.kt`（**尾沿去抖**，
+  用 `runTest` 虚拟时间测）+ `HarnessViewModel.directoryDebouncer` 接到 `file.*` 分支。
+  核过一件事：我们**没有事件队列**（事件直通 `update`，`LiveChatState` 按 step 分块天然有界），
+  真正无界的是**事件驱动的副作用**（旧实现每帧 `file.*` 发一次 `entries()` 请求 → 请求风暴）。
+  窗口 500ms；已知边界「事件不停时饿死」与既有的 `scheduleChatRefresh` 同取舍。
+  门验：**44 类 / 410 用例 / 0 失败**。
+- **在途（B 批开工，未升版本号）**：**请求代际隔离** —— 新 `data/RequestGate.kt`
+  （`current`/`invalidate`/`isCurrent`，`AtomicInteger`）+ `launchOperation` **在调用点领号**、
+  回来过闸；三个切换点已接（`selectSession`/`connectHostInternal`/`disconnect`）。
+  挡的是「旧会话的响应回来覆盖新会话状态」（标题 B、内容 A 那类静默错乱）。
+  门验：**44 类 / 410 用例 / 0 失败**（含 8 线程 × 500 次并发领号不重复）。
+- **在途（第六批，未升版本号）**：**A 批收官 —— `atSeq` 分叉入口**。新 `data/ChatForkPoint.kt`
+  （只给用户消息、`seq > 0`）+ `forkSession(sessionId, atSeq)` + 时间戳行里的低对比度按钮，
+  确认框由 `ChatDetail` 单点持有。入口**不占任何既有手势**（长按留给选词 —— 这是既有坑位）。
+  **顺带被 `ArchitectureGuardTest` 抓到超预算**（ChatMessageItems 806 / ChatDetail 805），
+  按制度拆分出 `ChatMessageFooter.kt`（84）与 `ChatForkDialog.kt`（39）→ 752 / 797。
+  门验：**44 类 / 410 用例 / 0 失败**。
+- **在途（第五批，未升版本号）**：**消息气泡带时间戳** —— `data/ChatTimeLabel.kt`
+  （三档粒度：今天只给时刻 / 今年给月日 / 更早给年月日，中文单独一支 pattern）+
+  `ChatItem` 只为**消息**显示、跟随气泡一侧对齐、按值 `remember` 缓存。
+  数据来源早就存在（历史事件的 `event.time`，过程组耗时摘要已用它），**不需要 bridge 支持**。
+  门验：**44 类 / 410 用例 / 0 失败**。
+- **在途（第四批，未升版本号）**：**已归档会话可看** —— `DshClient.sessions(archived)` +
+  `HarnessState.archivedSessions` + 会话面板的「已归档 / 返回会话」切换（归档行用独立组件，
+  不给重命名/分叉/归档菜单）。**入口按能力位 `session-archive-list-v1` 守卫**：
+  老 bridge 会忽略 `archived` 参数并返回未归档列表，不判能力位就会展示**假结论**。
+  归档视图明说「本插件暂不支持恢复归档」。门验：**44 类 / 410 用例 / 0 失败**。
+- **在途（第三批，未升版本号）**：**失败行可「重试上一轮」** ——
+  新 `data/ChatRetry.kt`（取历史里最后一条有正文的用户消息）+ `retryLastUserMessage()`
+  + `TurnFailureRow` 的重试按钮（登出停止不给按钮）；两条渲染路径都接线。
+  `atSeq` 分叉 UI **有意未做**（消息级长按菜单会重踩「`combinedClickable` 吃掉长按、
+  选词手柄弹不出」那个坑，需单独设计入口）。门验：**44 类 / 410 用例 / 0 失败**。
+- **在途（第二批，未升版本号）**：**客户端接入服务端能力位** —— 解析 `connection.ready` 的
+  `bridgeVersion`/`capabilities`，设置页在「读到清单且缺关键能力」时**明说**
+  「插件过旧、审批与问答卡片不会出现」；清单缺失或为空一律算**未知**（不提示）——
+  假警告会让用户学会忽略警告。门验：**44 类 / 410 用例 / 0 失败**、`compileDebugKotlin` 真执行。
+  动机是「卡片不弹」与「本来就没有待审批」在屏幕上完全一样（该坑踩过两次，根因都在插件侧）。
+- **在途改动（未升版本号）**：对标第三方移动端 Whaleness（详见 `dsh-study/分析-2026-10-16/` 六份报告）
+  的 **A/B 两批客户端第一批**已落地 —— 会话页「滚动期冻结流式快照（80ms 稳定窗口）」、
+  「过程分组折叠 + 耗时摘要」（为此给 `ChatDisplayItem` 补了 `time` 字段）、思考条可展开、
+  设置页新增**外观**组（主题三档 + 应用内字号缩放 0.8–1.5× + 语言跟随系统）、
+  代码块高亮/语言标签/复制、消息内图片点击查看与保存相册、会话文件面板下载，
+  以及把工程纪律变成可执行门禁的 `ArchitectureGuardTest`（上线即抓到 `web/ChatWebBridge.kt`
+  自建网络客户端，已立账 `TECH-DEBT.md` DEBT-006）。
+  门验：**44 类 / 410 用例 / 0 失败**、`compileDebugKotlin` 真执行、`docsCheck` 通过；
+  **真机验收未做**（滚动手感、折叠观感、200% 系统字号布局都只能上机看）。
+  C 批（bridge 侧 `seq` 隔离 / 原子基线 / 交互重放等）与 A/B 剩余项见 `CHANGELOG-DEV.md` 2026-10-17 条末节。
 - 阶段：本 fork 的 **2.x 版本线**。**v2.2.41（versionCode 10066）应用改名 + 包名迁移，Gitee 与 AtomGit 双主备就位**（2026-10-16，tag v2.2.41，Gitee Release 已回验）。**GitHub 旧仓已删除并重建为镜像从站**，由 Actions 每 3 小时从 Gitee 自动同步（详见下文「渠道状态」）。
   应用名 `DeepSeek Harness` → **`DSH伴侣`**（英文 `DSH Companion`），包名 `io.github.hakunm.deepseekharness`
   → **`io.github.westanke.dshcompanion`**。动因是华为应用市场驳回「应用与『DeepSeek』名称相似、未提供商标权属证明」

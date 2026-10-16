@@ -2,6 +2,7 @@ package io.github.westanke.dshcompanion
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.westanke.dshcompanion.data.InterfaceStyle
 import io.github.westanke.dshcompanion.data.QUESTION_STATE_CONTINUED
 import io.github.westanke.dshcompanion.data.ChatContentParts
 import io.github.westanke.dshcompanion.data.ChatHistory
@@ -277,6 +278,49 @@ data class HarnessState(
     /** 是否显示上下文注入块；见 [AppPreferences.showContext]。 */
     val showContext: Boolean = false,
     /**
+     * 界面明暗风格（跟随系统 / 浅色 / 深色）；见 [AppPreferences.interfaceStyle]。
+     *
+     * 同样必须进状态：主题在三处被整个重建（初始、disconnect、loadSnapshot），
+     * 只在 setter 里改一次的话，用户切一次连接就会被系统配色顶回去。
+     */
+    val interfaceStyle: InterfaceStyle = InterfaceStyle.SYSTEM,
+    /** 应用内字号倍数；见 [AppPreferences.fontScale]。 */
+    val fontScale: Float = 1f,
+    /** 字号是否完全跟随系统；见 [AppPreferences.fontFollowsSystem]。 */
+    val fontFollowsSystem: Boolean = false,
+    /**
+     * 服务端自报的插件版本（来自 `connection.ready`）。**仅用于诊断展示**，
+     * 不作为功能判据 —— 能不能用某功能看的是能力位，不是版本号。
+     */
+    val bridgeVersion: String? = null,
+    /**
+     * 服务端自报的能力位（来自 `connection.ready`；旧服务端为空集 = **未知**）。
+     *
+     * 空集不等于「一条能力都没有」：调用方必须先确认真的读到了清单
+     * （见 [io.github.westanke.dshcompanion.data.parseBridgeCapabilities]），
+     * 否则每个旧服务端都会弹出假警告。
+     */
+    val bridgeCapabilities: Set<String> = emptySet(),
+    /**
+     * 已归档会话（按需拉取；空列表 = 没拉过或确实没有）。
+     *
+     * 与 [sessions] 分开存而不是合并成一个列表 + 标记位：归档视图是一个**独立的入口**，
+     * 合并会让「当前列表是哪些」这件事散落到每个渲染分支里。
+     */
+    val archivedSessions: List<ChatSession> = emptyList(),
+    /**
+     * 已并入的最后一个**持久事件序号**（断档检测用）。
+     *
+     * 换会话必须清空 —— 不同会话各有自己的序号序列，拿 A 的序号去比 B 的事件会**必然误判**。
+     * 判据见 `data/ChatSeqMonitor.kt`。
+     */
+    val lastEventSeq: Int? = null,
+    /**
+     * 服务端最近一次下发的**订阅基线**（`chat.session.snapshot` 的 `cursor`）；
+     * null = 还没收到过（旧服务端不会发，此时不做基线比较，见 ChatSeqMonitor）。
+     */
+    val baselineCursor: Int? = null,
+    /**
      * 发送中的输入框原文；发送成功后清空，失败时保留以便还回输入框。
      *
      * 为什么需要它：输入框是本地 UI 状态，发请求在协程里，两者对不上时
@@ -311,3 +355,14 @@ data class HarnessState(
     val attachmentUploading: Boolean = false,
     val error: String? = null,
 )
+
+/**
+ * 实际生效的应用内字号倍数。
+ *
+ * 勾了「跟随系统」时固定 1f —— 系统那份放大由 `Density.fontScale` 自己带，
+ * 这里若再返回用户存过的倍数就会**双重放大**（用户会看到「勾了跟随系统反而更大」）。
+ * 放在状态上而不是偏好里，是为了让界面读的是**已归一化**的值：偏好层面对
+ * NaN / 越界值做过兜底，但界面不该关心那件事。
+ */
+val HarnessState.effectiveFontScale: Float
+    get() = if (fontFollowsSystem) 1f else fontScale

@@ -97,6 +97,53 @@
     <string name="language">语言</string>
     <string name="chinese">中文</string>
     <string name="english">English</string>
+    <string name="language_follow_system">跟随系统</string>
+    <!-- 服务端插件过旧（缺少审批/问答能力位）时的明确提示：不留静默。 -->
+    <string name="retry">重试</string>
+    <!-- 会话统计（执行维度）。Token 用量与上下文压力本插件拿不到内核 usage，只在面板里明说。 -->
+    <string name="session_stats">会话统计</string>
+    <!-- 轨迹页：按轮次的时间轴，节点可展开看原始载荷。 -->
+    <string name="trajectory">轨迹</string>
+    <string name="trajectory_empty">这个会话还没有可回溯的历史</string>
+    <string name="trajectory_turn">第 %1$d 轮</string>
+    <string name="trajectory_unknown_turn">未归属轮次</string>
+    <string name="trajectory_tools">%1$d 个工具调用</string>
+    <string name="trajectory_user">用户消息</string>
+    <string name="trajectory_assistant">助手消息</string>
+    <string name="trajectory_tool">工具调用</string>
+    <string name="trajectory_deliverable">交付物</string>
+    <string name="trajectory_turn_end">轮次结束</string>
+    <string name="trajectory_other">其他事件</string>
+    <string name="trajectory_no_payload">（这条事件没有载荷）</string>
+    <string name="stats_turns">轮次</string>
+    <string name="stats_assistant">助手消息</string>
+    <string name="stats_tools">工具调用</string>
+    <string name="stats_events">事件总数</string>
+    <string name="stats_through">数据截至</string>
+    <string name="stats_empty">这个会话还没有可统计的历史</string>
+    <string name="stats_usage_unavailable">Token 用量与上下文压力需要内核提供 usage 数据，本插件暂拿不到，所以这里不给估算值 —— 估算误差成倍，会误导你对余量的判断。</string>
+    <!-- 从某条用户消息处开分支。 -->
+    <string name="fork_from_here">从这条分叉</string>
+    <string name="fork_confirm_title">从这条消息分叉？</string>
+    <string name="fork_confirm_body">会新建一个会话，保留到这条消息为止的内容；原会话不受影响。</string>
+    <string name="fork_confirm_action">分叉</string>
+    <!-- 已归档会话视图：接口来自 bridge 的 session-archive-list-v1 能力位。 -->
+    <string name="show_archived_sessions">已归档</string>
+    <string name="show_active_sessions">返回会话</string>
+    <string name="archived_empty">没有已归档的会话</string>
+    <string name="archived_sessions_hint">已归档的会话仍可打开；本插件暂不支持恢复归档，需在电脑端 WebUI 调整。</string>
+    <string name="bridge_outdated_warning">这台电脑的插件版本较旧（%1$s），审批与问答卡片不会出现 —— 请在电脑端把 dsh-remote-bridge 升级到最新版</string>
+    <!-- 外观：主题与字号。主题三档里「跟随系统」不可省（见 InterfaceStyle 的注释）。 -->
+    <string name="appearance">外观</string>
+    <string name="interface_style">界面风格</string>
+    <string name="interface_style_system">跟随系统</string>
+    <string name="interface_style_light">浅色</string>
+    <string name="interface_style_dark">深色</string>
+    <string name="font_scale">字号大小</string>
+    <string name="font_scale_value">%1$s×</string>
+    <string name="font_scale_desc">只作用于这个 App，会与系统字号相乘。</string>
+    <string name="font_follows_system">完全跟随系统字号</string>
+    <string name="font_follows_system_desc">打开后忽略上面的倍数，只用系统设置里的字号。</string>
     <string name="disconnect">断开连接</string>
     <string name="error">错误</string>
     <string name="file_too_large">文件过大，移动编辑器仅打开不超过 2 MiB 的文本。</string>
@@ -452,4 +499,8 @@
     <string name="web_no_connection">还没连上电脑 —— 请先在会话列表里选一台，选好本页会自动接着读</string>
     <string name="web_no_token">这台电脑还没有设备令牌，请重新配对</string>
     <string name="web_read_only_scope">这台设备没有 chat.write 权限，只能查看</string>
+    <!-- 消息内图片保存到相册的三条提示。失败必须说出来，不能静默。 -->
+    <string name="image_saved_to_gallery">已保存到相册</string>
+    <string name="image_save_needs_permission">相册需要「存储」权限，Android 10 以下需授权后才能保存</string>
+    <string name="image_save_failed">保存到相册失败</string>
 </resources>

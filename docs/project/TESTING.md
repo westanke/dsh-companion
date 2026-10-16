@@ -33,6 +33,96 @@
     该文件已把硬编码英文字面量改为按 `en` 配置开 Context 读 `values-en`，但**未实跑验证**。
   - **未做真机验收**：且因包名变更，验收前必须先卸载旧包（旧包无法覆盖安装）。
 
+- **2026-10-17 质量收尾：测试数字一致性并入门禁（未升版本号）**：
+  `:app:testDebugUnitTest` **44 类 / 410 用例 / 0 失败**（新增 `TestCountsTest`：三处声明一致 +
+  用例数 == 源码 `@Test` 静态计数）。**首跑如期变红**（它自己让 409 → 410），同步后转绿。
+  另查明一处口径：**测试文件 41 个 ≠ 测试类 43 个** —— `PreviewKindTest.kt` 里还有
+  `HtmlPreviewTest`、`ArchitectureGuardTest.kt` 里还有 `ArchitectureGuardSelfCheckTest`，
+  一个 `.kt` 可以声明多个测试类，所以文档里的「类数」不能拿文件数替代。
+- **2026-10-17 质量收尾：中英 strings 一致性并入门禁（未升版本号）**：
+  `:app:testDebugUnitTest` **44 类 / 410 用例 / 0 失败**（新增 `StringResourcesTest` 2 例：
+  键集合双向一致、占位符一致；含下限断言）。**首跑两例都红，是我的路径拼错**（把仓库根当资源目录），
+  测试对、实现错。
+- **2026-10-17 质量收尾：坑位索引一致性并入门禁（未升版本号）**：
+  `:app:testDebugUnitTest` **44 类 / 410 用例 / 0 失败**（`ArchitectureGuardTest` 新增
+  「坑位索引与 PITFALLS 正文双向一致」，含下限断言）。
+- **2026-10-17 B 批：Clock/Transport 接缝（未升版本号）**：
+  `:app:testDebugUnitTest` **44 类 / 410 用例 / 0 失败**（用例数不变：改的是既有用例的**测量方式**）。
+  `ConnectionCoordinator` 新增 `measureOverride` 接缝，三个依赖精确延迟比较的用例注入
+  `fixedLatency`，「谁更快」不再受机器负载影响；并发性与挂死超时两个用例保留真实延迟。
+  **DEBT-007 清账**。
+- **2026-10-17 Whaleness 舒适度：轨迹页 UI（未升版本号）**：
+  `:app:testDebugUnitTest` **44 类 / 410 用例 / 0 失败**（`TrajectoryTest` 增至 10 例：
+  加「原始 data 原样带上」「短耗时两种形态与边界」）。
+  **第三次被 `ArchitectureGuardTest` 抓到超预算**：`ChatDetail.kt` 810 行 →
+  拆出 `ChatHeader.kt`（163 行顶栏）→ 636 / 214。**未做真机**。
+- **2026-10-17 Whaleness 舒适度：轨迹页数据层（未升版本号）**：
+  `:app:testDebugUnitTest` **44 类 / 410 用例 / 0 失败**（新增 `TrajectoryTest` 8 例：
+  分组与排序、未知轮次不丢弃、Other 类型、五类映射、无名字工具、正常跨度、
+  **乱序/零跨度返回 null**、空历史）。**首跑红一条：测试对、实现错**（min/max 算耗时在乱序时给假跨度），
+  已改为「只在单调时给值」。另记 **DEBT-007**：`ConnectionCoordinatorTest` 的延迟容差用例 flaky。
+- **2026-10-17 C 批：交付物实时到达（未升版本号）**：
+  `:app:testDebugUnitTest` **44 类 / 410 用例 / 0 失败**（本次**无新增用例** ——
+  改动是 ViewModel 的事件分支，该层在本项目没有测试基建）；
+  `compileDebugKotlin` 真执行。**未做真机**。
+- **2026-10-17 C 批：会话统计（执行维度，未升版本号）**：
+  `:app:testDebugUnitTest` **44 类 / 410 用例 / 0 失败**（新增 `SessionStatsTest` 4 例：
+  各类型计数、未知类型只进总数、新鲜度取最大序号、空历史）；
+  `compileDebugKotlin` 真执行。**上下文用量环刻意不做**（内核 usage 不可证）。
+- **2026-10-17 C 批：断档检测与 resync（未升版本号）**：
+  `:app:testDebugUnitTest` **44 类 / 410 用例 / 0 失败**（新增 `ChatSeqMonitorTest` 8 例：
+  连续 / 跳号 / 重复 / 倒退 / 无序号 / 无起点 / 基线三种比较 / cursor 未知）；
+  `compileDebugKotlin` 真执行。**未做真机**：需人为构造「订阅窗口漏事件」才能看到 resync 生效。
+- **2026-10-17 B 批：历史投影缓存（未升版本号）**：
+  `:app:testDebugUnitTest` **44 类 / 410 用例 / 0 失败**（新增 `ChatVisibleItemsTest` 4 例：
+  思考永不显示、上下文按开关、顺序保持、空历史）；
+  `compileDebugKotlin` 真执行。**行数守卫第二次抓到超预算**（ChatDetail 797→越过 800），
+  拆出 `ChatScrollFreeze.kt` → 781。
+- **2026-10-17 B 批：事件去抖（未升版本号）**：
+  `:app:testDebugUnitTest` **44 类 / 410 用例 / 0 失败**（新增 `EventDebouncerTest` 5 例，
+  全部用 `runTest` 虚拟时间：风暴塌缩、窗口重置、分批各算、执行后再来、cancel。
+  **首跑红两条，抓出实现写成了节流而非去抖** —— 改实现后全绿）；
+  `compileDebugKotlin` 真执行。**未做真机**：批量改写文件时不再连发请求需上机验证。
+- **2026-10-17 B 批：请求代际隔离（未升版本号）**：
+  `:app:testDebugUnitTest` **44 类 / 410 用例 / 0 失败**（新增 `RequestGateTest` 4 例：
+  初始号有效、invalidate 作废此前所有号、连点会话只有最后的号算数、8 线程 × 500 次并发领号互不重复）；
+  `compileDebugKotlin` 真执行。**未做真机**：闸门语义有单测，端到端竞态仍需真机卡时序验证。
+- **2026-10-17 A 批收官：`atSeq` 分叉入口（第六批，未升版本号）**：
+  `:app:testDebugUnitTest` **44 类 / 410 用例 / 0 失败**（新增 `ChatForkPointTest` 4 例：
+  用户消息是分叉点、助手/过程行不是、`seq = 0` 与负数被拒）；`compileDebugKotlin` 真执行。
+  **行数守卫当场抓到超预算**（ChatMessageItems 806 / ChatDetail 805），按制度拆分为
+  `ChatMessageFooter.kt`(84) + `ChatForkDialog.kt`(39) → 752 / 797。
+  **未做真机**：入口观感与内核在 `atSeq` 处的包含边界（文案已避免承诺）。
+- **2026-10-17 消息气泡时间戳（第五批，未升版本号）**：
+  `:app:testDebugUnitTest` **44 类 / 410 用例 / 0 失败**（新增 `ChatTimeLabelTest` 6 例：
+  三档粒度、跨零点边界、中英形态、时区）。**首跑红了两条，两条都是测试假设错、实现对**：
+  换时区会连「哪一天」一起变（分档跟着掉档）；中文下 `MMM d` 实际是「10月 3」而非「10月3日」。
+  `compileDebugKotlin` 真执行。**未做真机**。
+- **2026-10-17 已归档会话可看（第四批，未升版本号）**：
+  `:app:testDebugUnitTest` **44 类 / 410 用例 / 0 失败**（`BridgeCapabilitiesTest` 补 1 例：
+  能力位存在 / 不存在 / 未知三种，未知必须为假 —— 否则入口会展示「一条归档都没有」的假结论）；
+  `compileDebugKotlin` 真执行。**未做真机**：切换入口与归档行观感需上机。
+- **2026-10-17 失败行「重试上一轮」（第三批，未升版本号）**：
+  `:app:testDebugUnitTest` **44 类 / 410 用例 / 0 失败**（新增 `ChatRetryTest` 5 例：
+  取最后一条用户消息、跳过空正文、无用户消息返回 null、越过中间行、逐字还原）；
+  `compileDebugKotlin` 真执行。**未做真机**：按钮观感与重试后历史刷新时序需上机。
+- **2026-10-17 客户端接入服务端能力位（第二批，未升版本号）**：
+  `:app:testDebugUnitTest` **44 类 / 410 用例 / 0 失败**（新增 `BridgeCapabilitiesTest` 9 例：
+  正常解析、缺失/空清单算未知、脏项跳过（含 `42` 这类数字原语）、非对象载荷、
+  缺口列表与顺序、依赖表守门）；`compileDebugKotlin` 真执行。
+  **未做真机**：警示条观感与「旧服务端不弹假警告」的完整链路需上机。
+- **2026-10-17 对标 Whaleness 的 A/B 两批客户端改动（未升版本号）**：
+  `:app:testDebugUnitTest` **44 类 / 410 用例 / 0 失败 / 0 跳过**（口径：数
+  `app/build/test-results/` XML）。本轮新增用例：过程分组 19（含 1 554 条序列的
+  「摊平后与输入完全相等」属性断言）、代码高亮 12（含 20 万字符病态输入的性能钉子）、
+  外观设置 10、架构门禁 8。其中 1 条是**修断言而不是改实现**：
+  `[1, 2]` 里的两个数字本就都该着色，初版期望写成了只匹配 "1"。
+  `compileDebugKotlin` 真执行（BUILD SUCCESSFUL）；`docsCheck` 8 文档 / 43 任务一致。
+  - **未做真机验收**：滚动期冻结流式快照的手感、过程组折叠的观感、应用内字号在
+    200% 系统字号下的布局、代码块长行横向滚动、图片保存到相册
+    （API 28 及以下缺 `WRITE_EXTERNAL_STORAGE`，会给出明确失败提示而不是静默）——
+    全部只能上机确认。**单测绿 ≠ 行为对**（AGENTS.md §5）。
+
 - **v1.9.0 产物**：`artifacts/DeepSeek-Harness-companion-v1.9.0.apk`，2,714,772 字节，SHA-256
   `03007f1cbffb037a51e5e9b87ea0dce76c47dd8a700434fa1abb311544ec3942`；versionCode `10009`、
   versionName `1.9.0`；APK Signature Scheme v2，唯一签名者 `CN=DSH Pocket Client`（RSA 2048）。

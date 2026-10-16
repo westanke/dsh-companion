@@ -127,7 +127,15 @@ class DshClient(
         execute(Request.Builder().url(pathUrl("trash", id, "restore")).post(EMPTY_BODY)).use(::ensureSuccess)
     }
 
-    fun sessions(): List<ChatSession> = get("chat/sessions", SessionList.serializer()).items
+    /**
+     * 会话列表；`archived = true` 时**只列已归档**的那批。
+     *
+     * 注意老 bridge 会**忽略**这个查询参数、照样返回未归档列表（不是报错），
+     * 所以调用方必须先确认能力位 `session-archive-list-v1`（见 `data/BridgeCapabilities.kt`），
+     * 否则会把「服务端不支持」读成「一条归档都没有」。
+     */
+    fun sessions(archived: Boolean = false): List<ChatSession> =
+        get(if (archived) "chat/sessions?archived=true" else "chat/sessions", SessionList.serializer()).items
 
     fun chatWorkspaces(): List<ChatWorkspace> = get("chat/workspaces", ChatWorkspaceList.serializer()).items
 

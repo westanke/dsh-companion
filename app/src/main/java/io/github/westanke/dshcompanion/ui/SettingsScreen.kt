@@ -33,6 +33,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -46,7 +47,25 @@ import io.github.westanke.dshcompanion.HarnessViewModel
 import io.github.westanke.dshcompanion.BuildConfig
 import io.github.westanke.dshcompanion.R
 import io.github.westanke.dshcompanion.data.BusySendMode
+import io.github.westanke.dshcompanion.data.InterfaceStyle
+import io.github.westanke.dshcompanion.data.missingRequiredCapabilities
 import io.github.westanke.dshcompanion.disconnect
+import java.util.Locale
+
+/**
+ * 字号倍数的可选区间与档位数。
+ *
+ * 与 `normalizeFontScale` 的区间**必须一致**：那里是兜底（防非法值），
+ * 这里是界面（防用户拖出界）。两处若各写一套，界面就会允许存下一个
+ * 偏好层立刻改写的值 —— 表现是「拖到底再进来，滑块自己弹回去一点」。
+ */
+private val FontScaleRange = 0.8f..1.5f
+
+/** 6 个中间档 → 步进 0.1（0.8/0.9/…/1.5 共 8 个落点）。 */
+private const val FontScaleSteps = 6
+
+/** 固定用 US locale 格式化：某些区域用逗号作小数点，「1,2×」会看着像笔误。 */
+private fun formatFontScale(value: Float): String = String.format(Locale.US, "%.1f", value)
 
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -116,6 +135,23 @@ fun SettingsScreen(state: HarnessState, viewModel: HarnessViewModel) {
                 WarningBanner(stringResource(R.string.http_warning), Modifier.padding(top = 8.dp, bottom = 22.dp))
             } else Spacer(Modifier.height(22.dp))
 
+            // 服务端能力位（新版插件才会带）。**读到了且缺关键能力**才提示：
+            // 旧插件不给清单 = 未知，此时弹警告只会教用户忽略警告。
+            //
+            // 这条提示补的是一个真实痛点：审批/问答卡片不出现时，手机端看起来与
+            // 「本来就没有待审批」一模一样，用户只能干等（见 PITFALLS §bridge 版本基线）。
+            val missingCapabilities = if (state.bridgeCapabilities.isEmpty()) {
+                emptyList()
+            } else {
+                missingRequiredCapabilities(state.bridgeCapabilities)
+            }
+            if (missingCapabilities.isNotEmpty()) {
+                WarningBanner(
+                    stringResource(R.string.bridge_outdated_warning, state.bridgeVersion ?: "?"),
+                    Modifier.padding(top = 8.dp, bottom = 22.dp),
+                )
+            }
+
             SettingsHeading(stringResource(R.string.device))
             SettingRow(Icons.Outlined.PhoneAndroid, state.device?.name.orEmpty(), state.device?.id.orEmpty())
             FlowRow(
@@ -131,21 +167,108 @@ fun SettingsScreen(state: HarnessState, viewModel: HarnessViewModel) {
             }
 
             SettingsHeading(stringResource(R.string.language))
-            val english = AppCompatDelegate.getApplicationLocales().toLanguageTags().startsWith("en")
+            // 语言三档：跟随系统 / 中文 / English。
+            //
+            // 「跟随系统」在这里必须存在：此前只有中英二选一，用户想跟着系统走
+            // 就只能每次进设置手动切。判据用 LocaleListCompat 的 tag 前缀 ——
+            // 空 tag 表示未指定（= 跟随系统），这正是 AppCompatDelegate 的语义。
+            val languageTag = AppCompatDelegate.getApplicationLocales().toLanguageTags()
+            val languageIndex = when {
+                languageTag.startsWith("en") -> 2
+                languageTag.startsWith("zh") -> 1
+                else -> 0
+            }
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(bottom = 28.dp)) {
                 SegmentedButton(
-                    selected = !english,
-                    onClick = { if (english) toggleLanguage() },
-                    shape = SegmentedButtonDefaults.itemShape(0, 2),
+                    selected = languageIndex == 0,
+                    onClick = {
+                        if (languageIndex != 0) {
+                            viewModel.markLanguageChosen()
+                            setAppLanguage(null)
+                        }
+                    },
+                    shape = SegmentedButtonDefaults.itemShape(0, 3),
+                    icon = { Icon(Icons.Outlined.Language, null) },
+                ) { Text(stringResource(R.string.language_follow_system)) }
+                SegmentedButton(
+                    selected = languageIndex == 1,
+                    onClick = {
+                        if (languageIndex != 1) {
+                            viewModel.markLanguageChosen()
+                            setAppLanguage("zh-CN")
+                        }
+                    },
+                    shape = SegmentedButtonDefaults.itemShape(1, 3),
                     icon = { Icon(Icons.Outlined.Language, null) },
                 ) { Text(stringResource(R.string.chinese)) }
                 SegmentedButton(
-                    selected = english,
-                    onClick = { if (!english) toggleLanguage() },
-                    shape = SegmentedButtonDefaults.itemShape(1, 2),
+                    selected = languageIndex == 2,
+                    onClick = {
+                        if (languageIndex != 2) {
+                            viewModel.markLanguageChosen()
+                            setAppLanguage("en")
+                        }
+                    },
+                    shape = SegmentedButtonDefaults.itemShape(2, 3),
                     icon = { Icon(Icons.Outlined.Language, null) },
                 ) { Text(stringResource(R.string.english)) }
             }
+
+            // 外观：界面风格 + 字号。两项都会被 Theme 在最外层消费，
+            // 所以这里改完立刻全 App 生效，不需要重启。
+            SettingsHeading(stringResource(R.string.appearance))
+            Text(
+                stringResource(R.string.interface_style),
+                modifier = Modifier.padding(bottom = 8.dp),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(bottom = 20.dp)) {
+                val styles = listOf(
+                    InterfaceStyle.SYSTEM to R.string.interface_style_system,
+                    InterfaceStyle.LIGHT to R.string.interface_style_light,
+                    InterfaceStyle.DARK to R.string.interface_style_dark,
+                )
+                styles.forEachIndexed { index, (style, label) ->
+                    SegmentedButton(
+                        selected = state.interfaceStyle == style,
+                        onClick = { viewModel.setInterfaceStyle(style) },
+                        shape = SegmentedButtonDefaults.itemShape(index, styles.size),
+                    ) { Text(stringResource(label)) }
+                }
+            }
+            SwitchRow(
+                title = stringResource(R.string.font_follows_system),
+                description = stringResource(R.string.font_follows_system_desc),
+                checked = state.fontFollowsSystem,
+                onCheckedChange = viewModel::setFontFollowsSystem,
+            )
+            Text(
+                stringResource(R.string.font_scale),
+                modifier = Modifier.padding(top = 12.dp),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            Slider(
+                // coerceIn 是防御性的：Slider 的 value 超出 valueRange 会直接抛异常，
+                // 而偏好里的旧值来自历史版本（那时区间可能是另一套）。
+                value = state.fontScale.coerceIn(FontScaleRange.start, FontScaleRange.endInclusive),
+                onValueChange = viewModel::setFontScale,
+                valueRange = FontScaleRange,
+                steps = FontScaleSteps,
+                enabled = !state.fontFollowsSystem,
+            )
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.font_scale_value, formatFontScale(state.fontScale)),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Text(
+                    stringResource(R.string.font_scale_desc),
+                    modifier = Modifier.padding(start = 8.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Spacer(Modifier.height(28.dp))
 
             // 智能体运行时的发送行为。放在这里是因为它不是「聊天页的临时开关」，
             // 而是一条会影响每次输入的长期习惯，用户需要能一眼看到自己设成了什么。

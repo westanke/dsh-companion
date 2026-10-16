@@ -712,6 +712,19 @@ private fun isExpired(credential: Credential): Boolean = credential.isExpired()
 
 fun toggleLanguage() {
     val current = AppCompatDelegate.getApplicationLocales().toLanguageTags()
-    val next = if (current.startsWith("en")) "zh-CN" else "en"
-    AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags(next))
+    setAppLanguage(if (current.startsWith("en")) "zh-CN" else "en")
+}
+
+/**
+ * 切换应用语言；[tag] 为 null 表示**跟随系统**。
+ *
+ * 抽出来是因为设置页的语言改成三档（跟随系统 / 中文 / English），
+ * 而原来只有一个二选一的 [toggleLanguage]。跟随系统用「空 LocaleList」表达 ——
+ * 这是 AppCompatDelegate 的约定，注意它与「从没设置过」在 API 上无法区分，
+ * 所以冷启动是否兜底中文要看 `AppPreferences.languageChosen` 那个标志。
+ */
+fun setAppLanguage(tag: String?) {
+    AppCompatDelegate.setApplicationLocales(
+        if (tag == null) LocaleListCompat.getEmptyLocaleList() else LocaleListCompat.forLanguageTags(tag)
+    )
 }

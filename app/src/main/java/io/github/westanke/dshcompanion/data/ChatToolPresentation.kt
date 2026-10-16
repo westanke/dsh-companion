@@ -44,6 +44,8 @@ internal fun toolItem(entry: HistoryEntry, toolResults: Map<String, ToolResultIn
         id = "${event.seq}-tool",
         seq = event.seq,
         kind = ChatItemKind.TOOL,
+        // 时间用于过程组的「耗时」摘要（组内首尾取差）。
+        time = event.time,
         // 标题就是动作短语（官方口径），不再是 "Code" / "Read" 这种英文类别词。
         title = actions.joinToString("，"),
         body = description ?: argumentsSummary(arguments) ?: viewTitle ?: name,

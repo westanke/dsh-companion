@@ -212,6 +212,7 @@ import java.io.InputStream
 import io.github.westanke.dshcompanion.ui.BinaryFilePreview
 import io.github.westanke.dshcompanion.ui.EmptyState
 import io.github.westanke.dshcompanion.closeSessionFile
+import io.github.westanke.dshcompanion.downloadSelected
 import io.github.westanke.dshcompanion.openSessionFile
 
 /**
@@ -230,6 +231,21 @@ internal fun SessionFilesSheet(state: HarnessState, viewModel: HarnessViewModel,
     // 只认当前会话的结果：切会话后残留的详情不该再显示（否则会看到上一个会话的文件）。
     val opened = state.sessionFileOpen?.takeIf { it.sessionId == state.selectedSessionId }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val context = LocalContext.current
+    // 下载**整条复用「文件」页那一份**：系统文件选择器（SAF）+ `viewModel.downloadSelected`。
+    // 不新写下载器 —— `openSessionFile` 成功时已经把 `selectedRootId` 与 `document` 指到了
+    // 这个文件上（见 HarnessSessionsViewModel.loadSessionFile），`downloadSelected` 读到的正是
+    // 它；另起一条读法只会多出一份没人测过的取字节路径。
+    //
+    // 为什么可以不比一遍路径就下：这个面板是模态的，而 `opened` 只在 `openSessionFile`
+    // 里被置上 —— 同一刻 `document` 也被指向同一个文件。想把它挪走只能去「文件」页，
+    // 那要关掉面板（关掉就 `closeSessionFile()` 清掉详情），所以「面板里显示 A、
+    // 下载却拿到 B」这条路走不通。
+    val downloadLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri ->
+        uri?.let { viewModel.downloadSelected { requireNotNull(context.contentResolver.openOutputStream(it)) } }
+    }
     ModalBottomSheet(
         onDismissRequest = onClose,
         sheetState = sheetState,
@@ -238,7 +254,16 @@ internal fun SessionFilesSheet(state: HarnessState, viewModel: HarnessViewModel,
         if (opened == null) {
             SessionFileList(state, viewModel::openSessionFile)
         } else {
-            SessionFileDetail(opened, viewModel::closeSessionFile)
+            SessionFileDetail(
+                open = opened,
+                onBack = viewModel::closeSessionFile,
+                // 落到系统选择器的默认文件名：面板里显示的就是路径，取末段才像「另存为」。
+                onDownload = {
+                    downloadLauncher.launch(
+                        opened.requestedPath.substringAfterLast('/').ifBlank { "download" },
+                    )
+                },
+            )
         }
     }
 }
@@ -369,7 +394,7 @@ internal fun SessionFileRow(ref: SessionFileRef, onClick: () -> Unit) {
 }
 
 @Composable
-internal fun SessionFileDetail(open: SessionFileOpen, onBack: () -> Unit) {
+internal fun SessionFileDetail(open: SessionFileOpen, onBack: () -> Unit, onDownload: () -> Unit) {
     val resolved = open.resolved
     val preview = open.preview
     val failure = open.failure
@@ -441,7 +466,9 @@ internal fun SessionFileDetail(open: SessionFileOpen, onBack: () -> Unit) {
                         skippedForSize = open.tooLarge,
                         fallbackMessage = stringResource(R.string.session_file_binary),
                         skippedHint = stringResource(R.string.session_file_files_hint),
-                        onDownload = null,
+                        // 传了才有这个按钮：跳过预览的大文件（图片 / PDF 超上限）在面板里
+                        // 只有「已跳过预览」一句提示，没有出路就等于看不到也拿不走。
+                        onDownload = onDownload,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
