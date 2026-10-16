@@ -55,11 +55,11 @@ scripts/build.sh docsCheck          # 文档一致性（8 文档 / ROADMAP 任�
    工具链那份会与 `settings.gradle.kts` 的 `FAIL_ON_PROJECT_REPOS` 冲突直接构建失败）；
 3. Gradle 对同一项目目录互斥，脚本用 `flock` 串行化。
 
-> **CI 口径**：`.github/workflows/android.yml` 跑
-> `docsCheck testDebugUnitTest lintDebug assembleDebug`。
-> **本地照抄会假绿**：本机构建走镜像与本地缓存，与 hosted runner 环境不同；
-> 结论以本地 `testDebugUnitTest` + `docsCheck` 为准，lint 仅在有 `lint-baseline` 时作参考
-> （当前无 baseline，勿把 lint warning 数当门禁）。
+> **CI 口径**：`.github/workflows/android.yml` 的硬门是
+> `docsCheck testDebugUnitTest assembleDebug`；`lintDebug` 仅生成报告并上传 artifact，不拦截
+> （当前无 baseline，16 个既有 lint error 未清，勿当门禁）。hosted runner 可直连
+> services.gradle.org 与 maven.google.com，无需本项目的 `init-mirrors.gradle`（那是本机/CN 用的）。
+> **结论仍以本地 `scripts/build.sh testDebugUnitTest` + `docsCheck` 为准。**
 
 ---
 

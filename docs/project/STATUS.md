@@ -57,7 +57,10 @@
     重建实路（GitHub Import API 已 410/404 废弃、网页 Importer 在本机网络卡 availability 检查）：
     ① 建空仓；② 经 Contents API（api.github.com 可达）提交引导版 `mirror-sync.yml`；
     ③ workflow 在 GitHub runner 上从 Gitee `clone --mirror` 再 `push --mirror` 覆盖空仓——
-    普通 git 传输**保留真实 commit hash**，重建后 GitHub main 与 Gitee 同为 `df6dcc5`（19 tag 齐全）。
+    普通 git 传输**保留真实 commit hash**，重建后 GitHub main 与 Gitee 每次同步后 SHA 逐字一致（19 tag 齐全）。
+    重建当次另修两处既有 CI 问题：`setup-android@v3` 默认装已下架的 `tools` 包（改显式声明
+    `platform-tools platforms;android-36 build-tools;36.0.0`）、`lintDebug` 16 个既有错误被当硬门禁
+    （按 AGENTS.md「无 baseline 勿当门禁」改为仅出报告，硬门为 docsCheck + 单测 + assembleDebug）。
   - **自动同步机制**：`.github/workflows/mirror-sync.yml` 每 3 小时（UTC `17 */3 * * *`）+ 手动触发，
     两个 job：① 内嵌自举段（等价 `scripts/ci/mirror-push.sh`）在 runner 上从 Gitee（不可达则回退 AtomGit）
     `git clone --mirror` 后 `git push --mirror` 到本仓——refs 全量对齐，主源删分支/tag 从站跟随删除。
