@@ -518,6 +518,10 @@ internal fun ChatDetail(
         // 有思考才渲染，没有时整条不存在 —— 不用 AnimatedVisibility 收起，
         // 那会留下一条带边框的空缝，在输入区上方永久挡着一行。
         ChatThinkBar(liveThinking)
+        // 生成合成内容标识（v2.2.41）：常驻，不进消息列表。放在思考条**之后**——
+        // 两者都在「消息区下方 / 输入区上方」这一条窄带里，标识必须紧贴输入框（用户产生
+        // AI 内容的地方），否则被思考条挤到上面去就离生成动作远了。
+        AiGeneratedNotice()
         when (val approvals = state.approvalState) {
             ApprovalUiState.None -> Composer(
                 value = message,

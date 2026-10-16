@@ -475,6 +475,10 @@ Use HTTPS through Caddy/Nginx, Tailscale/WireGuard, another VPN, or a trusted tu
 - Device tokens use Android Keystore-backed encrypted storage.
 - Provider secrets are written to the DSH credential store and never read back into the app.
 - Chat and file data is sent only to the DSH address configured by the user.
+- **Generated-content notice**: per Art. 4 of China's *Measures for Labelling AI-Generated Synthetic
+  Content*, a persistent notice ("内容由 AI 生成，请甄别后使用") sits above the chat composer.
+  You configure the model yourself and generation happens on your own DSH server; this app does not
+  provide an AI generation service and sends nothing to any third party.
 
 ## Troubleshooting
 

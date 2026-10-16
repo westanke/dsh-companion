@@ -152,6 +152,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -550,6 +551,41 @@ internal fun isSoftKeyboardEvent(nativeFlags: Int): Boolean =
  * 为什么不放进消息流：它是「运行状态」而不是「会话内容」。插在列表里会随消息滚动、
  * 把正文挤开，一屏行里也根本找不着（这条原来是列表里的一个 ActivityRow）。
  */
+
+/**
+ * 生成合成内容标识条（《人工智能生成合成内容标识办法》第四条：应当在生成合成内容或者
+ * 交互场景界面中添加、可以被用户明显感知到的**显式标识**）。
+ *
+ * 为什么放在这里（输入区正上方、消息区正下方）：
+ * - 与 [ChatThinkBar] 同为「非消息内容」的常驻条，位置固定、**不进** LazyColumn ——
+ *   进了列表就会随消息滚走，用户看几屏之后就再也见不到，标识也就失去意义；
+ * - 输入框是用户产生 AI 内容的地方，标识贴在它正上方，看到与生成之间没有心智隔断；
+ * - 尺寸走 `labelSmall` + `onSurfaceVariant`，刻意弱于正文 —— 这是常驻合规提示，
+ *   不是正文的一部分，抢注意力会干扰长会话阅读。
+ *
+ * 为什么只有一行、不做成弹窗或一次性浮层：
+ * 第四条的措辞是「界面中添加…提示标识」，常驻优于一次性提示；弹窗类方案会打断会话，
+ * 且「已关闭不再提示」之后用户就再也看不到标识，反而更不合规。
+ *
+ * 免责范围说明：本 App 是**纯客户端**，生成方是用户自己部署的 DSH 服务端、模型由用户
+ * 自行配置，内容不出用户自己的地址。这条标识是按「从严」口径加的，不改变本 App
+ * 在资质上的定性（那由服务端承担，见 CHANGELOG-DEV v2.2.41 备注）。
+ */
+@Composable
+internal fun AiGeneratedNotice() {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = stringResource(R.string.ai_generated_notice),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
 
 @Composable
 internal fun ChatThinkBar(raw: String) {

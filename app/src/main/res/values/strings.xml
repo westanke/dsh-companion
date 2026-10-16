@@ -5,6 +5,9 @@
     <string name="server">服务器</string>
     <string name="device_pairing">设备配对</string>
     <string name="connect_title">连接 你的 DSH 服务端</string>
+    <!-- 生成合成内容标识：《人工智能生成合成内容标识办法》第四条要求的界面显式标识。
+         常驻输入区上方，不随消息滚动，也不进 LazyColumn。 -->
+    <string name="ai_generated_notice">内容由 AI 生成，请甄别后使用</string>
     <string name="connect_subtitle">连接已启用远程访问的 DSH 工作区</string>
     <string name="server_address">服务器地址</string>
     <string name="pairing_code">一次性配对码</string>

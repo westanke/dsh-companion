@@ -5,6 +5,9 @@
     <string name="server">Server</string>
     <string name="device_pairing">Device pairing</string>
     <string name="connect_title">Connect to your DSH server</string>
+    <!-- Generated-content notice required by Art. 4 of the China's AI Content Labelling Measures.
+         Sits above the composer, does not scroll with the message list. -->
+    <string name="ai_generated_notice">AI-generated content — please review before use</string>
     <string name="connect_subtitle">Connect to a DSH workspace with remote access enabled</string>
     <string name="server_address">Server address</string>
     <string name="pairing_code">One-time pairing code</string>
