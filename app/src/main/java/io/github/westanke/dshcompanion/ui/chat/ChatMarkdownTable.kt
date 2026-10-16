@@ -1,5 +1,7 @@
 package io.github.westanke.dshcompanion.ui.chat
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,6 +11,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -16,25 +19,21 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 /**
- * Markdown 表格渲染：**两列**（左字段名、右值），右列自然折行。
+ * Markdown 表格渲染：**真表格**（表头行 + 边框 + 数据行）。
  *
- * ## 为什么不是「一列一个字段的竖排卡片」
+ * ## 样式依据
  *
- * 第一版就是竖排卡片（每个字段单独一张卡、字段名与值上下排）。真机反馈「**表格没可读性了**」：
- * 竖排卡片把「阶段 / 做什么 / 目的」这种**多字段行**拆成三截，读一行要在三张卡之间跳，
- * 而且每张卡自带背景与圆角，视觉噪音比原来的表格还大。
+ * 对照 Whaleness（`dsh-study/实施-2026-10-17/截图/图2-whaleness.jpg`）定的稿：
+ * 表头一行（深色底、白字）、数据行浅底、行与列都有分隔线。这样它**看起来就是一张表** ——
+ * 而不是「一段左边有字段名的文字」。
  *
- * 对照 Whaleness（`dsh-study/实施-2026-10-17/截图/图2-whaleness.jpg`）后改成现在这样：
- * **每行数据一行**，左边字段名（窄列、固定宽）、右边值（**宽列、自然折行**），
- * 字段与字段之间用细分隔线隔开 —— 与网页端表格的阅读顺序一致，长值也不会被切掉。
+ * 三轮真机反馈的演进（都留在这里，免得再走回头路）：
+ * 1. 第一版用渲染库默认表格 → **横向滚动 + 固定列宽**，手机上一宽右侧被切掉；
+ * 2. 第二版改成「一字段一张竖排卡片」→ 被反馈「**没可读性了**」（多字段行要跳着看）；
+ * 3. 第三版改成「两列 + 无表头」→ 被反馈「**不像表**」（就是普通文字行，缺表头与边框）。
  *
- * ## 表格为什么能出现（第一版的隐藏坑）
- *
- * 渲染库 `com.mikepenz.markdown` 默认用 **CommonMark** flavour —— 它**不解析 GFM 表格**，
- * 所以 `MarkdownComponents.table` 这个回调**根本不会被调用**，表格会被当成普通段落渲染
- * （表现就是「阶段 / 做什么 / 目的」竖排密排、没有表格结构）。
- * 修法：给 `Markdown(...)` 传 `flavour = GFMFlavourDescriptor()`，
- * 表格节点才会被解析出来，本组件才会接上。
+ * 所以现在是第四版：**保留两列布局**（左字段名窄、右值宽且折行），
+ * 但补上表头行与分隔线 —— 折行与表格感两个都要，不是二选一。
  */
 internal data class MarkdownTable(
     val header: List<String>,
@@ -105,57 +104,87 @@ private fun isSeparatorRow(cells: List<String>): Boolean =
     cells.isNotEmpty() && cells.all { it.matches(Regex("^:?-{1,}:?$")) }
 
 /** 字段名列的宽度上限：超过就省略（右侧的值才是重点）。 */
-private val LABEL_MAX_WIDTH = 108.dp
+private val LABEL_MAX_WIDTH = 104.dp
 
 /**
- * 一行数据一行：左边字段名、右边值。
+ * 表格本体：**表头行 + 数据行**，行与列都有分隔线。
  *
- * 右侧的值**刻意不设 `maxLines`**：Compose 的 `Text` 默认就是自动折行的，
+ * 值这一侧**刻意不设 `maxLines`**：Compose 的 `Text` 默认就是自动折行的，
  * 而默认渲染之所以截断，正是因为库那边给了固定列宽 —— 这里从根上去掉那个约束。
  */
 @Composable
 internal fun ChatMarkdownTable(table: MarkdownTable, modifier: Modifier = Modifier) {
-    // 每行一张 Surface 而不是 Card：Whaleness 那边也是「一块浅底 + 细分隔线」，
-    // 不需要圆角浮起的效果（那是表单控件的感觉，不是阅读材料）。
+    // 外框一道边 + 圆角：图2 Whaleness 那边也是「一张有边框的表」，
+    // 没有这道边，内部再多分隔线也还是一段文字。
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         shape = MaterialTheme.shapes.small,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+        Column(Modifier.fillMaxWidth()) {
+            // ── 表头行：深色底 + 白字，一眼看出「这是列名」而不是数据 ──
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            ) {
+                TableRow(
+                    cells = table.header,
+                    isHeader = true,
+                    showBottomDivider = true,
+                )
+            }
+            // ── 数据行 ──
             table.rows.forEachIndexed { rowIndex, row ->
-                if (rowIndex > 0) {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 6.dp),
+                if (rowIndex > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                TableRow(cells = row, isHeader = false, showBottomDivider = false)
+            }
+        }
+    }
+}
+
+/** 表格的一行：每列之间一道竖线，列宽按内容（字段名列有上限、值列吃掉剩余宽度）。 */
+@Composable
+private fun TableRow(cells: List<String>, isHeader: Boolean, showBottomDivider: Boolean) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            cells.forEachIndexed { columnIndex, cell ->
+                if (columnIndex > 0) {
+                    VerticalDivider(
+                        modifier = Modifier.padding(horizontal = 8.dp),
                         color = MaterialTheme.colorScheme.outlineVariant,
                     )
                 }
-                row.forEachIndexed { columnIndex, cell ->
-                    if (columnIndex > 0) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(vertical = 6.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant,
-                        )
-                    }
-                    Row(verticalAlignment = Alignment.Top) {
-                        Text(
-                            table.header.getOrNull(columnIndex) ?: "#${columnIndex + 1}",
-                            modifier = Modifier
-                                .widthIn(max = LABEL_MAX_WIDTH)
-                                .padding(end = 10.dp, top = 2.dp, bottom = 6.dp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.labelMedium,
-                        )
+                if (columnIndex == 0) {
+                    // 第一列是字段名：窄列、最多两行、超出省略。
+                    Text(
+                        cell,
+                        modifier = Modifier.widthIn(max = LABEL_MAX_WIDTH).padding(start = 10.dp),
+                        color = if (isHeader) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                } else {
+                    // 其余列是值：吃掉剩余宽度、自然折行。
+                    Box(Modifier.weight(1f).padding(end = 10.dp)) {
                         Text(
                             cell.ifBlank { "—" },
-                            modifier = Modifier.weight(1f).padding(top = 2.dp, bottom = 6.dp),
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
                 }
             }
+        }
+        if (showBottomDivider) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
         }
     }
 }
