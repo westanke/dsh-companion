@@ -281,13 +281,16 @@ scripts/build.sh :app:testDebugUnitTest     # unit tests
 
 ## Download and install
 
-Download from this repository's Releases (both hosts carry the same file — pick either):
+Download from Releases. **Gitee is the primary host (shipped there first)**; AtomGit is the
+in-China code mirror, and GitHub is an auto-synced mirror (pulled from Gitee every 3 hours,
+so its Release assets may lag slightly):
 
-- GitHub: <https://github.com/westanke/dsh-companion/releases/latest>
-- Gitee (faster from mainland China): <https://gitee.com/westanke/dsh-companion/releases/latest>
+- Gitee (recommended, fastest in mainland China): <https://gitee.com/westanke/dsh-companion/releases/latest>
+- GitHub (mirror): <https://github.com/westanke/dsh-companion/releases/latest>
+- AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DeepSeek-Harness-companion-v2.2.40.apk
+DSH伴侣-companion-v2.2.41.apk
 ```
 
 Requirements:
@@ -317,8 +320,8 @@ generated: the subject was kept identical on purpose, but it is **not the old ke
   build requires an uninstall too.
 
 Release history: `v1.1.0` / `v1.2.0` / `v1.4.0` / `v1.9.0` are tagged; `v1.5.0`–`v1.8.0` are not tagged
-separately — their features shipped together in `v1.9.0`. The `v2.0.0`–`v2.2.19` line has no tags; `v2.2.20` and `v2.2.23` are tagged and released on both sites
-(as of 2026-10-11); artifacts live in `artifacts/` and on the Releases page.
+separately — their features shipped together in `v1.9.0`. The `v2.0.0`–`v2.2.19` line has no tags; from `v2.2.20`
+onward tags are kept across Gitee / AtomGit / GitHub (GitHub is an auto-synced mirror); artifacts are on the Releases page.
 
 ## Screenshots
 

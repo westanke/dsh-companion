@@ -1,9 +1,11 @@
 # 工具审批 / ask_user_question 双链路端到端调研
 
 调研对象：`/media/wangke/OFFICE/workspace/dsh-companion`
-源码根：`app/src/main/java/io/github/hakunm/deepseekharness/`
+源码根：`app/src/main/java/io/github/westanke/dshcompanion/`
+（v2.2.41 包名迁移前为 `io/github/hakunm/deepseekharness/`；本文行号写于迁移前，
+路径前缀按此对照，类名与相对位置不变）
 
-行号均对应当前工作区文件内容。
+行号对应本文调研当时的工作区文件内容（迁移前）。
 
 ---
 

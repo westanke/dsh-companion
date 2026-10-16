@@ -1,7 +1,7 @@
 # 当前状态
 
 - 日期：2026-10-16
-- 阶段：本 fork 的 **2.x 版本线**。**v2.2.41（versionCode 10066）应用改名 + 包名迁移，已发 Gitee**（2026-10-16，tag v2.2.41，Release 已回验）。**GitHub 侧未推，欠 31 个提交**（详见下文「渠道状态」）。
+- 阶段：本 fork 的 **2.x 版本线**。**v2.2.41（versionCode 10066）应用改名 + 包名迁移，Gitee 与 AtomGit 双主备就位**（2026-10-16，tag v2.2.41，Gitee Release 已回验）。**GitHub 旧仓已删除并重建为镜像从站**，由 Actions 每 3 小时从 Gitee 自动同步（详见下文「渠道状态」）。
   应用名 `DeepSeek Harness` → **`DSH伴侣`**（英文 `DSH Companion`），包名 `io.github.hakunm.deepseekharness`
   → **`io.github.westanke.dshcompanion`**。动因是华为应用市场驳回「应用与『DeepSeek』名称相似、未提供商标权属证明」
   —— `NOTICE` 那份 MIT 只覆盖 logo **著作权**，不是**商标权**。
@@ -36,8 +36,8 @@
   - 2026-10-11 说明：**原始那把发布钥匙的密码已彻底丢失**（本机/仓库/CI/git 历史全查过），现用的是**重新生成**的钥匙，主题刻意与旧钥匙一致（同为 `CN=DSH Pocket Client`）。
   - 后果：**它不是旧钥匙** —— v1.9.0 及更早（旧 `CN=DSH Pocket Client`，证书 `4e7fa1db…`）与上游 `CN=Hakunm` 都盖不上去，跨签名升级**必须先卸载**（会清除已保存的连接）。**v2.2.24 之后的包彼此可以直接覆盖**（v2.2.26 → v2.2.27 实测同一把钥匙）
   - 旧钥匙已归档在同目录 `archived-unknown-password/` 下，保留不删
-- 仓库：`https://github.com/westanke/dsh-companion`、`https://gitee.com/westanke/dsh-companion`；上游 `Hakunm/dsh-android-app` 只作参考，**不推送**
-- 已打 tag（`git tag` 实测，2026-10-16）：`v1.1.0` / `v1.2.0` / `v1.4.0` / `v1.9.0` / `v2.2.20` / `v2.2.23` / `v2.2.26` / `v2.2.27` / `v2.2.28` / `v2.2.29` / `v2.2.30` / `v2.2.31` / `v2.2.32` / `v2.2.33` / `v2.2.34` / `v2.2.35` / **`v2.2.39`**。v2.0.0–v2.2.19 之间没有 tag；**v2.2.36–v2.2.38 没有独立 tag**（随 v2.2.39 一并发布）
+- 仓库：Gitee 主站 `https://gitee.com/westanke/dsh-companion`、AtomGit 备站 `https://atomgit.com/westanke163/dsh-companion`、GitHub 镜像从站 `https://github.com/westanke/dsh-companion`（自动同步，勿手工推）；上游 `Hakunm/dsh-android-app` 只作参考，**不推送**
+- 已打 tag（`git tag` 实测，2026-10-16）：`v1.1.0` / `v1.2.0` / `v1.4.0` / `v1.9.0` / `v2.2.20` / `v2.2.23` / `v2.2.26` / `v2.2.27` / `v2.2.28` / `v2.2.29` / `v2.2.30` / `v2.2.31` / `v2.2.32` / `v2.2.33` / `v2.2.34` / `v2.2.35` / `v2.2.39` / `v2.2.40` / **`v2.2.41`**（共 19 个）。v2.0.0–v2.2.19 之间没有 tag；**v2.2.36–v2.2.38 没有独立 tag**（随 v2.2.39 一并发布）
 - 真机验收：**审批与问答卡片已确认修好（2026-10-16）**，但**修的是插件侧，本 App 一行未改**。plan 模式评审实测：**手机端弹出卡片，电脑端 WebUI 同时正常弹出**（红线「不得抢答」未踩）。病根是 `dsh-remote-bridge` 的两个钩子注册时没带 Cordis 的 `{ prepend: true }`，被 `push` 到 waterfall 链尾、排在官方 WebUI 之后，于是永不被调用；插件 **v2.3.7** 已修并真机验证。**此前「10-11 能弹、10-16 又不弹」两次结论相反的悬案就此解开**：不是非稳定复现，而是 `sessionIdOfAgent`（v2.3.6 修）与 `prepend`（v2.3.7 修）**两个病根叠加**——前者修好后后者仍在，症状看起来「回来了」。**App 侧代码（订阅、拉取、渲染三环）自始至终是对的。**v2.2.27 的七项修复**待本轮真机验收**。**尚未逐项验收**：图片/PDF 预览的翻页与缩放手感、工具调用详情的展开观感、长按选中/双击复制的手势边界、`dsh-ui` 卡片观感、HTML 结构预览排版、输入区 `⋯` 菜单在窄屏与各输入法下的可达性
 - 已知缺口：
   - 单测夹具 `ConnectionShareInteropTest.kt` 仍内嵌一枚**已吊销**的真实设备令牌；该文件在 `app/src` 内，是否改写夹具待定（文档侧已全部脱敏）
@@ -45,13 +45,23 @@
 - 插件侧的定位过程值得一读：`dsh-remote-bridge/docs/project/PITFALLS.md` §waterfall 不 prepend 就等于没注册（含 Cordis 源码行号）——最反直觉的一点是，**提问钩子的源码注释里早就写对了机理，只是注册时漏了这个选项**，且失败完全静默、两侧日志都不说一句话。另一份 `RETRO-question-card.md` 复盘的结论是：**卡片代码从头到尾都是对的**，错的是排查方法（先解释现象、却没先确认现象真的发生过）
 - 阻塞项：`PARITY.md` 中仍有后续 DSH WebUI 能力未对等；`IME-001` 继续扩大不同厂商键盘实机覆盖
 - 下一步：真机验收 v2.2.27 的七项修复与上一条列的未验收项；按需补齐 DSH WebUI 对等能力（设置五大组、终端、插件启停等需要先改插件开 REST 通道）
-- **渠道状态（2026-10-16，用户定调「Gitee 为主、GitHub 为从」）**：
+- **渠道状态（2026-10-16，三端拓扑：Gitee 主 / AtomGit 备 / GitHub 镜像从站）**：
   - **Gitee = 主站**：代码、tag v2.2.41、Release（含 APK / SHA256SUMS.txt / RELEASE_NOTES 三个资产）全部就位，
     资产已**下载回验**，字节数 2,895,430 与 SHA-256 `5317b009…f957` 与本地三处一致。
-  - **GitHub = 从站，仍欠 31 个提交**：远端 `main` 停在 `fad3521`（对应本地 `bb2e0d8`，v2.2.40 发版文档就绪）。
-  - **欠账性质**：不是普通落后，而是**历史重写造成的分叉** —— 分叉点 `8fcbf0c`（v2.2.35）之后，
-    两边 11 个提交**两两树对象完全相同**（已逐一验证），内容零差异，只是 commit hash 不同。
-  - **试过 `git merge origin/main`，47 个文件冲突**（28 AA + 15 UU + 4 DU）：本地已做包名迁移而远端线没有，
-    于是 87 个 Kotlin 文件变成「远端新增 / 本地删除」的对撞。**已 `git merge --abort` 回退，未留下任何冲突残留。**
-    合并提交还会触发镜像脚本 422（见 `PITFALLS.md`），所以这条路要走通必须先线性化历史（`-X ours` 或 squash 重放）。
-  - 待网络与策略合适时再做；届时**禁止 `--force`**（用户硬规矩）。
+  - **AtomGit = 备站**（`westanke163/dsh-companion`，注意账号名与 Gitee 不同）：2026-10-16 建仓并全量推送
+    main + 19 个 tag，与 Gitee 逐个 ref 比对 SHA 一致（v1.1.0/v1.2.0 两个最老轻量 tag 两端服务端展开方式
+    略有差异，指向的 commit 相同，无实际影响）。AtomGit 只镜像代码，不承担 Release。
+  - **GitHub = 镜像从站**：旧仓存在 v2.2.35 之后**历史重写分叉**（两边 11 个提交树对象两两相同、hash 不同；
+    试过 `git merge origin/main` 爆 47 个冲突，`git merge --abort` 已回退无残留），手工合并/推送此路不通，
+    加上本机到 `github.com:443` 长期被阻断。用户拍板：**删除旧仓、从 Gitee 导入重建**（GitHub Importer
+    保留真实 commit hash），此后不再手工推 GitHub。
+  - **自动同步机制**：`.github/workflows/mirror-sync.yml` 每 3 小时（UTC `17 */3 * * *`）+ 手动触发，
+    两个 job：① `scripts/ci/mirror-push.sh` 在 runner 上从 Gitee（不可达则回退 AtomGit）`git clone --mirror`
+    后 `git push --mirror` 到本仓——refs 全量对齐，主源删分支/tag 从站跟随删除；GITHUB_TOKEN 推送不会
+    递归触发 workflow。② `scripts/ci/sync-releases.py` 幂等把 Gitee Release 正文与三类资产
+    （APK / SHA256SUMS.txt / RELEASE_NOTES，源码包不搬，GitHub 自动生成）补到 GitHub，已存在即跳过，
+    已用 `DRY_RUN=1` 本地干跑验证（v2.2.41 三个资产含中文文件名识别正确）。
+  - **本地推送**：`bash scripts/push-all.sh` 只推 Gitee + AtomGit（`PUSH_TAGS=1` 推标签，
+    `INCLUDE_GITHUB=1` 才会顺带试 GitHub）；远端命名用 `bash scripts/setup-remotes.sh` 幂等整理。
+  - 历史教训留档：历史重写分叉的来龙去脉与「merge 提交触发镜像脚本 422」见 `PITFALLS.md` 对应条目；
+    旧的 31 提交欠账随删仓一笔勾销，不再需要线性化历史，也不再在本地对 GitHub 使 `--force`。

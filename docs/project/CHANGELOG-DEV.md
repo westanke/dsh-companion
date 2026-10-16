@@ -3,6 +3,40 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## 2026-10-16 · 渠道基建（不升版本号，App 零改动）：三端拓扑 Gitee 主 / AtomGit 备 / GitHub 镜像从站
+
+### 基于什么
+
+用户指令原话：「atomgit也推，删除github所有内容，让重新自动从atomgit和Gitee去自动同步」。
+背景是 GitHub 侧旧账已经还不动：v2.2.35（分叉点 `8fcbf0c`）之后历史被重写，两边 11 个提交
+树对象两两相同但 hash 不同，`git merge origin/main` 爆 47 个冲突（28 AA + 15 UU + 4 DU）；
+本机到 `github.com:443` 又长期被阻断，手工推送只能走 REST 重建哈希，永远对不齐。
+
+### 干了什么
+
+1. **AtomGit 建仓并全量推送**：`westanke163/dsh-companion`（AtomGit 账号名是 westanke163，
+   与 Gitee/GitHub 的 westanke 不同），main + 19 个 tag 全量推送，与 Gitee 逐 ref 比对 SHA 一致。
+2. **删除 GitHub 旧仓并从 Gitee 导入重建**：GitHub Importer 保留**真实 commit hash**，
+   31 个提交欠账与历史分叉随删仓一笔勾销，不再需要线性化、不需要 `--force`。
+3. **自动同步工作流** `.github/workflows/mirror-sync.yml`（每 3 小时 + 手动 `workflow_dispatch`）：
+   - `scripts/ci/mirror-push.sh`：runner 上 `git clone --mirror` Gitee（不通回退 AtomGit），
+     再 `git push --mirror` 到本仓——refs 全量对齐，含删除面；GITHUB_TOKEN 推送不递归触发 workflow；
+   - `scripts/ci/sync-releases.py`：Gitee Release 正文与三类资产（APK / SHA256SUMS.txt /
+     RELEASE_NOTES，不搬 GitHub 会自动生成的 zip/tar.gz）幂等补到 GitHub，已存在即跳过。
+4. **本地推送工具**：`scripts/push-all.sh`（默认只推 Gitee + AtomGit，`PUSH_TAGS=1` 推标签，
+   `INCLUDE_GITHUB=1` 才试 GitHub，`FORCE=1` 才走 `--force-with-lease`）；
+   `scripts/setup-remotes.sh` 幂等整理远端命名（origin=GitHub / gitee / atomgit，upstream 只读不动）。
+
+### 测什么
+
+- AtomGit 回读：`git ls-remote` 36 行 vs Gitee 38 行，差异仅 v1.1.0/v1.2.0 两个最老轻量 tag
+  在两端服务端的 `^{}` 解引用展示，指向 commit 相同（本地验证两个 tag 均为 commit 类型）。
+- `bash -n` 三个 shell 脚本、`py_compile` Python 脚本、yaml 解析均通过。
+- `sync-releases.py` 用 `DRY_RUN=1` 本地实跑：18 个旧 Release 全部识别为已存在、资产已存在；
+  v2.2.41 正确创建并识别三个资产（含中文名 `DSH伴侣-companion-v2.2.41.apk`，2,895,430 字节，
+  下载计数与 Gitee 一致）；干跑曾暴露一个 DRY_RUN 占位 bug（创建分支 gh=None），已修并复验。
+- App 侧零改动，无版本号变化。
+
 ## 2026-10-16 · v2.2.41（补）：生成合成内容显式标识（AI 标识条）
 
 ### 基于什么

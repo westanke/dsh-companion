@@ -12,7 +12,7 @@
 ④ 同步实装目录          ← 只读实装副本
 ⑤ 打包 + 回填真实数据    ← APK 大小与 SHA-256 写回文档
 ⑥ git 提交（不推送不发布）
-⑦ 等用户发话 → 双站推 + 双打 tag + 双发 Release
+⑦ 等用户发话 → 推主备（Gitee + AtomGit）+ 打 tag + Gitee 发 Release；GitHub 从站自动同步
 ```
 
 **为什么 ② 必须在 ③/④ 之前**：先同步产物再改文档/版本号，会让文档描述一个**不存在的状态**
@@ -46,8 +46,8 @@ scripts/build.sh assembleRelease           # 发布包（需签名配置）
 ## ⑤ 回填真实数据
 
 ```sh
-stat -c '%s' artifacts/DeepSeek-Harness-companion-vX.Y.Z.apk     # 字节数
-sha256sum artifacts/DeepSeek-Harness-companion-vX.Y.Z.apk       # 摘要
+stat -c '%s' "artifacts/<APK 文件名>"     # 字节数（v2.2.41 起文件名含中文应用名 DSH伴侣）
+sha256sum "artifacts/<APK 文件名>"        # 摘要
 ```
 
 把这两个真实值写回 README 双站与 `artifacts/SHA256SUMS.txt`。
@@ -61,10 +61,16 @@ sha256sum artifacts/DeepSeek-Harness-companion-vX.Y.Z.apk       # 摘要
 
 ## ⑦ 推送与发布（必须用户点头）
 
-- 双推：`origin`（GitHub）+ `gitee`；**atomgit 不动**。
-- 打 tag + 双站发 Release（两端内容相同）。
-- **禁止 `--force`**。
-- 双站链接：本仓库自身/姊妹仓库的绝对地址双列「GitHub · Gitee」；上游引用保持 GitHub 不改。
+三端拓扑（2026-10-16 起）：**Gitee 主 / AtomGit 备 / GitHub 镜像从站**。
+
+- 主备推送：`bash scripts/push-all.sh`（推 Gitee + AtomGit 的 main），`PUSH_TAGS=1 bash scripts/push-all.sh` 推标签；
+  远端命名先跑 `bash scripts/setup-remotes.sh` 整理。**默认不推 GitHub**（`INCLUDE_GITHUB=1` 才顺带试，本机 github.com:443 通常不通）。
+- Release 只在 **Gitee** 手工发（正文 + APK / SHA256SUMS.txt / RELEASE_NOTES；tag 名的 zip/tar.gz Gitee 自动生成）。
+- **GitHub 全自动**：`.github/workflows/mirror-sync.yml` 每 3 小时（也可 Actions 页手动 dispatch）
+  `git push --mirror` 对齐 refs，再由 `scripts/ci/sync-releases.py` 幂等回填 Release 与三类资产。
+  发版后想立刻见效，去 GitHub Actions 手动触发一次；否则等下个整点后 17 分。
+- **禁止 `--force`** 到主备两站；GitHub 从站的强推由仓库内 workflow 用 GITHUB_TOKEN 执行（镜像语义，非人工）。
+- 链接：本仓库自身以 Gitee 为主链接；上游引用保持 GitHub 不改；姊妹仓库沿用各自拓扑。
 
 ## 产物目录纪律
 

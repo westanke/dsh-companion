@@ -66,7 +66,7 @@ class DshClient(endpoint: String, token: String?)
 
 ### 1. 一台电脑，多个地址
 
-连接层重新建模（`app/src/main/java/io/github/hakunm/deepseekharness/data/ConnectionModels.kt`）：
+连接层重新建模（`app/src/main/java/io/github/westanke/dshcompanion/data/ConnectionModels.kt`，v2.2.41 前为 `io/github/hakunm/deepseekharness/…`）：
 
 ```
 Host        一台电脑：名字、凭据、若干地址、上次成功用的地址
@@ -252,13 +252,15 @@ scripts/build.sh :app:testDebugUnitTest   # 单元测试
 
 ## 下载与安装
 
-从本仓库的 Releases 下载（两站内容相同，任选其一）：
+从 Releases 下载。**Gitee 是主站（首发在这）**，AtomGit 为国内备站（仅代码镜像），
+GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release 可能略有延迟）：
 
-- GitHub：<https://github.com/westanke/dsh-companion/releases/latest>
-- Gitee（国内访问更快）：<https://gitee.com/westanke/dsh-companion/releases/latest>
+- Gitee（推荐，国内最快）：<https://gitee.com/westanke/dsh-companion/releases/latest>
+- GitHub（镜像）：<https://github.com/westanke/dsh-companion/releases/latest>
+- AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DeepSeek-Harness-companion-v2.2.40.apk
+DSH伴侣-companion-v2.2.41.apk
 ```
 
 安装要求：
@@ -284,8 +286,8 @@ DeepSeek-Harness-companion-v2.2.40.apk
 - 与上游原版（`CN=Hakunm`）的证书同样不同，从上游版本切过来也要先卸载。
 
 发布历史：`v1.1.0` / `v1.2.0` / `v1.4.0` / `v1.9.0` 各有独立 tag；`v1.5.0`–`v1.8.0` 没有单独打 tag，
-这四个版本的功能随 `v1.9.0` 一并发布。`v2.0.0`–`v2.2.19` 之间没有 tag；`v2.2.20` 与 `v2.2.23` 已打 tag 并双站发布，
-产物见仓库 `artifacts/` 与 Releases 页。
+这四个版本的功能随 `v1.9.0` 一并发布。`v2.0.0`–`v2.2.19` 之间没有 tag；`v2.2.20` 起各版本 tag 均同步
+Gitee / AtomGit / GitHub 三端（GitHub 为自动镜像），产物见 Releases 页。
 
 ## 界面预览
 

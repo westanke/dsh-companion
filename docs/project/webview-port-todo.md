@@ -242,6 +242,7 @@
 - 行号均来自写文档时的 `grep -n` 与 `read`，未凭印象。
 - 本轮（药丸化之后）复测：`grep -c -i permission app/src/main/assets/chat.html` → `0`；`grep -n '<img' app/src/main/assets/chat.html` → 仅 2 处（Markdown 链接、待发附件 base64）；`grep -rn 'R.string.send_mode_queue|R.string.send_mode_steer' app/src` → 无引用（NONE）。
 - `⋯` 菜单消歧：`grep -n 'MoreVert' app/src/main/java/io/github/hakunm/deepseekharness/ui/ChatScreen.kt` → `SessionRow()` 的会话操作菜单 与 `ConversationHeader()` 的 `⋯` 两处，注意区分。
+  （注：该路径为 v2.2.41 包名迁移前旧路径；`ChatScreen.kt` 也在 v2.2.40 重构中拆进 `ui/chat/`，此命令只作历史记录）
 - Markdown 表格复核：`compactMarkdownTypography()` 仍配 `table = bodySmall`；`Markdown(` 的 5 处调用点**均未传 `components`**；Gradle 缓存里 `multiplatform-markdown-renderer.aar` 仍在 —— **未发现反证**。
 - 本轮新增/变更字符串（values 与 values-en 键名一致）：`more_actions`、`add_attachment`、`attachment_pick_image`、`attachment_pick_file`、`message_hint_running_steer`、`message_hint_running_queue`。
 - **v2.2.20 收口复测**（2026-10-11，全部在工作树里跑，未跑 gradle）：
