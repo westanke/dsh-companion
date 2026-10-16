@@ -18,7 +18,9 @@ on:
 
 permissions:
   contents: write
-  workflows: write   # push --mirror 会写入历史中的 .github/workflows/*.yml，必须显式声明
+# 注意：job 级 permissions 没有 workflows 键——GITHUB_TOKEN 按 GitHub 安全设计永远不能
+# 增改 workflow 文件，而 push --mirror 会写入历史中的 .github/workflows/*.yml。
+# 故推送凭证改用 secret MIRROR_PAT（一个带 repo + workflow scope 的 PAT / OAuth token）。
 
 concurrency:
   group: mirror-sync
@@ -31,7 +33,7 @@ jobs:
     steps:
       - name: 推送镜像（Gitee 主 → AtomGit 备 → GitHub 从，内嵌自举版）
         env:
-          GH_TOKEN: ${{ github.token }}
+          MIRROR_PAT: ${{ secrets.MIRROR_PAT }}
         run: |
           set -euo pipefail
           WORK="$(mktemp -d)"
@@ -56,7 +58,8 @@ jobs:
           fi
           git clone --mirror "$SRC_URL" "$WORK/mirror.git"
           cd "$WORK/mirror.git"
-          git remote set-url --push origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          : "${MIRROR_PAT:?仓库 secret MIRROR_PAT 未配置（需带 repo + workflow scope 的 PAT）}"
+          git remote set-url --push origin "https://x-access-token:${MIRROR_PAT}@github.com/${GITHUB_REPOSITORY}.git"
           git push --mirror origin
           echo "✅ 镜像完成（源：$SRC_LABEL）"
 

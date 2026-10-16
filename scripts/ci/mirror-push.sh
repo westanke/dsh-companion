@@ -4,12 +4,18 @@
 #
 # 为什么是 --mirror：GitHub 端定位为「从站镜像」，refs 集合必须与主源逐字节一致——
 # 包括「主源删掉的分支/tag，从站也要删掉」。普通 push 做不到删除面。
-# GitHub Actions 的 GITHUB_TOKEN 触发的推送不会再触发别的 workflow（防递归，见 GitHub 文档）。
+#
+# 为什么用 secret MIRROR_PAT 而不是 GITHUB_TOKEN：GITHUB_TOKEN 按设计不能增改
+# workflow 文件（job permissions 也没有 workflows 键），而 --mirror 必然写入
+# 历史里的 .github/workflows/*.yml（实测 ref 全部被拒）。MIRROR_PAT 是带
+# repo + workflow scope 的 PAT / OAuth token。PAT 发起的 push 会正常触发
+# android.yml——这正是想要的 CI 校验；mirror-sync.yml 自身不递归是因为
+# 推送的 commit 已含同内容的该文件且 concurrency 串行（refs 内容相同时为幂等）。
 #
 # 本地不要跑这个脚本：它强推当前 GitHub 仓库；本地日常推送用 scripts/push-all.sh。
 set -euo pipefail
 
-: "${GITHUB_TOKEN:?GITHUB_TOKEN 未注入}"
+: "${MIRROR_PAT:?仓库 secret MIRROR_PAT 未注入}"
 : "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY 未注入}"
 
 # 顺序即优先级：Gitee 主站 → AtomGit 备站
@@ -48,7 +54,7 @@ git clone --mirror "$src_url" "$WORK/mirror.git"
 echo "::endgroup::"
 
 cd "$WORK/mirror.git"
-git remote set-url --push origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+git remote set-url --push origin "https://x-access-token:${MIRROR_PAT}@github.com/${GITHUB_REPOSITORY}.git"
 
 echo "::group::push --mirror → github.com/${GITHUB_REPOSITORY}"
 git push --mirror origin
