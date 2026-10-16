@@ -94,6 +94,24 @@ def wanted_assets(release):
     return result
 
 
+def ascii_asset_name(name):
+    """GitHub uploads 不支持非 ASCII 资产名（实测百分号编码的中文被整段丢弃、
+    raw UTF-8 报 400、也不读 Content-Disposition）。Gitee 侧保留中文名，
+    GitHub 侧把非 ASCII 字符连同多余连字符清掉：
+    DSH伴侣-companion-v2.2.41.apk -> DSH-companion-v2.2.41.apk"""
+    import re
+    ascii_only = name.encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[-\s]+", "-", ascii_only).strip("-")
+
+
+def broken_variants(target):
+    """同一文件被错误上传后在 GitHub 留下的残缺名（历史坑自愈用）。
+    如 DSH.-companion-v2.2.41.apk：中文被吃后可能残留孤立分隔符。"""
+    import re
+    base, dot, ext = target.rpartition(".")
+    return {base.replace("-", ".-") + dot + ext} if dot else set()
+
+
 def main():
     failures = 0
     releases = gitee_releases()
@@ -117,11 +135,21 @@ def main():
                 else:
                     print("＝ Release %s 已存在（id=%s）" % (tag, gh["id"]))
 
-                existing = {a["name"] for a in gh.get("assets", [])}
+                gh_assets = gh.get("assets", [])
+                existing = {a["name"]: a for a in gh_assets}
                 for asset_name, dl_url in wanted_assets(rel):
-                    if asset_name in existing:
-                        print("    · 资产已存在：%s" % asset_name)
+                    target_name = ascii_asset_name(asset_name)
+                    if target_name in existing:
+                        print("    · 资产已存在：%s" % target_name)
                         continue
+                    # 自愈：删掉中文被吃后留下的残缺名资产（如 DSH.-companion-...）
+                    for bad in broken_variants(target_name):
+                        if bad in existing:
+                            print("    🧹 删除残缺名资产：%s → %s" % (bad, target_name))
+                            if not DRY_RUN:
+                                http("DELETE",
+                                     "https://api.github.com/repos/%s/releases/assets/%s"
+                                     % (REPO, existing[bad]["id"]))
                     print("    ↓ 下载：%s" % asset_name)
                     with urllib.request.urlopen(dl_url, timeout=300) as dl:
                         blob = dl.read()
@@ -129,16 +157,20 @@ def main():
                         print("    ::warning::超过 2GiB，跳过：%s" % asset_name)
                         continue
                     if not DRY_RUN:
-                        dest = os.path.join(tmp, asset_name)
+                        dest = os.path.join(tmp, target_name)
                         with open(dest, "wb") as f:
                             f.write(blob)
                         with open(dest, "rb") as f:
                             payload = f.read()
+                        # name 必须全 ASCII（见 ascii_asset_name 注释），故 quote 后仍全 ASCII
                         up = ("https://uploads.github.com/repos/%s/releases/%s/assets?name=%s"
-                              % (REPO, gh["id"], urllib.parse.quote(asset_name)))
+                              % (REPO, gh["id"], urllib.parse.quote(target_name)))
                         http("POST", up, body=payload, raw=True,
                              headers={"Content-Type": "application/octet-stream"})
-                    print("    ↑ 已上传：%s（%d 字节）" % (asset_name, len(blob)))
+                    shown = target_name if target_name != asset_name else asset_name
+                    print("    ↑ 已上传：%s（%d 字节）%s"
+                          % (shown, len(blob),
+                             "" if shown == asset_name else "（Gitee 原名：%s）" % asset_name))
             except Exception as e:  # 单个失败不拖垮其余
                 failures += 1
                 print("::error::%s 同步失败：%r" % (tag, e))
