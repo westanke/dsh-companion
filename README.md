@@ -535,7 +535,7 @@ keyPassword=...
 - 单元测试：46 个测试类 / 421 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
 - 当前 APK：`DSH伴侣-companion-v2.2.42.apk`，**2,965,986 字节**，
-  SHA-256 `9889ace36de37ba828ff4708404ea2b519c268c947d3df40fa17ec0d6d3ca505`（`artifacts/SHA256SUMS.txt` 同步）。
+  SHA-256 `bb90c4cd2c718e040da0e786c739283acedddbf40df2c4a2e52c3d528e3f586e`（`artifacts/SHA256SUMS.txt` 同步）。
   **这一版尚未发版** —— 本地打包 + 签名验证（v2 方案，证书 `CN=DSH Pocket Client`，与 v2.2.41 同证书、可覆盖安装），
   等真机验收后再上传。当前包已含**真机反馈两处修复**（Markdown 表格改纵向卡片不再截断、消息时间戳补底距不再与下一条重叠）
 - 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用。证书没变，但 **v2.2.41 起包名变了**，

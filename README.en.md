@@ -587,7 +587,7 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
 - Current APK: `DSH伴侣-companion-v2.2.42.apk`, **2,965,986 bytes**,
-  SHA-256 `9889ace36de37ba828ff4708404ea2b519c268c947d3df40fa17ec0d6d3ca505` (kept in sync in
+  SHA-256 `bb90c4cd2c718e040da0e786c739283acedddbf40df2c4a2e52c3d528e3f586e` (kept in sync in
   `artifacts/SHA256SUMS.txt`). **This build is not released yet** — it was only packaged and
   signature-verified locally (v2 scheme, `CN=DSH Pocket Client`, the same key as v2.2.41 so it
   installs straight over it); uploading waits for on-device acceptance
