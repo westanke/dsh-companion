@@ -360,6 +360,16 @@ fun SettingsScreen(state: HarnessState, viewModel: HarnessViewModel) {
                 Modifier.padding(bottom = 18.dp),
             )
 
+            // 构建水印：版本号在多次重打之间不变，所以「改了没生效」的争议一直说不清。
+            // 把 git 短哈希与构建时刻摆在版本行下面，用户一眼就能确认「我装的是哪一次构建」。
+            Text(
+                // 只显示 git 短哈希：它在多次重打之间必然不同，时间戳在 defaultConfig 里取不到，不为它引依赖。
+                "构建 ${BuildConfig.BUILD_STAMP}",
+                modifier = Modifier.padding(start = 52.dp, bottom = 18.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+            )
+
             OutlinedButton(
                 onClick = viewModel::disconnect,
                 modifier = Modifier.fillMaxWidth().height(50.dp),

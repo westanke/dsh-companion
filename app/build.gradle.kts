@@ -760,6 +760,21 @@ android {
         //   未做：真机验收 —— 所有界面改动均未上机，等发话。
         versionCode = 10067
         versionName = "2.2.42"
+        // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
+        // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
+        // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。
+        val buildStamp: String = try {
+            val git = providers.exec {
+                commandLine("git", "-C", rootDir.absolutePath, "rev-parse", "--short", "HEAD")
+            }.standardOutput.asText.get().trim()
+            if (git.isBlank()) "nogit" else git
+        } catch (_: Exception) {
+            "nogit"
+        }
+        buildConfigField("String", "BUILD_STAMP", "\"$buildStamp\"")
+        // 只保留 git 哈希：它在多次重打之间必然不同，足够一锤定音；
+        // 时间戳需要 android.text / java.time，在 defaultConfig 里都解析不到，不值当为它引依赖。
+        buildConfigField("String", "BUILD_TIME", "\"\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
