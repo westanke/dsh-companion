@@ -28,3 +28,5 @@ signing.properties
 /init-mirrors.gradle
 .cm
 .c4
+*.pyc
+__pycache__/
