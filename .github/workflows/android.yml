@@ -15,6 +15,10 @@ jobs:
           java-version: 17
           cache: gradle
       - uses: android-actions/setup-android@v3
+        with:
+          # v3 action 默认装旧版 'tools'，在新 runner 镜像上已不存在（sdkmanager exit 1）。
+          # 显式声明项目实际需要的 SDK 组件；compile/targetSdk = 36。
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x gradlew
       - run: ./gradlew docsCheck testDebugUnitTest lintDebug assembleDebug --no-daemon
