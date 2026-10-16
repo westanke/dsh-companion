@@ -290,7 +290,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.41.apk
+DSH伴侣-companion-v2.2.42.apk
 ```
 
 Requirements:
@@ -299,7 +299,9 @@ Requirements:
 - A running DeepSeek Harness WebUI
 - `dsh-remote-bridge` **≥ 2.3.7** installed in the WebUI (formerly `dsh-workspace`; 2.0.0 / 2.0.1 are
   seriously broken: image reads fail entirely and the plugin cannot activate; **approval and question
-  cards need 2.3.7+** — older versions show none of them on the phone)
+  cards need 2.3.7+** — older versions show none of them on the phone. **Automatic gap resync, the
+  subscription baseline, live deliverable cards and single-meaning `seq` need 2.3.8+** (missing them
+  breaks nothing — you just do not get those features)
 - At least one authorized root added in the plugin, with remote access enabled
 - The phone can reach the IP, domain, and port configured in the plugin
 
@@ -584,12 +586,14 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 - Unit tests: 44 test classes / 410 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.41.apk`, 2,895,430 bytes,
-  SHA-256 `5317b009d1e806fc695a695b77d255b8c32cfae06c7a593736cf822e2e23f957` (kept in sync in
-  `artifacts/SHA256SUMS.txt`)
+- Current APK: `DSH伴侣-companion-v2.2.42.apk`, **2,965,986 bytes**,
+  SHA-256 `0488215e1a6b6ebd3d9972b8a18898205928f935b8e09399e4b191cd99156839` (kept in sync in
+  `artifacts/SHA256SUMS.txt`). **This build is not released yet** — it was only packaged and
+  signature-verified locally (v2 scheme, `CN=DSH Pocket Client`, the same key as v2.2.41 so it
+  installs straight over it); uploading waits for on-device acceptance
 - Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25). The key did not change, but the
   **package name did in v2.2.41**, so `v2.2.40` and earlier still require an uninstall first
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)
 - License: [GNU Affero General Public License v3.0](./LICENSE)
-- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.7** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+; **approval and question cards need 2.3.7+**)
+- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.7** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+; **approval and question cards need 2.3.7+**; gap resync / subscription baseline / live deliverable cards need 2.3.8+)
   (formerly [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace))

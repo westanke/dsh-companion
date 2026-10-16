@@ -745,8 +745,21 @@ android {
         //   测了什么：testDebugUnitTest 全量用例 0 失败、docsCheck 通过、
         //     compileDebugKotlin 真执行（不是 UP-TO-DATE）。UI 测试需真机/模拟器，本地未跑。
         //   未做：真机验收 —— 本版需重新上架，等发话。
-        versionCode = 10066
-        versionName = "2.2.41"
+        // v2.2.42（versionCode 10067）：**对标补强 A/B/C 三批 + Whaleness 会话页舒适度**（界面与协议两侧同动）。
+        //   基于什么：dsh-study/分析-2026-10-16/ 的六份对比报告（对 Whaleness dsh-mobile 与
+        //     dsh-plugin-mobile-gateway），以及用户拍板的三条要求（A/B/C 三批全做、会话页舒适度对齐、
+        //     设置页选项合并）。姊妹仓 dsh-remote-bridge 同期升 2.3.8。
+        //   干了什么：A 批 —— 图片点开与存相册、代码/JSON 高亮、滚动冻结、过程分组+耗时摘要、失败重试、
+        //     消息时间戳、按 atSeq 从某条用户消息分叉、已归档会话列表（恢复不做，内核能力不可证）、
+        //     字号缩放与外观设置合并；B 批 —— 架构守卫、请求代际隔离、事件去抖、投影缓存、
+        //     Clock/Transport 接缝；C 批客户端侧 —— 能力位探测、断档检测 resync、订阅基线、
+        //     连接即重放、交付物实时事件、会话统计与轨迹页。
+        //   为什么：这批跨 71 个文件、同时动界面与协议，需要一个能与已发布 2.2.41 区分的版本号。
+        //   测了什么：testDebugUnitTest 44 类 / 410 用例 / 0 失败、docsCheck 8 文档 / 46 任务一致、
+        //     lintDebug 通过、compileDebugKotlin 真执行（不是 UP-TO-DATE）。
+        //   未做：真机验收 —— 所有界面改动均未上机，等发话。
+        versionCode = 10067
+        versionName = "2.2.42"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }

@@ -97,7 +97,7 @@
   门验：**44 类 / 410 用例 / 0 失败**、`compileDebugKotlin` 真执行、`docsCheck` 通过；
   **真机验收未做**（滚动手感、折叠观感、200% 系统字号布局都只能上机看）。
   C 批（bridge 侧 `seq` 隔离 / 原子基线 / 交互重放等）与 A/B 剩余项见 `CHANGELOG-DEV.md` 2026-10-17 条末节。
-- 阶段：本 fork 的 **2.x 版本线**。**v2.2.41（versionCode 10066）应用改名 + 包名迁移，Gitee 与 AtomGit 双主备就位**（2026-10-16，tag v2.2.41，Gitee Release 已回验）。**GitHub 旧仓已删除并重建为镜像从站**，由 Actions 每 3 小时从 Gitee 自动同步（详见下文「渠道状态」）。
+- 阶段：本 fork 的 **2.x 版本线**。**v2.2.42（versionCode 10067）= 对标补强 A/B/C 三批 + Whaleness 会话页舒适度**（2026-10-17，**本地已提交，待真机验收；未推送未发版**）。上一版 **v2.2.41（versionCode 10066）应用改名 + 包名迁移，Gitee 与 AtomGit 双主备就位**（2026-10-16，tag v2.2.41，Gitee Release 已回验）。**GitHub 旧仓已删除并重建为镜像从站**，由 Actions 每 3 小时从 Gitee 自动同步（详见下文「渠道状态」）。
   应用名 `DeepSeek Harness` → **`DSH伴侣`**（英文 `DSH Companion`），包名 `io.github.hakunm.deepseekharness`
   → **`io.github.westanke.dshcompanion`**。动因是华为应用市场驳回「应用与『DeepSeek』名称相似、未提供商标权属证明」
   —— `NOTICE` 那份 MIT 只覆盖 logo **著作权**，不是**商标权**。
@@ -120,9 +120,15 @@
   - v2.2.30 修掉第二大头：`eventSubscription` 原先只在 `onCleared()` 与主动断开时关闭，熄屏后 WebSocket 一直连着（WiFi 射频 + TCP keepalive 全程在线，系统还会反复唤醒进程）。现在 **熄屏断流、亮屏接回**：`MainActivity` 注册 `ACTION_SCREEN_OFF`/`ACTION_SCREEN_ON`（**不用 `onStop`** —— 切 App/分屏时屏幕还亮着不该断），ViewModel 加 `pauseEvents()`/`resumeEvents()`，熄屏只关流、**保留 active 连接与令牌**。亮屏补三样：会话列表、当前会话历史、**审批与待答问题**（后两类不走 history，必须单独补，否则熄屏期间产生的卡片永远不出现）。
   - 策略由用户拍板（原话「能让 熄屏 就不在线了，如果不是熄屏状态 实时优先」）。**代价**：熄屏期间收不到推送通知，亮屏一次性补上、不丢内容。
 - 当前产物：**只保留「必须的」与「最新的」**（用户要求：已发布到 Release 的 APK 不在本地囤积）：
-  - `DSH伴侣-companion-v2.2.41.apk`，**2,895,430 字节**（**当前版本 · 改名 + 包名迁移 + AI 标识 · 已发 Gitee**，
-    release 构建，R8 + 资源裁剪），SHA-256 `5317b009d1e806fc695a695b77d255b8c32cfae06c7a593736cf822e2e23f957`
-    —— 已上传 Gitee Release（tag v2.2.41）并**下载回验**：字节数与 SHA-256 与本地三处一致
+  - `DSH伴侣-companion-v2.2.42.apk`，**2,965,986 字节**（**当前版本 · 对标补强 A/B/C 三批 + Whaleness 会话页舒适度 ·
+    **待真机验收，未上传未发版**），release 构建，R8 + 资源裁剪，SHA-256 `0488215e1a6b6ebd3d9972b8a18898205928f935b8e09399e4b191cd99156839`
+    —— 已本地验证签名（**v2 方案**，证书 `CN=DSH Pocket Client`，与 v2.2.41 同一张证书 ⇒ 可直接覆盖安装）；
+    同步的插件产物为 `dsh-remote-bridge` **2.3.8**（已同步至 `~/.dsh/profiles/web/node_modules/dsh-remote-bridge/`，
+    `lib/index.js` / `index.d.ts` / `client.cjs` / `package.json` 四处字节数与源码一致）
+  - `DSH伴侣-companion-v2.2.41.apk`，**2,895,430 字节**（上一版 · 改名 + 包名迁移 + AI 标识 · 已发 Gitee），
+    release 构建，R8 + 资源裁剪，SHA-256 `5317b009d1e806fc695a695b77d255b8c32cfae06c7a593736cf822e2e23f957`
+    —— 已上传 Gitee Release（tag v2.2.41）并**下载回验**：字节数与 SHA-256 与本地三处一致。
+    **本地暂留**：按既定顺序「发新版 → 上传 → 回读校验 → 再删上一版本地包」，v2.2.42 尚未发版，故这一版还不能删
   - `DeepSeek-Harness-v1.0.0.apk` 与 `DeepSeek-Harness-compat02-release.apk`（上游基线，各 2,561,512 字节）。`.gitignore` 特意用 `!` 保留这两个，用途是比对「本 fork 证书 ≠ 上游证书」，**不要删**
   - `SHA256SUMS.txt`：**全量历史**校验和（含 v1.9.0 起所有已发布版本）。它是**校验记录**而不是本地文件清单，本地删包**不动它**。
   - 其余版本的 APK（v1.1.0 ~ v2.2.33）**本地不留** —— 两站 Release 都有资产，需要时直接下载；`artifacts/*` 除 `SHA256SUMS.txt` 与上述两个基线包外全部被 `.gitignore` 忽略，**丢了无法从 git 回滚**，所以更不该在本地堆。
