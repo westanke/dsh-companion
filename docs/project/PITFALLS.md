@@ -223,3 +223,46 @@ project 级仓库追加，与 `settings.gradle.kts` 的 `RepositoriesMode.FAIL_O
   本地 `main` 可能落后（自认没有的修复其实早落地），也可能**领先**（夹着本地合并、远端仍 OPEN 的 PR）。
 
 **铁律**：本地 commit 可自主；push / release / tag / 上传产物一律等用户点头。
+
+---
+
+### GitHub 443 阻断与镜像从站
+
+**症状**：本机 `git push origin` 报 `gnutls_handshake() failed` 或连接超时；
+但 `api.github.com`、`uploads.github.com` 正常，`gh` 也已登录。
+
+**根因**：本机到 `github.com:443` 长期被阻断（DNS 正常），REST API 走的主机名不在封锁面。
+历史上用过工作区 `gh-mirror-rest.py` 经 REST 重建提交，但那条路**保留不了原始 commit hash**
+（哈希覆盖父提交，重建链就是新 hash），与主站永远对不齐。
+
+**现在怎么办（2026-10-16 起的定论）**：GitHub 降级为**镜像从站**，本地不再手工推：
+- 主备两站用 `scripts/push-all.sh` 推 Gitee + AtomGit；
+- GitHub 由 `.github/workflows/mirror-sync.yml` 在 **GitHub 自己的 runner** 上
+  `git clone --mirror` Gitee（不通回退 AtomGit）后 `git push --mirror` —— runner 不受本机网络限制，
+  且普通 clone/push 保留真实 hash；
+- 发版后想立刻同步，Actions 页手动 `workflow_dispatch`，否则等每 3 小时定时。
+
+**重建仓库的捷径**：若 GitHub 历史已与主站分叉（本项目 v2.2.35 后发生过 hash 重写分叉，
+merge 爆 47 个冲突），直接删仓再用 **GitHub Importer 从 Gitee 导入**，hash 原样保留，
+比线性化/`-s ours` 收编干净得多。注意删仓需要 token 带 `delete_repo` scope。
+
+**铁律**：不要在本地对 GitHub 反复试推或用 REST 脚本补哈希；从站的唯一事实来源是 Gitee。
+
+---
+
+### AtomGit 账号名与 API 版本
+
+**症状**：照 Gitee/GitHub 的账号 `westanke` 拼 AtomGit 地址，403 `project could not be found`；
+访问 `https://atomgit.com/api/v1/...` 一律 404 `NOT_PATH`。
+
+**根因**：AtomGit 账号是 **`westanke163`**（与另外两端不同）；其 Web 主机上的旧版 API 路径
+已废弃，可用的是 **`https://api.atomgit.com/api/v5/`**（与 Gitee v5 同源同形），
+认证头 `PRIVATE-TOKEN: <token>`（v3 路径也认，但不是正路）。
+
+**现在怎么办**：
+- 仓库地址 `https://atomgit.com/westanke163/dsh-companion.git`；
+- 建仓 `POST https://api.atomgit.com/api/v5/user/repos`（`auto_init=false`，随后 push 全量 refs）；
+- 已观察到的服务端差异：两个最老的**轻量 tag**（v1.1.0/v1.2.0）在 Gitee 的 `ls-remote`
+  输出带 `^{}` 解引用行、AtomGit 不带，指向 commit 相同，属展示差异，不用修。
+
+**铁律**：三端账号名不要想当然；新接远端先 `git ls-remote` 探活再配 remote。

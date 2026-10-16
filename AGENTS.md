@@ -34,7 +34,9 @@
 - **与谁配**：服务端插件 `dsh-remote-bridge`（AGPL-3.0，≥ 2.3.3）。**App 不自带任何 DSH 能力。**
 - **不做什么**：不跑内核、不代理官方 WebUI、不打包 Ubuntu。把 DSH 搬进手机是另一条路线（DSHA 系），
   与我们**互斥不互补**——详见 `docs/project/decisions/` 与 `dsh-study/` 下的对比研究。
-- **双站**：GitHub + Gitee 镜像，链接规则见 `docs/project/README.md` 与仓库根 README。
+- **三端拓扑（2026-10-16 起）**：Gitee 主站 + AtomGit 备站（本地 `bash scripts/push-all.sh` 推这两个），
+  GitHub 是镜像从站，**不手工推**——由 `.github/workflows/mirror-sync.yml` 每 3 小时从 Gitee 同步代码/tag/Release
+  （Gitee 不通回退 AtomGit）。远端命名用 `scripts/setup-remotes.sh` 整理。链接规则见根 README。
 
 ---
 
@@ -146,8 +148,8 @@ web/           ← WebView 容器（chat.html 兜底路径）
 - **「已合并」≠「已发布」≠「用户吃到了」**。三态必须分清，未发版前明说「等下个 release」。
 - 公开文本（PR / issue / Release notes）只写事实：改了什么、为什么、门验结果。
   私聊验收口语、内部原话、自封头衔一律不进公开文本。
-- 双站链接三类处理：上游引用保持 GitHub 不改；本仓库自身/姊妹仓库的绝对地址双列
-  「GitHub · Gitee」；仓库内相对链接两站自动解析。
+- 链接三类处理：上游引用保持 GitHub 不改；本仓库自身链接以 **Gitee 为主、GitHub 为从**，
+  AtomGit 仅在指向代码镜像时列出；姊妹仓库沿用它们各自的拓扑；仓库内相对链接各端自动解析。
 - **禁止**：推送（push / release / tag / 上传产物）未经用户明确同意。
   本地 commit、构建、测试、清理、写文档可直接做。
 
@@ -168,6 +170,8 @@ web/           ← WebView 容器（chat.html 兜底路径）
 - `端口 3090 归属`
 - `Gradle wrapper 挂起`
 - `并发写者与未提交改动`
+- `GitHub 443 阻断与镜像从站`
+- `AtomGit 账号名与 API 版本`
 
 > 新坑位：名字加进上面清单 + 原文写进 `PITFALLS.md` 并补 `### 同名` 锚点。
 
