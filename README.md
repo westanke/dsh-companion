@@ -503,7 +503,7 @@ keyPassword=...
 - 单元测试：27 个测试类 / 290 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
 - 当前 APK：`DeepSeek-Harness-companion-v2.2.40.apk`，2,895,422 字节，
-  SHA-256 `a277a38e9e6f90f69a32e9e1a86607fef4bead93ec5648ff4276aca6084c0e79`（`artifacts/SHA256SUMS.txt` 同步）
+  SHA-256 `977d9ac0b06f0823982e2957e3d879fa7168034c52d7fe7b826af760c63afc64`（`artifacts/SHA256SUMS.txt` 同步）
 - 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用，v2.2.31 → v2.2.40 可直接覆盖升级）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)
 - 许可证：[GNU Affero General Public License v3.0](./LICENSE)

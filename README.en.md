@@ -538,7 +538,7 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
 - Current APK: `DeepSeek-Harness-companion-v2.2.40.apk`, 2,895,422 bytes,
-  SHA-256 `a277a38e9e6f90f69a32e9e1a86607fef4bead93ec5648ff4276aca6084c0e79` (kept in sync in
+  SHA-256 `977d9ac0b06f0823982e2957e3d879fa7168034c52d7fe7b826af760c63afc64` (kept in sync in
   `artifacts/SHA256SUMS.txt`)
 - Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25; v2.2.31 → v2.2.40 installs in place)
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)

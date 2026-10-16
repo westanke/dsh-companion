@@ -17,10 +17,11 @@
   - v2.2.30 修掉第二大头：`eventSubscription` 原先只在 `onCleared()` 与主动断开时关闭，熄屏后 WebSocket 一直连着（WiFi 射频 + TCP keepalive 全程在线，系统还会反复唤醒进程）。现在 **熄屏断流、亮屏接回**：`MainActivity` 注册 `ACTION_SCREEN_OFF`/`ACTION_SCREEN_ON`（**不用 `onStop`** —— 切 App/分屏时屏幕还亮着不该断），ViewModel 加 `pauseEvents()`/`resumeEvents()`，熄屏只关流、**保留 active 连接与令牌**。亮屏补三样：会话列表、当前会话历史、**审批与待答问题**（后两类不走 history，必须单独补，否则熄屏期间产生的卡片永远不出现）。
   - 策略由用户拍板（原话「能让 熄屏 就不在线了，如果不是熄屏状态 实时优先」）。**代价**：熄屏期间收不到推送通知，亮屏一次性补上、不丢内容。
 - 当前产物：**只保留「必须的」与「最新的」**（用户要求：已发布到 Release 的 APK 不在本地囤积）：
-  - `DeepSeek-Harness-companion-v2.2.40.apk`，**2,895,422 字节**（**当前版本 · 重构验证包 · 待真机验收**，
-    release 构建，R8 + 资源裁剪），SHA-256 `a277a38e9e6f90f69a32e9e1a86607fef4bead93ec5648ff4276aca6084c0e79`
+  - `DeepSeek-Harness-companion-v2.2.40.apk`，**2,895,422 字节**（**当前版本 · 重构版 · 真机验收已过 · 待发版**，
+    release 构建，R8 + 资源裁剪），SHA-256 `977d9ac0b06f0823982e2957e3d879fa7168034c52d7fe7b826af760c63afc64`
     —— **与 v2.2.39 字节数完全相同**（同为 2,895,422），这正是「重构未改一行代码」最直接的证据
-  - `DeepSeek-Harness-companion-v2.2.39.apk`，2,895,422 字节（上一版；已实现待发版，**未构建发布产物**）
+    （哈希与 07:28 那次不同、字节数相同：APK 签名含构建时间戳，重打必变哈希，属正常）
+  - `DeepSeek-Harness-companion-v2.2.39.apk`，2,895,422 字节（上一版；**已发版**：GitHub + Gitee 双站 Release，tag v2.2.39）
   - `DeepSeek-Harness-v1.0.0.apk` 与 `DeepSeek-Harness-compat02-release.apk`（上游基线，各 2,561,512 字节）。`.gitignore` 特意用 `!` 保留这两个，用途是比对「本 fork 证书 ≠ 上游证书」，**不要删**
   - `SHA256SUMS.txt`：**全量历史**校验和（含 v1.9.0 起所有已发布版本）。它是**校验记录**而不是本地文件清单，本地删包**不动它**。
   - 其余版本的 APK（v1.1.0 ~ v2.2.33）**本地不留** —— 两站 Release 都有资产，需要时直接下载；`artifacts/*` 除 `SHA256SUMS.txt` 与上述两个基线包外全部被 `.gitignore` 忽略，**丢了无法从 git 回滚**，所以更不该在本地堆。
