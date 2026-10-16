@@ -149,7 +149,7 @@
   - 策略由用户拍板（原话「能让 熄屏 就不在线了，如果不是熄屏状态 实时优先」）。**代价**：熄屏期间收不到推送通知，亮屏一次性补上、不丢内容。
 - 当前产物：**只保留「必须的」与「最新的」**（用户要求：已发布到 Release 的 APK 不在本地囤积）：
   - `DSH伴侣-companion-v2.2.42.apk`，**2,965,986 字节**（**当前版本 · 对标补强 A/B/C 三批 + Whaleness 会话页舒适度 ·
-    **待真机验收，未上传未发版**），release 构建，R8 + 资源裁剪，SHA-256 `bb90c4cd2c718e040da0e786c739283acedddbf40df2c4a2e52c3d528e3f586e`
+    **待真机验收，未上传未发版**），release 构建，R8 + 资源裁剪，SHA-256 `5b4abb5960a274dfddf2d5177a5e7ae17192775c5005abd1d06c8fb05f8138c6`
     —— 已本地验证签名（**v2 方案**，证书 `CN=DSH Pocket Client`，与 v2.2.41 同一张证书 ⇒ 可直接覆盖安装）；
     同步的插件产物为 `dsh-remote-bridge` **2.3.8**（已同步至 `~/.dsh/profiles/web/node_modules/dsh-remote-bridge/`，
     `lib/index.js` / `index.d.ts` / `client.cjs` / `package.json` 四处字节数与源码一致）
