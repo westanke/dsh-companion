@@ -1,7 +1,7 @@
 # 当前状态
 
 - 日期：2026-10-16
-- 阶段：本 fork 的 **2.x 版本线**。**v2.2.41（versionCode 10066）应用改名 + 包名迁移，待发版**（2026-10-16）。
+- 阶段：本 fork 的 **2.x 版本线**。**v2.2.41（versionCode 10066）应用改名 + 包名迁移，已发 Gitee**（2026-10-16，tag v2.2.41，Release 已回验）。**GitHub 侧未推，欠 31 个提交**（详见下文「渠道状态」）。
   应用名 `DeepSeek Harness` → **`DSH伴侣`**（英文 `DSH Companion`），包名 `io.github.hakunm.deepseekharness`
   → **`io.github.westanke.dshcompanion`**。动因是华为应用市场驳回「应用与『DeepSeek』名称相似、未提供商标权属证明」
   —— `NOTICE` 那份 MIT 只覆盖 logo **著作权**，不是**商标权**。
@@ -24,11 +24,9 @@
   - v2.2.30 修掉第二大头：`eventSubscription` 原先只在 `onCleared()` 与主动断开时关闭，熄屏后 WebSocket 一直连着（WiFi 射频 + TCP keepalive 全程在线，系统还会反复唤醒进程）。现在 **熄屏断流、亮屏接回**：`MainActivity` 注册 `ACTION_SCREEN_OFF`/`ACTION_SCREEN_ON`（**不用 `onStop`** —— 切 App/分屏时屏幕还亮着不该断），ViewModel 加 `pauseEvents()`/`resumeEvents()`，熄屏只关流、**保留 active 连接与令牌**。亮屏补三样：会话列表、当前会话历史、**审批与待答问题**（后两类不走 history，必须单独补，否则熄屏期间产生的卡片永远不出现）。
   - 策略由用户拍板（原话「能让 熄屏 就不在线了，如果不是熄屏状态 实时优先」）。**代价**：熄屏期间收不到推送通知，亮屏一次性补上、不丢内容。
 - 当前产物：**只保留「必须的」与「最新的」**（用户要求：已发布到 Release 的 APK 不在本地囤积）：
-  - `DeepSeek-Harness-companion-v2.2.40.apk`，**2,895,422 字节**（**当前版本 · 重构版 · 真机验收已过 · 待发版**，
-    release 构建，R8 + 资源裁剪），SHA-256 `977d9ac0b06f0823982e2957e3d879fa7168034c52d7fe7b826af760c63afc64`
-    —— **与 v2.2.39 字节数完全相同**（同为 2,895,422），这正是「重构未改一行代码」最直接的证据
-    （哈希与 07:28 那次不同、字节数相同：APK 签名含构建时间戳，重打必变哈希，属正常）
-  - `DeepSeek-Harness-companion-v2.2.39.apk`，2,895,422 字节（上一版；**已发版**：GitHub + Gitee 双站 Release，tag v2.2.39）
+  - `DSH伴侣-companion-v2.2.41.apk`，**2,895,430 字节**（**当前版本 · 改名 + 包名迁移 + AI 标识 · 已发 Gitee**，
+    release 构建，R8 + 资源裁剪），SHA-256 `5317b009d1e806fc695a695b77d255b8c32cfae06c7a593736cf822e2e23f957`
+    —— 已上传 Gitee Release（tag v2.2.41）并**下载回验**：字节数与 SHA-256 与本地三处一致
   - `DeepSeek-Harness-v1.0.0.apk` 与 `DeepSeek-Harness-compat02-release.apk`（上游基线，各 2,561,512 字节）。`.gitignore` 特意用 `!` 保留这两个，用途是比对「本 fork 证书 ≠ 上游证书」，**不要删**
   - `SHA256SUMS.txt`：**全量历史**校验和（含 v1.9.0 起所有已发布版本）。它是**校验记录**而不是本地文件清单，本地删包**不动它**。
   - 其余版本的 APK（v1.1.0 ~ v2.2.33）**本地不留** —— 两站 Release 都有资产，需要时直接下载；`artifacts/*` 除 `SHA256SUMS.txt` 与上述两个基线包外全部被 `.gitignore` 忽略，**丢了无法从 git 回滚**，所以更不该在本地堆。
@@ -47,3 +45,13 @@
 - 插件侧的定位过程值得一读：`dsh-remote-bridge/docs/project/PITFALLS.md` §waterfall 不 prepend 就等于没注册（含 Cordis 源码行号）——最反直觉的一点是，**提问钩子的源码注释里早就写对了机理，只是注册时漏了这个选项**，且失败完全静默、两侧日志都不说一句话。另一份 `RETRO-question-card.md` 复盘的结论是：**卡片代码从头到尾都是对的**，错的是排查方法（先解释现象、却没先确认现象真的发生过）
 - 阻塞项：`PARITY.md` 中仍有后续 DSH WebUI 能力未对等；`IME-001` 继续扩大不同厂商键盘实机覆盖
 - 下一步：真机验收 v2.2.27 的七项修复与上一条列的未验收项；按需补齐 DSH WebUI 对等能力（设置五大组、终端、插件启停等需要先改插件开 REST 通道）
+- **渠道状态（2026-10-16，用户定调「Gitee 为主、GitHub 为从」）**：
+  - **Gitee = 主站**：代码、tag v2.2.41、Release（含 APK / SHA256SUMS.txt / RELEASE_NOTES 三个资产）全部就位，
+    资产已**下载回验**，字节数 2,895,430 与 SHA-256 `5317b009…f957` 与本地三处一致。
+  - **GitHub = 从站，仍欠 31 个提交**：远端 `main` 停在 `fad3521`（对应本地 `bb2e0d8`，v2.2.40 发版文档就绪）。
+  - **欠账性质**：不是普通落后，而是**历史重写造成的分叉** —— 分叉点 `8fcbf0c`（v2.2.35）之后，
+    两边 11 个提交**两两树对象完全相同**（已逐一验证），内容零差异，只是 commit hash 不同。
+  - **试过 `git merge origin/main`，47 个文件冲突**（28 AA + 15 UU + 4 DU）：本地已做包名迁移而远端线没有，
+    于是 87 个 Kotlin 文件变成「远端新增 / 本地删除」的对撞。**已 `git merge --abort` 回退，未留下任何冲突残留。**
+    合并提交还会触发镜像脚本 422（见 `PITFALLS.md`），所以这条路要走通必须先线性化历史（`-X ours` 或 squash 重放）。
+  - 待网络与策略合适时再做；届时**禁止 `--force`**（用户硬规矩）。
