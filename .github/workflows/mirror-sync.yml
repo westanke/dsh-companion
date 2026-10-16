@@ -18,6 +18,7 @@ on:
 
 permissions:
   contents: write
+  workflows: write   # push --mirror 会写入历史中的 .github/workflows/*.yml，必须显式声明
 
 concurrency:
   group: mirror-sync
