@@ -29,12 +29,13 @@ import com.mikepenz.markdown.compose.components.MarkdownComponents
 import com.mikepenz.markdown.compose.components.markdownComponents
 import com.mikepenz.markdown.compose.elements.MarkdownCodeBlock
 import com.mikepenz.markdown.compose.elements.MarkdownCodeFence
+import com.mikepenz.markdown.compose.elements.MarkdownText
 import io.github.westanke.dshcompanion.R
 
 /**
- * 聊天气泡正文的 Markdown 组件：**只换代码块**，其余组件沿用渲染库的默认实现。
+ * 聊天气泡正文的 Markdown 组件：换掉**代码块与表格**，其余组件沿用渲染库的默认实现。
  *
- * 为什么两个回调都要换：Markdown 把代码分给两条互不相干的路 —— 围栏块（```kotlin）
+ * 为什么两个代码回调都要换：Markdown 把代码分给两条互不相干的路 —— 围栏块（```kotlin）
  * 走 `codeFence`，四空格缩进的块走 `codeBlock`。只覆盖 `codeBlock` 的话，模型输出里
  * **几乎全部**的代码（清一色围栏写法）一行都不会变，表现为「明明传了 components，
  * 界面却像没传」。
@@ -68,6 +69,24 @@ internal val chatMarkdownComponents: MarkdownComponents = markdownComponents(
                 ChatCodeBlock(code = code, language = language, style = style)
             },
         )
+    },
+    // 表格：渲染库自带的表格是**横向滚动 + 固定列宽**（内部 tableMaxWidth / widthIn 那一套），
+    // 手机上表格一宽右侧就被截断。真机反馈：「渲染的表格直接截断，应该自动换行」。
+    //
+    // 该库的 MarkdownComponents 是开放接口（有 getTable()），所以不必换库 —— 覆盖这一项即可。
+    // 解析失败时**不吞内容**：回落到 MarkdownText，原文至少还在。
+    table = { model ->
+        val table = parseMarkdownTable(model.content)
+        if (table == null) {
+            MarkdownText(
+                content = model.content,
+                node = model.node,
+                modifier = Modifier.fillMaxWidth(),
+                style = model.typography.text,
+            )
+        } else {
+            ChatMarkdownTable(table = table, modifier = Modifier.fillMaxWidth())
+        }
     },
 )
 
