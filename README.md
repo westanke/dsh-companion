@@ -265,8 +265,8 @@ DeepSeek-Harness-companion-v2.2.40.apk
 
 - Android 8.0（API 26）或更高版本
 - 已运行的 DeepSeek Harness WebUI
-- DSH WebUI 已安装 `dsh-remote-bridge` **≥ 2.3.3**（旧名 `dsh-workspace`；2.0.0 / 2.0.1 有严重缺陷：
-  图片读取全部失败、插件无法激活）
+- DSH WebUI 已安装 `dsh-remote-bridge` **≥ 2.3.7**（旧名 `dsh-workspace`；2.0.0 / 2.0.1 有严重缺陷：
+  图片读取全部失败、插件无法激活；**审批 / 问答卡片需要 2.3.7+**，更低版本在手机端一张都不显示）
 - 插件中至少添加了一个授权根，并已启用远程访问
 - 手机可以访问插件配置的 IP、域名和端口
 
@@ -507,5 +507,5 @@ keyPassword=...
 - 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用，v2.2.31 → v2.2.40 可直接覆盖升级）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)
 - 许可证：[GNU Affero General Public License v3.0](./LICENSE)
-- 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.3**（「加载更早消息」需要 2.3.1+；「插件」页清单与启停需要 2.3.2+ / 2.3.3+）
+- 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.7**（「加载更早消息」需要 2.3.1+；「插件」页清单与启停需要 2.3.2+ / 2.3.3+；**审批 / 问答卡片需要 2.3.7+**）
   （旧名 [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace)）

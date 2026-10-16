@@ -158,9 +158,18 @@ sha256sum artifacts/DeepSeek-Harness-companion-v*.apk              # 摘要
 | 「加载更早消息」（`history()` 的 `beforeSeq`） | **2.3.1** |
 | 插件页清单（profile 判定） | **2.3.2** |
 | 插件页启停（`PATCH /settings/plugins`） | **2.3.3** |
+| **审批 / 问答卡片在手机端弹出** | **2.3.7** |
 
 **现在怎么办**：README 双站「安装要求」与「项目信息」两处写的必须一致（曾一处 2.3.3、一处 2.3.1）。
-当前口径：**≥ 2.3.3**，并在括号里注明分项。
+当前口径：**≥ 2.3.7**，并在括号里注明分项。
+
+**卡片这一项为什么单列**：2026-10-16 才定位清楚——它曾连续坏在**两个**插件侧病根上，
+App 侧代码自始至终是对的。① `sessionIdOfAgent` 漏了内核 `Agent.id`（bridge 2.3.6 修）；
+② 两个钩子注册时没带 Cordis 的 `{ prepend: true }`，被排到 waterfall 链尾、永不被调用
+（bridge **2.3.7** 修，含 Cordis 源码行号，见 `dsh-remote-bridge/docs/project/PITFALLS.md`
+§waterfall 不 prepend 就等于没注册）。
+**教训**：卡片不弹时**先查插件版本**再查 App —— 症状完全一样（手机零卡片、电脑端正常、
+两侧日志都不说一句话），但修的地方在另一个仓库。
 
 **铁律**：新增 bridge 依赖时，同步更新 README 双站 + `STATUS.md`，别只改一边。
 

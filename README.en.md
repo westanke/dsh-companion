@@ -294,8 +294,9 @@ Requirements:
 
 - Android 8.0 (API 26) or newer
 - A running DeepSeek Harness WebUI
-- `dsh-remote-bridge` **≥ 2.3.3** installed in the WebUI (formerly `dsh-workspace`; 2.0.0 / 2.0.1 are
-  seriously broken: image reads fail entirely and the plugin cannot activate)
+- `dsh-remote-bridge` **≥ 2.3.7** installed in the WebUI (formerly `dsh-workspace`; 2.0.0 / 2.0.1 are
+  seriously broken: image reads fail entirely and the plugin cannot activate; **approval and question
+  cards need 2.3.7+** — older versions show none of them on the phone)
 - At least one authorized root added in the plugin, with remote access enabled
 - The phone can reach the IP, domain, and port configured in the plugin
 
@@ -542,5 +543,5 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 - Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25; v2.2.31 → v2.2.40 installs in place)
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)
 - License: [GNU Affero General Public License v3.0](./LICENSE)
-- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.3** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+)
+- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.7** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+; **approval and question cards need 2.3.7+**)
   (formerly [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace))

@@ -30,11 +30,10 @@
   - 旧钥匙已归档在同目录 `archived-unknown-password/` 下，保留不删
 - 仓库：`https://github.com/westanke/dsh-companion`、`https://gitee.com/westanke/dsh-companion`；上游 `Hakunm/dsh-android-app` 只作参考，**不推送**
 - 已打 tag：`v1.1.0` / `v1.2.0` / `v1.4.0` / `v1.9.0` / `v2.2.20` / `v2.2.23` / **`v2.2.26`** / **`v2.2.27`**（`git tag` 实测）。v2.0.0–v2.2.19 之间没有 tag
-- 真机验收：**问答卡片曾于 2026-10-11 端到端验证通过**（内核提问 → 插件推帧 → App 渲染 → 作答 → 答案回到内核，审计表有完整证据链）。**但 2026-10-16 验收 v2.2.40 时又出现「卡片不弹」** —— 同一个功能两次结论相反，说明它**不是稳定复现**的问题，中间发生了某个变化（插件侧或内核侧）让症状回来了；在查清之前，不要拿 10-11 那次的结论当现状（见下方「已知缺口」第一条）。v2.2.27 的七项修复**待本轮真机验收**。**尚未逐项验收**：图片/PDF 预览的翻页与缩放手感、工具调用详情的展开观感、长按选中/双击复制的手势边界、`dsh-ui` 卡片观感、HTML 结构预览排版、输入区 `⋯` 菜单在窄屏与各输入法下的可达性
+- 真机验收：**审批与问答卡片已确认修好（2026-10-16）**，但**修的是插件侧，本 App 一行未改**。plan 模式评审实测：**手机端弹出卡片，电脑端 WebUI 同时正常弹出**（红线「不得抢答」未踩）。病根是 `dsh-remote-bridge` 的两个钩子注册时没带 Cordis 的 `{ prepend: true }`，被 `push` 到 waterfall 链尾、排在官方 WebUI 之后，于是永不被调用；插件 **v2.3.7** 已修并真机验证。**此前「10-11 能弹、10-16 又不弹」两次结论相反的悬案就此解开**：不是非稳定复现，而是 `sessionIdOfAgent`（v2.3.6 修）与 `prepend`（v2.3.7 修）**两个病根叠加**——前者修好后后者仍在，症状看起来「回来了」。**App 侧代码（订阅、拉取、渲染三环）自始至终是对的。**v2.2.27 的七项修复**待本轮真机验收**。**尚未逐项验收**：图片/PDF 预览的翻页与缩放手感、工具调用详情的展开观感、长按选中/双击复制的手势边界、`dsh-ui` 卡片观感、HTML 结构预览排版、输入区 `⋯` 菜单在窄屏与各输入法下的可达性
 - 已知缺口：
-  - **审批 / 问答卡片在真机上仍不弹出**（2026-10-16 用户确认「历史问题了」）。这是 v2.2.40 重构**之前就有**的症状，与文件位置无关，纯逻辑部分单测仍全绿。要定位见 `PITFALLS.md` §ask_user_question 三态 与 `dsh-remote-bridge/docs/project/RETRO-question-card.md`（那份复盘的结论是：**卡片代码从头到尾都是对的**，错的是排查方法 —— 先解释现象，却没先确认现象真的发生过）。
   - 单测夹具 `ConnectionShareInteropTest.kt` 仍内嵌一枚**已吊销**的真实设备令牌；该文件在 `app/src` 内，是否改写夹具待定（文档侧已全部脱敏）
-- 其他文档：`docs/project/CHANGELOG-DEV.md`（逐版开发日志）、`docs/project/PARITY.md`（对等矩阵）、`docs/project/webview-report.md`（WebView 线复盘）、`docs/project/webview-parity-audit.md`（原生 vs WebView 能力边界）、`docs/project/webview-port-todo.md`（移植清单）、`docs/task-14-session-audit.md`（能力缺口审计）、`README.en.md`（英文 README，已同步 2.2.27）
-- 插件仓库侧的排查复盘值得一读：`dsh-remote-bridge/docs/project/RETRO-question-card.md` —— 问答卡片「一直不显示」的排查里，**卡片代码从头到尾都是对的**，错的是排查方法（先解释现象、却没先确认现象真的发生过）
+- 其他文档：`docs/project/CHANGELOG-DEV.md`（逐版开发日志）、`docs/project/PARITY.md`（对等矩阵）、`docs/project/webview-report.md`（WebView 线复盘）、`docs/project/webview-parity-audit.md`（原生 vs WebView 能力边界）、`docs/project/webview-port-todo.md`（移植清单）、`docs/task-14-session-audit.md`（能力缺口审计）、`docs/project/approvals-questions-trace.md`（审批/问答两条链路端到端追踪，9 节带行号）、`README.en.md`（英文README，已同步 2.2.27）
+- 插件侧的定位过程值得一读：`dsh-remote-bridge/docs/project/PITFALLS.md` §waterfall 不 prepend 就等于没注册（含 Cordis 源码行号）——最反直觉的一点是，**提问钩子的源码注释里早就写对了机理，只是注册时漏了这个选项**，且失败完全静默、两侧日志都不说一句话。另一份 `RETRO-question-card.md` 复盘的结论是：**卡片代码从头到尾都是对的**，错的是排查方法（先解释现象、却没先确认现象真的发生过）
 - 阻塞项：`PARITY.md` 中仍有后续 DSH WebUI 能力未对等；`IME-001` 继续扩大不同厂商键盘实机覆盖
 - 下一步：真机验收 v2.2.27 的七项修复与上一条列的未验收项；按需补齐 DSH WebUI 对等能力（设置五大组、终端、插件启停等需要先改插件开 REST 通道）
