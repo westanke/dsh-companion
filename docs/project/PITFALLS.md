@@ -110,7 +110,19 @@ sha256sum artifacts/DeepSeek-Harness-companion-v*.apk              # 摘要
 
 **现在怎么办**：只渲染 `state=continued` 的问题，`open` 状态直接丢弃；
 `refreshPendingQuestions` 只对当前 `selectedSessionId` 发 GET，返回后校验会话是否切走。
-**全仓无遍历、无定时器、无轮询**，刷新只挂四个入口：切会话 / 顶栏刷新 / WS 结构性事件 / WS 重连。
+**全仓无遍历、无定时器、无轮询**，刷新只挂**四类**入口：切会话 / 顶栏刷新 / WS 结构性事件 / WS 重连。
+
+**为什么不能遍历会话列表**（这条原因原先只活在源码注释里，2026-10-16 补进本条目）：
+`GET /chat/sessions/{id}/questions` 在服务端内部走 `resolveAgent(sessionId, { resume: true })`，
+而 `resume` 的语义是「resolve 不到就地启动」。所以对一个**冷会话**调这个**纯查询**端点，
+副作用是把该会话的 Agent 在服务端**拉活** —— 一次「读一下有没有待答问题」变成一次会话唤醒。
+拿 sessionId 遍历 `sessions` 批量拉，100 个会话就是 100 次误唤醒。
+警告原文在 `data/DshClient.kt:292-297`，同一约束在 `HarnessInteractionsViewModel.kt:98-99` 与 `:120-129` 用散文重述过。
+**铁律**：任何「看起来是只读」的端点，先确认服务端有没有 `resolveAgent(..., resume)` 这类隐式副作用。
+
+**附带一条容易记错的**：`scheduleChatRefresh()`（400ms 去抖）**不负责审批与问答**，
+它只拉 `history` 与 `sessions`。审批 5 个触发点、问答 9 个触发点，各自直接发 GET，
+不走 400ms 窗口也不受单飞约束 —— 两条链路是**完全解耦**的，别指望调它能刷新问答。
 
 **铁律**：别给 agent 抢答。内核 host 面有 `user-questions/request` 事件（`(request, next) => …`），
 是给宿主插入界面的钩子；抢答会与官方 WebUI 冲突，应像 approvals 那样 `next()` 委托兜底。

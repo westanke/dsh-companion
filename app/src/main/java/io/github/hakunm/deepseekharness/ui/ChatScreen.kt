@@ -209,9 +209,6 @@ import io.github.hakunm.deepseekharness.data.displayItems
 import io.github.hakunm.deepseekharness.data.permissionSelect
 import io.github.hakunm.deepseekharness.data.todoItems
 import java.io.InputStream
-import io.github.hakunm.deepseekharness.ui.chat.ApprovalPanel
-import io.github.hakunm.deepseekharness.ui.chat.ApprovalLoading
-import io.github.hakunm.deepseekharness.ui.chat.QuestionCard
 import io.github.hakunm.deepseekharness.ui.chat.Composer
 import io.github.hakunm.deepseekharness.ui.chat.ChatThinkBar
 import io.github.hakunm.deepseekharness.ui.chat.ChatDetail
