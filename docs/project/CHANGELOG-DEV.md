@@ -3,6 +3,41 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## 2026-10-16 · 清 lint 历史欠账（不升版本号）：16 个 error 归零，lintDebug 提回硬门
+
+### 基于什么
+
+GitHub 重建后 CI 第一次真正跑通，暴露出 `lintDebug` 有 16 个历史 error（此前无 baseline、
+又被当硬门禁，曾直接 BUILD FAILED）。用户要求清掉。原则：真问题修代码，确证误报才在调用点
+`@SuppressLint` 并写理由，绝不为变绿一刀切压制。
+
+### 干了什么（三类）
+
+1. **震动反馈真 bug（5 个 error：MissingPermission ×1 + NewApi ×3 + 权限缺失）**
+   `ChatWebBridge.haptic()` 直接调 `VibratorManager`(API 31) 与 `createPredefined`(API 29)，
+   minSdk 却是 26——在 26~30 的机器上必抛 NoSuchMethodError，被外层 `runCatching` 吞成「静默不震」；
+   且 Manifest 没声明 `VIBRATE`。修法：Manifest 加 `android.permission.VIBRATE`（normal 级，安装即授予）；
+   代码按 SDK 分级，31+ 走 VibratorManager + EFFECT_TICK，26~30 退回 Vibrator + 20ms 单次震动，
+   并先查 `hasVibrator()`。**这是本次唯一的真实行为修复**：老设备的发送震动此前是坏的。
+2. **Compose 里 `LocalContext.getString()`（10 个 error，LocalContextGetResourceValueCall）**
+   `context.getString()` 不订阅 Configuration，切换界面语言时不会随重组刷新，toast/提示会停留在旧语言。
+   全部改为组合期 `stringResource(...)` 预取，回调/LaunchedEffect 闭包引用捕获值；
+   `ChatWebScreen` 的 LaunchedEffect 还把两个文案加进了 key，切语言会重发带正确文案的 init。
+   涉及 ChatActivityRows / ChatDetail / ChatMessageItems / ChatToolDetail / ChatWebScreen。
+3. **JS 接口（1 个 error，JavascriptInterface）** 根因是 lint 无法穿过 `AndroidView` 的 factory
+   lambda 解析外部 `bridge` 的具体类型、只看到泛型 T（同文件内联匿名对象就不报）。先把唯一无注解的
+   public 方法 `onPicked()` 降为 `internal`（顺手收紧真实 JS 暴露面），并给 `bridge` 显式标注
+   `ChatWebBridge` 类型；仍报的那处在调用点 `@SuppressLint("JavascriptInterface")` 并注释列出
+   已逐一核对带注解的 JS 方法。
+
+### 测什么
+
+- `scripts/build.sh :app:lintDebug`：**0 error / 52 warning / 4 hint，BUILD SUCCESSFUL**（warning 是
+  依赖新版本、PluralsCandidate、UnusedResources、长 vector path 等非门禁项，本次不动）。
+- `:app:testDebugUnitTest`：27 类 / 290 用例 / 0 失败 / 0 跳过，无回归。
+- `.github/workflows/android.yml` 把 `lintDebug` 提回硬门（AGP 只对 error 判失败，warning 不拦截）。
+- 震动的真机分级路径与 10 处 UI 文案仍建议真机过一眼（单测不覆盖触感与多语言重组）。
+
 ## 2026-10-16 · 渠道基建（不升版本号，App 零改动）：三端拓扑 Gitee 主 / AtomGit 备 / GitHub 镜像从站
 
 ### 基于什么

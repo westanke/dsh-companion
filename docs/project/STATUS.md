@@ -58,9 +58,14 @@
     ① 建空仓；② 经 Contents API（api.github.com 可达）提交引导版 `mirror-sync.yml`；
     ③ workflow 在 GitHub runner 上从 Gitee `clone --mirror` 再 `push --mirror` 覆盖空仓——
     普通 git 传输**保留真实 commit hash**，重建后 GitHub main 与 Gitee 每次同步后 SHA 逐字一致（19 tag 齐全）。
-    重建当次另修两处既有 CI 问题：`setup-android@v3` 默认装已下架的 `tools` 包（改显式声明
-    `platform-tools platforms;android-36 build-tools;36.0.0`）、`lintDebug` 16 个既有错误被当硬门禁
-    （按 AGENTS.md「无 baseline 勿当门禁」改为仅出报告，硬门为 docsCheck + 单测 + assembleDebug）。
+    重建当次另修一处既有 CI 问题：`setup-android@v3` 默认装已下架的 `tools` 包（改显式声明
+    `platform-tools platforms;android-36 build-tools;36.0.0`）。
+  - **lint 历史欠账已清零（2026-10-16 晚，不升版本号，App 行为变化仅震动修复一处）**：16 个 error
+    全部修复——`ChatWebBridge.haptic()` 补 `VIBRATE` 权限并按 SDK 31/26 分级（原代码在 API 26~30
+    必崩、被 runCatching 吞成静默失效）、10 处 `LocalContext.getString()` 改组合期 `stringResource`
+    （切语言随重组刷新）、`onPicked` 降 internal 收紧 JS 暴露面、一处 `JavascriptInterface` 误报在调用点
+    带理由 `@SuppressLint`。现 **0 error / 52 warning / 4 hint（无 baseline）**，`lintDebug` 已提回
+    android.yml 硬门（warning 不拦截）。本地门验：lintDebug BUILD SUCCESSFUL、290 单测 0 失败。
   - **自动同步机制**：`.github/workflows/mirror-sync.yml` 每 3 小时（UTC `17 */3 * * *`）+ 手动触发，
     两个 job：① 内嵌自举段（等价 `scripts/ci/mirror-push.sh`）在 runner 上从 Gitee（不可达则回退 AtomGit）
     `git clone --mirror` 后 `git push --mirror` 到本仓——refs 全量对齐，主源删分支/tag 从站跟随删除。
