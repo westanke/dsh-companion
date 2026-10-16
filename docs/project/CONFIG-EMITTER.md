@@ -3,7 +3,7 @@
 > **交付物**（本任务写作用域内的三个文件）
 > - `tools/emit-config.mjs` —— 生成端脚本（只用 Node 内置模块）
 > - `docs/project/CONFIG-EMITTER.md` —— 本文档
-> - `app/src/test/java/io/github/hakunm/deepseekharness/data/ConnectionShareInteropTest.kt` —— 与 APP 解码端的对拍单测
+> - `app/src/test/java/io/github/westanke/dshcompanion/data/ConnectionShareInteropTest.kt` —— 与 APP 解码端的对拍单测
 >
 > **一句话结论**：脚本能真的跑出 `DSH1:` 文本，令牌默认由脚本在本机自动配对换取（不需要人工抄写），
 > 且生成端的产物与 Kotlin `ConnectionShare.encode()` 的输出**逐字节相同**，APP 解码端能完整还原。
@@ -323,11 +323,11 @@ DSH1:eyJkaXNwbGF5TmFtZSI6IuWutumHjOeahOeUteiEkSIsImVuZHBvaW50cyI6W3sibGFiZWwiOiL
 
 ## 6. 与 APP 解码端的对拍单测
 
-文件：`app/src/test/java/io/github/hakunm/deepseekharness/data/ConnectionShareInteropTest.kt`
+文件：`app/src/test/java/io/github/westanke/dshcompanion/data/ConnectionShareInteropTest.kt`
 
 ```bash
 cd /media/wangke/OFFICE/workspace/dsh-companion
-scripts/build.sh :app:testDebugUnitTest --tests "io.github.hakunm.deepseekharness.data.ConnectionShareInteropTest"
+scripts/build.sh :app:testDebugUnitTest --tests "io.github.westanke.dshcompanion.data.ConnectionShareInteropTest"
 ```
 
 固定输入**全部是脚本的真实 stdout**（已用脚本反向校验过与 .kt 里的字面量逐字节相同）：
@@ -357,10 +357,10 @@ scripts/build.sh :app:testDebugUnitTest --tests "io.github.hakunm.deepseekharnes
 
 ```console
 $ cd /media/wangke/OFFICE/workspace/dsh-companion
-$ scripts/build.sh :app:testDebugUnitTest --tests "io.github.hakunm.deepseekharness.data.ConnectionShareInteropTest"
+$ scripts/build.sh :app:testDebugUnitTest --tests "io.github.westanke.dshcompanion.data.ConnectionShareInteropTest"
 [build] 使用缓存 Gradle：/media/wangke/OFFICE/workspace/android-toolchain/gradle-home/wrapper/dists/gradle-9.5.0-bin/bvnork1r7n8i6kp5cnkibsc9q/gradle-9.5.0/bin/gradle
 [build] 使用依赖镜像脚本：/media/wangke/OFFICE/workspace/dsh-companion/scripts/init-mirrors.gradle
-[build] 任务：:app:testDebugUnitTest --tests io.github.hakunm.deepseekharness.data.ConnectionShareInteropTest
+[build] 任务：:app:testDebugUnitTest --tests io.github.westanke.dshcompanion.data.ConnectionShareInteropTest
 > Task :app:compileDebugUnitTestKotlin
 > Task :app:testDebugUnitTest
 
@@ -368,7 +368,7 @@ BUILD SUCCESSFUL in 3s
 31 actionable tasks: 2 executed, 29 up-to-date
 ```
 
-JUnit 报告（`app/build/test-results/testDebugUnitTest/TEST-io.github.hakunm.deepseekharness.data.ConnectionShareInteropTest.xml`）：
+JUnit 报告（`app/build/test-results/testDebugUnitTest/TEST-io.github.westanke.dshcompanion.data.ConnectionShareInteropTest.xml`）：
 
 ```
 tests=10 failures=0 errors=0 skipped=0 time=0.224s

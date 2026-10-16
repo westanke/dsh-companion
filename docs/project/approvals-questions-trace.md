@@ -53,7 +53,7 @@ Base URL：`normalizeEndpoint`（`data/DshClient.kt:555-562`）强制以 `/api/v
  *
  * ⚠️ 服务端在这条路上会走 `resolveAgent(..., resume)` —— 对**冷**会话调它会把那边的
  * Agent 拉活。所以调用方**只能**传当前打开的那个会话，绝不能拿它去遍历会话列表
- * （见 [io.github.hakunm.deepseekharness.HarnessViewModel.refreshPendingQuestions]）。
+ * （见 [io.github.westanke.dshcompanion.HarnessViewModel.refreshPendingQuestions]）。
  */
 ```
 
@@ -442,7 +442,7 @@ KDoc `:12` 引用的理由与 `HarnessEventRules.kt:174-183` 一致。
      *
      * ⚠️ 服务端在这条路上会走 `resolveAgent(..., resume)` —— 对**冷**会话调它会把那边的
      * Agent 拉活。所以调用方**只能**传当前打开的那个会话，绝不能拿它去遍历会话列表
-     * （见 [io.github.hakunm.deepseekharness.HarnessViewModel.refreshPendingQuestions]）。
+     * （见 [io.github.westanke.dshcompanion.HarnessViewModel.refreshPendingQuestions]）。
      */
 ```
 

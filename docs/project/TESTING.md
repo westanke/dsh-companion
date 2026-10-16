@@ -23,6 +23,16 @@
   | v1.4.0 | 135 / 0 |
   | v1.3.0 | 112 / 0 |
 
+- **2026-10-16 `v2.2.41` 应用改名 + 包名迁移**（本表只到 v1.9.0，2.x 的逐版记录见 `CHANGELOG-DEV.md`）：
+  `docsCheck` 通过；`:app:testDebugUnitTest` **27 类 / 290 用例 / 0 失败 / 0 跳过**
+  （与 v2.2.40 逐项一致 —— 本版只改应用名、包名与一个 UI 测试断言，不动任何业务逻辑）；
+  `compileDebugKotlin` 真执行（**非 UP-TO-DATE**），BUILD SUCCESSFUL，仅 3 条既有 deprecation warning；
+  87 个 Kotlin 文件的 `package`/`import` 与源码目录整体迁移后**零残留**
+  （`grep io.github.hakunm.deepseekharness` 命中 0）。
+  - **未做 UI 测试**：`ConnectScreenTest` 属 `androidTest`，需真机/模拟器，本地无设备。
+    该文件已把硬编码英文字面量改为按 `en` 配置开 Context 读 `values-en`，但**未实跑验证**。
+  - **未做真机验收**：且因包名变更，验收前必须先卸载旧包（旧包无法覆盖安装）。
+
 - **v1.9.0 产物**：`artifacts/DeepSeek-Harness-companion-v1.9.0.apk`，2,714,772 字节，SHA-256
   `03007f1cbffb037a51e5e9b87ea0dce76c47dd8a700434fa1abb311544ec3942`；versionCode `10009`、
   versionName `1.9.0`；APK Signature Scheme v2，唯一签名者 `CN=DSH Pocket Client`（RSA 2048）。

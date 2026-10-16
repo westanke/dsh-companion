@@ -277,9 +277,11 @@ DeepSeek-Harness-companion-v2.2.40.apk
 - **`v1.9.0` 及更早的包盖不上**：签名不同，必须先卸载再装（卸载会清除已保存的连接，
   装好后重新配对，或直接粘贴一份配置文本）。
 - **`v2.2.25` 及以后可以互相覆盖升级**（同一把证书）。
+- **⚠️ `v2.2.41` 起包名变了**（`io.github.hakunm.deepseekharness` → `io.github.westanke.dshcompanion`）：
+  应用名同步改为「DSH伴侣」，规避「DeepSeek」商标风险。**`applicationId` 变了就是另一个 App**，
+  `v2.2.40` 及更早的包**无法覆盖安装，必须先卸载**（同样会清空已保存的连接，需重新配对）。
+  理由与影响详见 [开发日志 v2.2.41](./docs/project/CHANGELOG-DEV.md)。
 - 与上游原版（`CN=Hakunm`）的证书同样不同，从上游版本切过来也要先卸载。
-
-`applicationId` 与上游保持一致（`io.github.hakunm.deepseekharness`）。
 
 发布历史：`v1.1.0` / `v1.2.0` / `v1.4.0` / `v1.9.0` 各有独立 tag；`v1.5.0`–`v1.8.0` 没有单独打 tag，
 这四个版本的功能随 `v1.9.0` 一并发布。`v2.0.0`–`v2.2.19` 之间没有 tag；`v2.2.20` 与 `v2.2.23` 已打 tag 并双站发布，
@@ -498,13 +500,15 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.40`（`versionCode` 10065）
-- 包名：`io.github.hakunm.deepseekharness`
+- 当前版本：`v2.2.41`（`versionCode` 10066）
+- 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
+- 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：27 个测试类 / 290 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DeepSeek-Harness-companion-v2.2.40.apk`，2,895,422 字节，
-  SHA-256 `977d9ac0b06f0823982e2957e3d879fa7168034c52d7fe7b826af760c63afc64`（`artifacts/SHA256SUMS.txt` 同步）
-- 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用，v2.2.31 → v2.2.40 可直接覆盖升级）
+- 当前 APK：`DSH伴侣-companion-v2.2.41.apk`，2,895,430 字节，
+  SHA-256 `5317b009d1e806fc695a695b77d255b8c32cfae06c7a593736cf822e2e23f957`（`artifacts/SHA256SUMS.txt` 同步）
+- 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用。证书没变，但 **v2.2.41 起包名变了**，
+  `v2.2.40` 及更早仍需先卸载）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)
 - 许可证：[GNU Affero General Public License v3.0](./LICENSE)
 - 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.7**（「加载更早消息」需要 2.3.1+；「插件」页清单与启停需要 2.3.2+ / 2.3.3+；**审批 / 问答卡片需要 2.3.7+**）

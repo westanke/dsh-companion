@@ -25,11 +25,21 @@ val signingValues = Properties().apply {
 val hasDedicatedSigning = signingValues.isNotEmpty()
 
 android {
-    namespace = "io.github.hakunm.deepseekharness"
+    // v2.2.41（versionCode 10066）：**包名迁移** `io.github.hakunm.deepseekharness` → `io.github.westanke.dshcompanion`。
+    //   ① 基于什么：华为应用市场驳回「应用与『DeepSeek』名称相似、未提供商标权属证明」；应用名同时改为「DSH伴侣」。
+    //   ② 为什么连包名一起换：旧包名带上游作者 hakunm 的命名空间与 deepseekharness 字样，
+    //      落在应用市场的人工审核视野里同样是混淆源；而 applicationId 一变就是**另一个 App**，
+    //      老用户无法覆盖升级，必须先卸载（会清掉已保存的连接）。这是有意接受的代价，不是疏忽。
+    //   ③ 干了什么：87 个 Kotlin 文件的 package/import 整体迁移（main 60 / test 26 / androidTest 1），
+    //      源码目录由 io/github/hakunm/deepseekharness 搬到 io/github/westanke/dshcompanion；
+    //      namespace 与 applicationId 同步；中文/英文 strings.xml 的 app_name 与 connect_title 同步。
+    //   ④ 测什么：scripts/build.sh docsCheck + :app:testDebugUnitTest（用例数见 CHANGELOG-DEV）+ compileDebugKotlin 真执行。
+    //   旧包名留在 git 历史里，需要追溯时看 tag v2.2.40 及更早。
+    namespace = "io.github.westanke.dshcompanion"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "io.github.hakunm.deepseekharness"
+        applicationId = "io.github.westanke.dshcompanion"
         minSdk = 26
         targetSdk = 36
         // 版本号必须高于上游（1.0.0 / 10000），否则无法覆盖安装，用户在手机上也无法区分装的是哪个。
@@ -712,8 +722,31 @@ android {
         //   测了什么：testDebugUnitTest 27 类 / 290 用例 / 0 失败（与拆分前逐项一致）、
         //     assembleDebug 通过、docsCheck 8 文档 43 任务一致、app/src 零文件超 800 行。
         //   未做：真机验收 —— 本版就是为此出的包，**不发布**。
-        versionCode = 10065
-        versionName = "2.2.40"
+        // v2.2.41（versionCode 10066）：**应用改名 + 包名迁移**，唯一一版会破坏「覆盖安装」的版本。
+        //   基于什么：华为应用市场驳回「应用与『DeepSeek』应用名称相似，未提供相关授权或商标权属证明」
+        //     （知识产权类），逐字对上了本 App 旧名 `DeepSeek Harness`。
+        //   为什么：NOTICE 里那份 MIT 授权只覆盖 logo 路径的**著作权**，不是「DeepSeek」这个**商标**，
+        //     著作权 ≠ 商标权，拿它去过审大概率不认。商标风险在**用户可见的应用名**上，
+        //     堵住可见名称是刚需；包名一并换是因为旧包名带着上游作者 hakunm 的命名空间
+        //     与 deepseekharness 字样，落在人工审核视野里同样是混淆源。
+        //   干了什么：
+        //     ① 应用名 `DeepSeek Harness` → **`DSH伴侣`**（英文环境 `DSH Companion`）；
+        //        连接页标题改为「**连接 你的 DSH 服务端**」/ `Connect to your DSH server`
+        //        —— 它描述的是用户自己部署的服务端，不是本 App，全名反而指错了对象。
+        //     ② 包名 `io.github.hakunm.deepseekharness` → **`io.github.westanke.dshcompanion`**
+        //        （namespace + applicationId 同步，源码目录整体搬家）。
+        //     ③ `ConnectScreenTest.kt` 原本硬编码英文字面量 "Connect to DeepSeek Harness"，
+        //        改名必红；改为按 en 配置开 Context 读 `values-en`，且**不用 activity.getString**
+        //        —— 语言切换走 AppCompatDelegate.setApplicationLocales 会触发 Activity 重建，
+        //        切换瞬间 getString 仍可能拿到旧 locale 的值。
+        //   代价（有意接受）：**applicationId 变了就是另一个 App**，老用户无法覆盖升级，必须先卸载，
+        //     而卸载会清掉已保存的连接与令牌，需重新配对。这是本次唯一无法两全的点。
+        //     旧包名保留在 git 历史（tag v2.2.40 及更早），需要追溯时去那里看。
+        //   测了什么：testDebugUnitTest 全量用例 0 失败、docsCheck 通过、
+        //     compileDebugKotlin 真执行（不是 UP-TO-DATE）。UI 测试需真机/模拟器，本地未跑。
+        //   未做：真机验收 —— 本版需重新上架，等发话。
+        versionCode = 10066
+        versionName = "2.2.41"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }

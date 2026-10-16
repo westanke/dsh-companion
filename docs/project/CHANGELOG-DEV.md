@@ -3,6 +3,100 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## 2026-10-16 · v2.2.41：应用改名 + 包名迁移（唯一一版破坏「覆盖安装」的版本）
+
+### 基于什么
+
+华为应用市场 6 条驳回意见中的知识产权类一条：
+
+> 应用与「DeepSeek」应用的名称相似（其他语言端应用的名称：Deepseek Harness客户端），
+> 但未提供相关授权或商标权属证明，可能导致用户产生混淆、误认或不适宜的联想。
+
+旧应用名 `app_name = "DeepSeek Harness"`（`values/strings.xml:3` 与 `values-en/strings.xml:3`）
+与审核员转述的名字逐字对得上，确认命中。
+
+顺带说明同一份驳回单里另外 5 条与本仓**无关**，理由各自如下，避免以后误判：
+
+| 驳回项 | 与本仓的关系 |
+|---|---|
+| 需提供遍历使用的演示录屏 | AppGallery Connect 后台「自测文件」上传动作，**代码零改动** |
+| 图标单层图 216×216 应为 1024×1024 | **鸿蒙专属**规格；本仓是 Android Gradle 工程，图标是纯矢量 adaptive icon，一个位图都没有 |
+| 未做真实身份认证 | 本 App **无账号体系**（全仓 grep `register\|signup\|登录\|注册\|实名\|手机号` 只命中 `ContextCompat.registerReceiver` 与一条「退出登录」注释），实名认证不适用 |
+| 缺 AI 文本生成资质 | 资质动作，**代码零改动** |
+| 勾了「不涉及 AI 生成合成服务」 | 后台改勾选声明，**代码零改动** |
+
+> 那份驳回针对的是**鸿蒙 HAP 包**，其代码不在本工作区（全工作区乃至家目录扫描
+> `module.json5` / `oh-package.json5` / `hvigorfile.ts` / `*.ets` 均零命中，`artifacts/` 只有 `.apk`）。
+
+### 为什么
+
+`NOTICE:1` 里确实有 MIT 授权，但那份授权覆盖的是 **logo 路径的著作权**，
+不是「DeepSeek」这个**商标**。著作权 ≠ 商标权 —— 拿它去过审大概率不认。
+商标风险落在**用户可见的应用名**上，所以堵住可见名称是刚需。
+
+包名一并换的理由：旧包名 `io.github.hakunm.deepseekharness` 带着上游作者 hakunm 的
+命名空间与 `deepseekharness` 字样，落在人工审核视野里同样是混淆源；
+且该前缀本就不是我们的命名空间 —— 仓库归 `westanke`，按 `io.github.<用户>.<仓库>`
+惯例应为 `io.github.westanke.dshcompanion`。
+
+### 干了什么
+
+**① 应用名**
+
+| 位置 | 改前 | 改后 |
+|---|---|---|
+| `values/strings.xml:3` `app_name` | `DeepSeek Harness` | **`DSH伴侣`** |
+| `values-en/strings.xml:3` `app_name` | `DeepSeek Harness` | **`DSH Companion`** |
+| `values/strings.xml:7` `connect_title` | `连接 DeepSeek Harness` | **`连接 你的 DSH 服务端`** |
+| `values-en/strings.xml:7` `connect_title` | `Connect to DeepSeek Harness` | **`Connect to your DSH server`** |
+
+`connect_title` 一起改还有个额外好处：它描述的是**用户自己部署的服务端**，不是本 App ——
+旧文案「连接 DeepSeek Harness」指错了对象。
+
+**② 包名**（`io.github.hakunm.deepseekharness` → `io.github.westanke.dshcompanion`）
+
+- `namespace` 与 `applicationId` 同步（`app/build.gradle.kts`）；
+- **87 个 Kotlin 文件**的 `package` / `import` 整体替换；
+- 源码目录搬家：`app/src/{main,test,androidTest}/java/io/github/hakunm/deepseekharness`
+  → `.../io/github/westanke/dshcompanion`（main 60 / test 26 / androidTest 1）；
+- `AndroidManifest.xml` 用的是相对名 `.MainActivity`，**无需改**。
+
+**③ 顺带修掉一个必红的测试**
+
+`ConnectScreenTest.kt` 原本硬编码英文字面量 `"Connect to DeepSeek Harness"`（两处），
+应用名一改必然报错。改为按 `en` 配置开 Context 读 `values-en` 的 `connect_title`：
+
+```kotlin
+val englishTitle = compose.activity.resources.createConfigurationContext(
+    Configuration(compose.activity.resources.configuration).apply {
+        setLocale(Locale.forLanguageTag("en"))
+    },
+).getString(R.string.connect_title)
+```
+
+**为什么不用 `activity.getString`**：语言切换走 `AppCompatDelegate.setApplicationLocales`，
+会触发 Activity 重建；切换瞬间 `activity.getString` 仍可能拿到切换前的 locale 值 ——
+原代码用字面量很可能正是被这件事坑过。显式开 `en` 配置的 Context，取值与重建时机无关。
+
+### 测了什么
+
+- `:app:testDebugUnitTest`：**27 类 / 290 用例 / 0 失败 / 0 跳过**（与 v2.2.40 逐项一致 —— 本版不改任何逻辑）
+- `compileDebugKotlin`：**真执行**（非 UP-TO-DATE），BUILD SUCCESSFUL，仅 3 条既有 deprecation warning
+- `docsCheck`：通过
+- **未做**：UI 测试（`ConnectScreenTest` 属 androidTest，需真机/模拟器）与真机验收 ——
+  且**包名变更导致无法覆盖安装，真机验收必须先卸载旧包**（会清空已保存的连接，需重新配对）。
+
+### 代价（有意接受）
+
+**`applicationId` 变了就是另一个 App。** 老用户无法覆盖升级，必须先卸载，
+而卸载会清掉已保存的连接与令牌，需重新配对。这是本次唯一无法两全的点。
+
+旧包名保留在 git 历史里（tag `v2.2.40` 及更早），需要追溯时去那里看。
+已发布的 `artifacts/*.apk` 文件名**保持不动**（按既定规矩，已发布产物不改名），
+新版本产物从 v2.2.41 起启用新命名。
+
+---
+
 ## 2026-10-16 · v2.2.40：清掉行数预算台账上的全部债务（纯重构，零功能变化）
 
 ### 基于什么

@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">DeepSeek Harness</string>
+    <string name="app_name">DSH Companion</string>
     <string name="mobile_workspace">Mobile developer workspace</string>
     <string name="server">Server</string>
     <string name="device_pairing">Device pairing</string>
-    <string name="connect_title">Connect to DeepSeek Harness</string>
+    <string name="connect_title">Connect to your DSH server</string>
     <string name="connect_subtitle">Connect to a DSH workspace with remote access enabled</string>
     <string name="server_address">Server address</string>
     <string name="pairing_code">One-time pairing code</string>

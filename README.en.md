@@ -308,10 +308,13 @@ generated: the subject was kept identical on purpose, but it is **not the old ke
 - **`v1.9.0` and earlier cannot be upgraded in place**: different signature, so uninstall first
   (which clears saved connections) and then pair again or paste a configuration string.
 - **`v2.2.25` and later upgrade in place** (same certificate).
+- **⚠️ The package name changes in `v2.2.41`** (`io.github.hakunm.deepseekharness` →
+  `io.github.westanke.dshcompanion`): the app name changes to **DSH Companion** at the same time,
+  to avoid the "DeepSeek" trademark. **A new `applicationId` means a different app** —
+  `v2.2.40` and earlier **cannot be upgraded in place; uninstall first** (which also clears saved
+  connections, so pair again). See [changelog v2.2.41](./docs/project/CHANGELOG-DEV.md) for why.
 - The certificate also differs from upstream's original APK (`CN=Hakunm`), so switching from an upstream
   build requires an uninstall too.
-
-The `applicationId` still matches upstream (`io.github.hakunm.deepseekharness`).
 
 Release history: `v1.1.0` / `v1.2.0` / `v1.4.0` / `v1.9.0` are tagged; `v1.5.0`–`v1.8.0` are not tagged
 separately — their features shipped together in `v1.9.0`. The `v2.0.0`–`v2.2.19` line has no tags; `v2.2.20` and `v2.2.23` are tagged and released on both sites
@@ -532,15 +535,17 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.40` (`versionCode` 10065)
-- Package: `io.github.hakunm.deepseekharness`
+- Version: `v2.2.41` (`versionCode` 10066)
+- Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
+- App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
 - Unit tests: 27 test classes / 290 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DeepSeek-Harness-companion-v2.2.40.apk`, 2,895,422 bytes,
-  SHA-256 `977d9ac0b06f0823982e2957e3d879fa7168034c52d7fe7b826af760c63afc64` (kept in sync in
+- Current APK: `DSH伴侣-companion-v2.2.41.apk`, 2,895,430 bytes,
+  SHA-256 `5317b009d1e806fc695a695b77d255b8c32cfae06c7a593736cf822e2e23f957` (kept in sync in
   `artifacts/SHA256SUMS.txt`)
-- Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25; v2.2.31 → v2.2.40 installs in place)
+- Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25). The key did not change, but the
+  **package name did in v2.2.41**, so `v2.2.40` and earlier still require an uninstall first
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)
 - License: [GNU Affero General Public License v3.0](./LICENSE)
 - Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.7** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+; **approval and question cards need 2.3.7+**)
