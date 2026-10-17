@@ -106,7 +106,7 @@
     <string name="trajectory">轨迹</string>
     <string name="trajectory_empty">这个会话还没有可回溯的历史</string>
     <string name="trajectory_turn">第 %1$d 轮</string>
-    <string name="trajectory_unknown_turn">未归属轮次</string>
+    <string name="trajectory_unknown_turn">轮次之间</string>
     <string name="trajectory_tools">%1$d 个工具调用</string>
     <string name="trajectory_user">用户消息</string>
     <string name="trajectory_assistant">助手消息</string>

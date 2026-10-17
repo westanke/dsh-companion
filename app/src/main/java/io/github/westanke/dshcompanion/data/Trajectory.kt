@@ -90,8 +90,9 @@ internal data class TrajectoryTurn(
  * 把历史折成轨迹。
  *
  * - 轮次按 `turn` 升序，组内按 `seq` 升序（事件在数组里不一定有序，不能依赖顺序）；
- * - `turn` 取不到的事件归入 [UNKNOWN_TURN]（0）——**不丢弃**，它们在「发生过什么」这件事上
- *   仍然是证据，只是归属不明；
+ * - `turn` 取不到的事件归入 [UNKNOWN_TURN]（0），展示成「轮次之间」——
+ *   对齐官方 Web 的 `Between turns`（例如 compaction 这类不属于任何一轮的记录）。
+ *   注意：**先**按 [trajectoryKindOf] 过滤掉不构成记录的事件，剩下的才谈归属；
  * - `history == null`（还没加载）返回空列表。
  */
 internal fun trajectoryOf(history: ChatHistory?): List<TrajectoryTurn> {
@@ -102,18 +103,26 @@ internal fun trajectoryOf(history: ChatHistory?): List<TrajectoryTurn> {
         val event = entry.event
         val data = event.data as? JsonObject
         val turn = (data?.get("turn") as? JsonPrimitive)?.content?.toIntOrNull() ?: UNKNOWN_TURN
+        // 不构成记录的事件（step 边界、内部日志）直接跳过，见 trajectoryKindOf。
+        val kind = trajectoryKindOf(event.type) ?: continue
         grouped.getOrPut(turn) { mutableListOf() }.add(
             TrajectoryNode(
                 seq = event.seq,
                 time = event.time,
-                kind = trajectoryKindOf(event.type),
+                kind = kind,
                 label = toolLabelOf(event.type, data),
                 raw = data,
             ),
         )
     }
+    // 排序：真实轮次按 turn 升序在前，「轮次之间」（UNKNOWN_TURN）**永远排最后**。
+    //
+    // 不只是为了好看：`turn` 缺失的多是 splice 进来的消息、compaction 这类**边缘记录**，
+    // 它们的数量不固定、信息密度还低。放在最前面会把真正的轮次顶出第一屏 ——
+    // 真机反馈「第一屏全是其他事件」正是这么来的。官方 Web 把它叫 `Between turns`，
+    // 语义上就是「轮次之外的附属区」，所以垫底是符合语义的位置。
     return grouped.entries
-        .sortedBy { it.key }
+        .sortedWith(compareBy({ it.key == UNKNOWN_TURN }, { it.key }))
         .map { (turn, nodes) -> TrajectoryTurn(turn, nodes.sortedBy { it.seq }) }
 }
 
@@ -138,12 +147,40 @@ internal fun shortDuration(millis: Long): String {
     return "$minutes:${seconds.toString().padStart(2, '0')}"
 }
 
-private fun trajectoryKindOf(type: String): TrajectoryNodeKind = when (type) {
-    "user/message" -> TrajectoryNodeKind.User
-    "assistant/message" -> TrajectoryNodeKind.Assistant
-    "tool/call" -> TrajectoryNodeKind.Tool
-    "deliverables/presented" -> TrajectoryNodeKind.Deliverable
-    "turn/end" -> TrajectoryNodeKind.TurnEnd
+/**
+ * 事件类型 → 轨迹节点类别；`null` 表示**这一帧不进轨迹**。
+ *
+ * ## 为什么要过滤（2026-10-17 真机反馈）
+ *
+ * 用户看到轨迹面板第一屏是 #0~#26 一整列「其他事件」，有效信息要往下翻。
+ * 对着真实会话数了一下，265 个事件里**一半是纯噪音**：
+ *
+ * | 类型 | 数量 | 是什么 |
+ * |---|---|---|
+ * | `step/start` / `step/end` | 42 + 42 | 每步的边界帧，同一轮里重复几十次 |
+ * | `session-log-deepseek/delivery-accepted` | 42 | 内部投递日志 |
+ * | `agent/inbox/spliced` | 4 | 收件箱拼接，内部簿记 |
+ *
+ * 这些都不是「发生过什么」的证据，只是实现细节。官方 Web 的轨迹
+ * （`@deepseek-ai/dsh-client-ui-trajectory`）只收 User / Assistant / Tool /
+ * subtool / compaction 这些**真正有语义的记录**，step 只作为边界标记、不单独成行 ——
+ * 这里对齐它的取舍。
+ *
+ * `tool/result` 也**不进**：它是 `tool/call` 的产物，详情在工具行里已经能展开看到；
+ * 单独成行会让「一次工具调用」在轨迹里占两行，读起来像调用了两次。
+ */
+private fun trajectoryKindOf(type: String): TrajectoryNodeKind? = when {
+    type == "user/message" -> TrajectoryNodeKind.User
+    type == "assistant/message" -> TrajectoryNodeKind.Assistant
+    type == "tool/call" -> TrajectoryNodeKind.Tool
+    type == "deliverables/presented" -> TrajectoryNodeKind.Deliverable
+    type == "turn/end" -> TrajectoryNodeKind.TurnEnd
+    // 以下都是实现细节，不构成"发生过什么"的记录。
+    type == "tool/result" -> null
+    type == "step/start" || type == "step/end" -> null
+    type == "turn/start" -> null
+    type.startsWith("session-log-") -> null
+    type.startsWith("agent/inbox/") -> null
     else -> TrajectoryNodeKind.Other
 }
 

@@ -155,12 +155,12 @@
   - 策略由用户拍板（原话「能让 熄屏 就不在线了，如果不是熄屏状态 实时优先」）。**代价**：熄屏期间收不到推送通知，亮屏一次性补上、不丢内容。
 - 当前产物：**只保留「必须的」与「最新的」**（用户要求：已发布到 Release 的 APK 不在本地囤积）：
   - `DSH伴侣-companion-v2.2.42.apk`，**2,965,986 字节**（**当前版本 · 对标补强 A/B/C 三批 + Whaleness 会话页舒适度 ·
-    **待真机验收，未上传未发版**），release 构建，R8 + 资源裁剪，SHA-256 `fd6b02d92b0ca25f4b9e72bd86c52fae18549603bb774729312cc90b888f4ee6`
+    **待真机验收，未上传未发版**），release 构建，R8 + 资源裁剪，SHA-256 `e009b1776aff593bdc3b090def5b6471cdec6cb8e72015faca461b8e109f171a`
     —— 已本地验证签名（**v2 方案**，证书 `CN=DSH Pocket Client`，与 v2.2.41 同一张证书 ⇒ 可直接覆盖安装）；
     同步的插件产物为 `dsh-remote-bridge` **2.3.8**（已同步至 `~/.dsh/profiles/web/node_modules/dsh-remote-bridge/`，
     `lib/index.js` / `index.d.ts` / `client.cjs` / `package.json` 四处字节数与源码一致）
   - `DSH伴侣-companion-v2.2.41.apk`，**2,895,430 字节**（上一版 · 改名 + 包名迁移 + AI 标识 · 已发 Gitee），
-    release 构建，R8 + 资源裁剪，SHA-256 `fd6b02d92b0ca25f4b9e72bd86c52fae18549603bb774729312cc90b888f4ee6`
+    release 构建，R8 + 资源裁剪，SHA-256 `e009b1776aff593bdc3b090def5b6471cdec6cb8e72015faca461b8e109f171a`
     —— 已上传 Gitee Release（tag v2.2.41）并**下载回验**：字节数与 SHA-256 与本地三处一致。
     **本地暂留**：按既定顺序「发新版 → 上传 → 回读校验 → 再删上一版本地包」，v2.2.42 尚未发版，故这一版还不能删
   - `DeepSeek-Harness-v1.0.0.apk` 与 `DeepSeek-Harness-compat02-release.apk`（上游基线，各 2,561,512 字节）。`.gitignore` 特意用 `!` 保留这两个，用途是比对「本 fork 证书 ≠ 上游证书」，**不要删**
@@ -168,7 +168,7 @@
   - 其余版本的 APK（v1.1.0 ~ v2.2.33）**本地不留** —— 两站 Release 都有资产，需要时直接下载；`artifacts/*` 除 `SHA256SUMS.txt` 与上述两个基线包外全部被 `.gitignore` 忽略，**丢了无法从 git 回滚**，所以更不该在本地堆。
   - 发新版本时的动作：构建 → 拷入 `artifacts/` → 上传两站 Release → **回读校验哈希** → 再删掉上一版本地包（等价于「本地只留最新」）。
 - **构建类型**：正式包一律 `scripts/build.sh assembleRelease`。debug 包不混淆、不裁剪资源，体积约 **21.8 MB**，与 release 的 2.87 MB 差 7.5 倍 —— 只看体积就能判断打错没打错
-- 签名：**`dsh-release.jks`**（`CN=DSH Pocket Client`，证书 SHA-256 `fd6b02d92b0ca25f4b9e72bd86c52fae18549603bb774729312cc90b888f4ee6`；alias `dshrelease`，口令见 `.secrets/deepseek-harness-android/signing.properties`，该文件与 `*.jks` 都在 `.gitignore` 内）
+- 签名：**`dsh-release.jks`**（`CN=DSH Pocket Client`，证书 SHA-256 `e009b1776aff593bdc3b090def5b6471cdec6cb8e72015faca461b8e109f171a`；alias `dshrelease`，口令见 `.secrets/deepseek-harness-android/signing.properties`，该文件与 `*.jks` 都在 `.gitignore` 内）
   - 2026-10-11 说明：**原始那把发布钥匙的密码已彻底丢失**（本机/仓库/CI/git 历史全查过），现用的是**重新生成**的钥匙，主题刻意与旧钥匙一致（同为 `CN=DSH Pocket Client`）。
   - 后果：**它不是旧钥匙** —— v1.9.0 及更早（旧 `CN=DSH Pocket Client`，证书 `4e7fa1db…`）与上游 `CN=Hakunm` 都盖不上去，跨签名升级**必须先卸载**（会清除已保存的连接）。**v2.2.24 之后的包彼此可以直接覆盖**（v2.2.26 → v2.2.27 实测同一把钥匙）
   - 旧钥匙已归档在同目录 `archived-unknown-password/` 下，保留不删

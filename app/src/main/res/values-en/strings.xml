@@ -103,7 +103,7 @@
     <string name="trajectory">Trajectory</string>
     <string name="trajectory_empty">No history to trace yet</string>
     <string name="trajectory_turn">Turn %1$d</string>
-    <string name="trajectory_unknown_turn">Unattributed</string>
+    <string name="trajectory_unknown_turn">Between turns</string>
     <string name="trajectory_tools">%1$d tool calls</string>
     <string name="trajectory_user">User message</string>
     <string name="trajectory_assistant">Assistant message</string>

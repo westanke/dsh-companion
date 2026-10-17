@@ -47,12 +47,17 @@ class TrajectoryTest {
     /** 归属不明的事件**不丢弃** —— 它们仍是「当时发生过什么」的证据。 */
     @Test
     fun `events without a turn fall into the unknown bucket without being dropped`() {
+        // 样本从 `step/end` 换成 `assistant/message`：2026-10-17 起 step 边界帧与内部
+        // 日志按官方 Web 的取舍被过滤掉（见 TrajectoryNoiseFilterTest），不再进轨迹。
+        // 这条测的是**归属**，所以要用一条真的会进轨迹的事件来验。
         val turns = trajectoryOf(history(
             event("user/message", seq = 1, time = 10),
-            event("step/end", seq = 2, time = 20, turn = 3),
+            event("assistant/message", seq = 2, time = 20, turn = 3),
         ))
-        assertEquals(listOf(UNKNOWN_TURN, 3), turns.map { it.turn })
-        assertEquals(TrajectoryNodeKind.User, turns[0].nodes.single().kind)
+        // 「轮次之间」垫底：真实轮次在前，边缘记录在后（见 trajectoryOf 的排序说明）。
+        assertEquals(listOf(3), turns.filter { it.turn != UNKNOWN_TURN }.map { it.turn })
+        assertEquals(UNKNOWN_TURN, turns.last().turn)
+        assertEquals(TrajectoryNodeKind.User, turns.last().nodes.single().kind)
     }
 
     /** 不认得的事件类型留成 Other，而不是消失在页面上。 */
