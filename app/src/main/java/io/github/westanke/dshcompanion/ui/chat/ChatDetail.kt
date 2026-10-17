@@ -130,8 +130,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import io.github.westanke.dshcompanion.data.ChatDisplayEntry
 import io.github.westanke.dshcompanion.data.groupChatDisplay
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -453,13 +452,24 @@ internal fun ChatDetail(
     // 直接 return —— 之后再没有第二次触发，位置就停在顶部。用户反馈「进会话默认在顶部
     // 没修好」正是这个原因（前两版都栽在「只跑一次」上）。
     //
-    // 这里改成：一直等到 totalItemsCount > 0 且**用户还没主动滑过**（isAtBottom 仍为真，
-    // 因为新建的 listState 初始就在底部语义）的那一刻，滚一次就收工。
+    // 这里等的是**布局稳定**，不是「有内容」：
+    // `.filter { it > 0 }.first()` 在第一次读到非零时就返回 —— 那一次很可能只是
+    // 「加载更早消息」按钮 + 空态（1~2 项），滚过去等于滚到那两项；等真正的消息
+    // 加载完，这个 effect 早就结束了，位置就留在顶部。这是前两版都栽的地方
+    // （用户反馈「进会话默认在顶部没修好」）。
+    //
+    // 判据改成：**连续两次读到同一个 totalItemsCount**（中间隔一帧）才算稳定。
+    // 首次进入时数据要分批到达（第一页 → 后续），count 会连着变好几轮；
+    // 连续两次相同才是真正停下来了，这时再滚到底。
     LaunchedEffect(selected.id) {
+        var previous = -1
         snapshotFlow { listState.layoutInfo.totalItemsCount }
-            .filter { it > 0 }
-            .first()
-        listState.animateScrollToItem((listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
+            .collect { count ->
+                if (count > 0 && count == previous) {
+                    listState.animateScrollToItem(count - 1)
+                }
+                previous = count
+            }
     }
     LaunchedEffect(displayItems.size, state.liveChat?.revision) {
         if (displayItems.isNotEmpty() && isAtBottom) {
