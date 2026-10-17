@@ -452,24 +452,35 @@ internal fun ChatDetail(
     // 直接 return —— 之后再没有第二次触发，位置就停在顶部。用户反馈「进会话默认在顶部
     // 没修好」正是这个原因（前两版都栽在「只跑一次」上）。
     //
-    // 这里等的是**布局稳定**，不是「有内容」：
-    // `.filter { it > 0 }.first()` 在第一次读到非零时就返回 —— 那一次很可能只是
-    // 「加载更早消息」按钮 + 空态（1~2 项），滚过去等于滚到那两项；等真正的消息
-    // 加载完，这个 effect 早就结束了，位置就留在顶部。这是前两版都栽的地方
-    // （用户反馈「进会话默认在顶部没修好」）。
+    // 这里改成**持续贴底**，不再等「某个时刻」：
+    // 前三版分别试过「只跑一次」「等列表有内容」「等 count 连续两次相同」，三版都失败 ——
+    // 因为历史是**分批到达**的（第一页 → 后续页 → 流式补齐），count 一直在变，
+    // 任何「等某个稳定时刻再滚一次」的判据都会在某一批到达前就结束。
     //
-    // 判据改成：**连续两次读到同一个 totalItemsCount**（中间隔一帧）才算稳定。
-    // 首次进入时数据要分批到达（第一页 → 后续），count 会连着变好几轮；
-    // 连续两次相同才是真正停下来了，这时再滚到底。
+    // 持续贴底的守卫是 `!userScrolled`：用户一旦**主动滑过**（离底超过阈值）就停手，
+    // 不再打扰翻历史；没滑过就一直跟着新内容贴底 —— 这正是聊天产品的常规行为
+    // （新消息到达时视图跟着走）。
+    //
+    // 阈值取 3 项：`isAtBottom` 用的也是「最后一项在前 3 个之内」这个口径，
+    // 两处保持一致，免得「自动滚动认为到底了、按钮却还显示」这种自相矛盾。
     LaunchedEffect(selected.id) {
-        var previous = -1
-        snapshotFlow { listState.layoutInfo.totalItemsCount }
-            .collect { count ->
-                if (count > 0 && count == previous) {
-                    listState.animateScrollToItem(count - 1)
-                }
-                previous = count
+        var userScrolled = false
+        snapshotFlow {
+            val info = listState.layoutInfo
+            val count = info.totalItemsCount
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+            Triple(count, last >= count - 3, count)
+        }.collect { (count, atBottom, lastIndex) ->
+            if (count == 0) return@collect
+            // 用户滑离底部 → 记为「已滑过」，之后不再自动跟随（直到换会话）。
+            if (!atBottom) {
+                userScrolled = true
+                return@collect
             }
+            if (userScrolled) return@collect
+            // 已经在底部就不动，否则滚到最后一项。
+            if (lastIndex < count - 1) listState.animateScrollToItem(count - 1)
+        }
     }
     LaunchedEffect(displayItems.size, state.liveChat?.revision) {
         if (displayItems.isNotEmpty() && isAtBottom) {
