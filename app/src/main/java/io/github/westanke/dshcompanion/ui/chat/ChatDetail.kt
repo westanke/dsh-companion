@@ -125,10 +125,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import io.github.westanke.dshcompanion.data.ChatDisplayEntry
 import io.github.westanke.dshcompanion.data.groupChatDisplay
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -443,11 +446,20 @@ internal fun ChatDetail(
     // `key(selected.id)`：切会话时重跑一次（listState 也随之重建，两者保持一致）。
     // 用 animateScrollToItem 而不是 scrollToItem：短列表瞬间跳转没有意义，
     // 长列表给一个几百毫秒的滑动，用户能看出「我在往下走」而不是「页面被重置了」。
+    // `snapshotFlow` + `first{...}`：等**列表真的有内容**的那一刻才滚。
+    //
+    // 为什么不能只用 `LaunchedEffect(selected.id)`：那个 effect 在 id 变化时跑一次，
+    // 而首次进入 ChatDetail 时历史往往还没回来（displayItems 为空），守卫 `isNotEmpty()`
+    // 直接 return —— 之后再没有第二次触发，位置就停在顶部。用户反馈「进会话默认在顶部
+    // 没修好」正是这个原因（前两版都栽在「只跑一次」上）。
+    //
+    // 这里改成：一直等到 totalItemsCount > 0 且**用户还没主动滑过**（isAtBottom 仍为真，
+    // 因为新建的 listState 初始就在底部语义）的那一刻，滚一次就收工。
     LaunchedEffect(selected.id) {
-        if (displayItems.isNotEmpty()) {
-            val target = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
-            listState.animateScrollToItem(target)
-        }
+        snapshotFlow { listState.layoutInfo.totalItemsCount }
+            .filter { it > 0 }
+            .first()
+        listState.animateScrollToItem((listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
     }
     LaunchedEffect(displayItems.size, state.liveChat?.revision) {
         if (displayItems.isNotEmpty() && isAtBottom) {

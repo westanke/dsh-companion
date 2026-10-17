@@ -80,14 +80,15 @@ internal fun ChatMessageFooter(
             // （3 → 6 → 8 → 10dp）—— 全都没用，因为间距根本不是这里产的：item 之间由
             // LazyColumn 的 `spacedBy(8.dp)` 负责，全宽 Text 的行高却跨过了那个边界。
             //
-            // 现在两个手段一起用：
-            // ① `wrapContentWidth()` —— 行高只包住文字本身，不再横向延伸到 item 边界；
-            // ② 上下 padding 归零 —— 与下一条消息的距离完全交给 `spacedBy(8.dp)`，
-            //    不再在这里重复加（加了只会把行高推出边界，正是五轮「重叠」的来源）。
-            // 与上方气泡之间由气泡自己的 padding + 这 6dp top 负责。
+            // 现在两个手段一起用（缺一不可，这是第六版才凑齐的）：
+            // ① `wrapContentWidth()` —— 行高只包住文字本身，不再横向延伸到 item 边界
+            //    （这是根治：行高跨边界才是与下一个 item 的气泡顶部相叠的原因）；
+            // ② `bottom = 8dp` —— 第五版我把它归零了，结果时间戳（labelSmall ≈ 13dp 行高）
+            //    与下一条消息之间只剩 spacedBy(8.dp)，对一条文字仍然太紧，用户第六次反馈。
+            //    有了①之后，bottom 不会再被推出边界，可以放心加。
             modifier = modifier
                 .wrapContentWidth()
-                .padding(top = 6.dp, start = 4.dp, end = 4.dp),
+                .padding(top = 6.dp, bottom = 8.dp, start = 4.dp, end = 4.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelSmall,
         )

@@ -36,6 +36,37 @@
 **真机验收** —— 所有界面改动均未上机；待验收清单见
 `dsh-study/实施-2026-10-17/交付说明.md` 第七节。
 
+## 2026-10-17 · 真机反馈八修：时间戳底距恢复 8dp + 进会话落底改成「等列表有内容」（未升版本号）
+
+### 基于什么
+
+用户第六次反馈（附截图，水印 `ac4ac01` 已对上）：「图片中文字全部修好了 上 显示的时间和文字重叠，
+进会话默认在顶部 没修好」。
+
+### 两个根因
+
+**① 时间戳仍重叠**：上一版把 footer 的 padding **全归零**了（以为间距该由 LazyColumn 的
+`spacedBy(8.dp)` 独占）。但时间戳是 `labelSmall`（行高约 13dp），对一条文字来说只剩
+`spacedBy(8.dp)` 太紧 —— 截图里 `08:44` 与下方正文几乎贴着。
+上一版（`bottom = 10dp` + `spacedBy(5.dp)` = 15dp）其实比这版宽，是我把有效的部分删掉了。
+**修**：`wrapContentWidth()` 保留（这才是根治：行高不再横向跨出 item 边界），
+`bottom = 8dp` 加回来 —— 有了 wrapContentWidth 之后 bottom 不会再被推出边界，可以放心加。
+
+**② 进会话仍停在顶部**：`LaunchedEffect(selected.id)` 只在 id 变化时跑**一次**。
+首次进入 `ChatDetail` 时历史往往还没回来（`displayItems` 为空），守卫 `isNotEmpty()`
+直接 return —— 之后**再没有第二次触发**，位置就停在顶部。前两版都栽在「只跑一次」上。
+**修**：改用 `snapshotFlow { layoutInfo.totalItemsCount }.filter { it > 0 }.first()` ——
+等列表**真的有内容**的那一刻才滚一次，然后收工。
+
+### 测什么
+
+`:app:testDebugUnitTest` **47 类 / 425 用例 / 0 失败**；`lintDebug` 通过。
+（补了 `kotlinx.coroutines.flow.filter` / `first` / `runtime.snapshotFlow` 三个 import。）
+
+### 未做
+
+- 未上真机复验；未推送、未发版。
+
 ## 2026-10-17 · 真机反馈七修：时间戳行高不再横向跨出 item 边界（未升版本号）
 
 ### 基于什么
