@@ -224,10 +224,22 @@ fun WorkspaceEvent.chatDelta(): ChatDelta? {
         "reasoning" -> ChatItemKind.REASONING
         else -> return null
     }
+    // turn / step 缺失**不能**丢整帧。
+    //
+    // 真机取证（2026-10-17，屏上探针）：frames 里 chat.message.delta 确实到了几十帧，
+    // 但 liveChat 恒 null、reasoning=0，于是状态条永远显示「内容由 AI 生成」——
+    // 而实际那一刻正文正在流式渲染。根因在插件侧：
+    // `chat-adapter.ts` 转发 chunk 时 turn/step 是**条件性**的
+    // （`...(typeof assistantData.turn === 'number' ? {turn} : {})`），
+    // 内核这一版的 assistant/chunk 不带这两个字段 → 这里原来 `?: return null`
+    // 把每一帧都静默丢掉。
+    //
+    // 这两个字段只用于「按 turn/step 切段」，不参与正文渲染，缺失时兜底 0 即可；
+    // 真正的必填只有 sessionId / index / text —— 缺任何一个才是无法归属的帧。
     return ChatDelta(
         sessionId = value.stringValue("sessionId") ?: return null,
-        turn = value.intValue("turn") ?: return null,
-        step = value.intValue("step") ?: return null,
+        turn = value.intValue("turn") ?: 0,
+        step = value.intValue("step") ?: 0,
         index = value.intValue("index") ?: return null,
         kind = kind,
         text = value.stringValue("text") ?: return null,

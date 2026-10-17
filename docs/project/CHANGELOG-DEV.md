@@ -82,6 +82,72 @@
 - 未上真机复验这一版（打完包立刻让用户装）。
 - 未推送、未发版。
 
+## 2026-10-17 · 真机取证后的落底修复：九版教训 + 两条硬判据
+
+### 基于什么
+
+用户直接指出验收标准本身错了：「『跳到底部』按钮消失，本就差一大截就不显示了，你还用它做标准」。
+
+### 这次改了什么（取证驱动，不是猜）
+
+**取证手段**：这台 vivo（V2080A / Android 11）上 **App 的 `Log.i` 一条都不进 logcat**（debug 版也是），
+所以改成**屏上可见探针**（会话页底部一行红字，显示 `total/vis/last/first/atBottom` 与 effect 内读数）。
+
+关键的一次读数：
+
+```
+外层 total=49 vis=3 last=2 first=0/0 viewport=1719 atBottom=false
+内层 count=49 atBottom=false lastIdx=49 total=49 vis=7
+```
+
+**它说明了两件事**：collect 正常发射、`count` 也对；但历史**分批加载**期间「视口还在 0、
+count 已涨到 49」，于是「不在底部」成立 → 旧代码判定「用户翻过历史」→ **自动滚动永久关闭**。
+
+**数据加载与用户滑动在布局上表现完全一样**，只有 `isScrollInProgress`（真手势）能区分。
+
+### 正确形状
+
+```kotlin
+LaunchedEffect(selected.id) {
+    // 等列表有内容
+    while (totalItemsCount == 0 && guard < 60) { delay(50) }
+    // 独立循环：每 32ms 推 600px，scrollBy 返回 0 即到底；用户真在拖动就退出
+    while (...) {
+        if (listState.isScrollInProgress) return@launch
+        if (listState.scrollBy(SCROLL_DOWN_PX) <= 0f) break
+        delay(SCROLL_TICK_MS)
+    }
+}
+```
+
+真机实测：`first` 从 **0/0 → 48/4560**（推了三屏多），最后一句出现在屏上。
+
+### 九版教训（全写进源码注释，改动前先读）
+
+1. 「跳到底部」按钮消失 ≠ 落底（判据只是「距底 ≤3 项」，实测差 46 项）；
+2. `LaunchedEffect(selected.id)` 只跑一次；
+3. `filter { count > 0 }.first()` 首次非零只有「加载更早消息」一项；
+4. 「等 count 连续两次相同」——数据分批到达，count 一直在变；
+5. **把「不在底部」当「用户滑过」—— 最致命，数据加载与手势无法用布局区分**；
+6. `animateScrollToItem(..., scrollOffset=-N)` 对「比一屏高的项」不生效；
+7. 每帧只推一次不够（collect 发射次数推不完一屏）。
+
+### 两条硬判据（以后验收都用这个）
+
+- **落底**：`/api/v1/chat/sessions/{id}/messages` 的最后一条消息**末尾文本出现在屏上**，
+  且**不需要手动滑动**。
+- **不要**用「跳到底部按钮是否消失」。
+
+### 过程中踩到的两个环境事实
+
+- 这台设备上 App 的 `Log.i` 完全不进 logcat（debug 版也不进）→ 调试只能靠屏上可见探针；
+- debug 包用 `apksigner` 以发布钥匙重签即可覆盖安装 release 版 → 调试链路打通。
+
+### 测什么
+
+`:app:testDebugUnitTest` **47 类 / 425 用例 / 0 失败**；`docsCheck` 8 文档 / 46 任务一致；`lintDebug` 通过。
+探针已全部删除（`grep probeText/innerProbe/DSH_SCROLL` 均为 0）。
+
 ## 2026-10-17 · 真机反馈九修：正文与时间戳之间补一层 Column（真凶是 SelectionContainer 的兄弟排布）
 
 ### 基于什么

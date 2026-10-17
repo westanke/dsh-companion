@@ -1,0 +1,66 @@
+mobile-gateway: [2026-10-17T05:03:36.930Z] mobile gateway mode=persistent: startup
+mobile-gateway: [2026-10-17T05:03:36.930Z] applying: version=0.10.2 interactionProtocol=question-approval-v2 path=/ws/mobile, webServer.port=3080, gatewayEnabled=true, requireAuth=true, devices=1
+mobile-gateway: [2026-10-17T05:03:36.930Z] management routes registered: /mgw (loopbackOnly=true)
+mobile-gateway: [2026-10-17T05:03:36.930Z] upgrade route registered: /ws/mobile
+mobile-gateway: [2026-10-17T05:03:36.931Z] session/event listener attached
+mobile-gateway: [2026-10-17T05:03:36.933Z] Host waterfall interaction listeners, workspace stream, and session control stream attached
+mobile-gateway: [2026-10-17T05:03:37.572Z] workspace stream failed; retrying: typert gateway: workspace/follow: active Service "workspaceController" is unavailable
+mobile-gateway: [2026-10-17T05:03:37.572Z] session control stream failed; retrying: typert gateway: session/control: active Service "sessionController" is unavailable
+mobile-gateway: [2026-10-17T05:03:37.584Z] LAN listener failed: listen EADDRINUSE: address already in use 0.0.0.0:3081
+dsh-pocket-relay: port 3081 busy, proxy on 3083 | 端口 3081 被占用，代理改用 3083
+dsh-pocket-relay: auto-restore check | 自动恢复检查：读取上次隧道状态
+mobile-gateway: [2026-10-17T05:03:38.578Z] workspace stream failed; retrying: typert gateway: workspace/follow: active Service "workspaceController" is unavailable
+mobile-gateway: [2026-10-17T05:03:38.578Z] session control stream failed; retrying: typert gateway: session/control: active Service "sessionController" is unavailable
+[info]: [ 'client ready' ]
+[info]: [ 'event-dispatch is ready' ]
+[info]: [
+  '[ws]',
+  'receive events or callbacks through persistent connection only available in self-build & Feishu app, Configured in:\n' +
+    '        Developer Console(开发者后台)\n' +
+    '          ->\n' +
+    '        Events and Callbacks(事件与回调)\n' +
+    '          ->\n' +
+    '        Mode of event/callback subscription(订阅方式)\n' +
+    '          ->\n' +
+    '        Receive events/callbacks through persistent connection(使用 长连接 接收事件/回调)'
+]
+[info]: [ '[ws]', 'ws client ready' ]
+mobile-gateway: [2026-10-17T05:03:39.580Z] session archive state forwarded: count=71
+mobile-gateway: [2026-10-17T05:03:39.584Z] session queue baseline forwarded: sessions=0
+
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│                                                                              │
+│                                                                              │
+│                         ▄▀▀ ▄▀█ █▀▀ ▀█▀ █▀▄▀█ █▀▀ █▀█                        │
+│                         █▀  █▀█ ▄▄█  █  █ ▀ █ █▄▄ █▀▀                        │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                FastMCP 4.1.0                                 │
+│                            https://gofastmcp.com                             │
+│                                                                              │
+│                 🖥  Server:      Word Document Server, 4.1.0                  │
+│                 🚀 Deploy free: https://horizon.prefect.io                   │
+│                                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+
+[10/17/26 13:03:44] INFO     Starting MCP server 'Word Document transport.py:241
+                             Server' with transport 'stdio'                     
+[2026-10-17T05:03:59.765Z] [INFO] obsidian-mcp starting {"vault":"/media/wangke/OFFICE/Wiki","readOnly":false}
+[2026-10-17T05:03:59.766Z] [INFO] obsidian-mcp ready
+[MCP-Server-Chart] 2026-10-17T05:04:04.174Z ℹ️  setting up tool handlers...
+[MCP-Server-Chart] 2026-10-17T05:04:04.176Z ℹ️  tool handlers set up
+[MCP-Server-Chart] 2026-10-17T05:04:04.182Z ✅ Stdio MCP Server started
+12306 MCP Server running on stdio @Joooook
+dsh: warning: 1 entry did not activate
+dsh-remote-bridge (dsh-remote-bridge): Error: listen EADDRINUSE: address already in use 127.0.0.1:3090
+    at Server.setupListenHandle [as _listen2] (node:net:2167:16)
+    at listenInCluster (node:net:2224:12)
+    at node:net:2448:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+dsh web: http://127.0.0.1:3080/?token=vpgj29F08lf-A_n_3gNum7R9CFE-HGAmXk_tUvdWhGc
+dsh web: opening the default browser; pass --no-open to disable
+mobile-gateway: [2026-10-17T05:16:51.020Z] plugin stopped, all sockets closed
+[info]: [ '[ws]', 'ws client closed manually (force)' ]

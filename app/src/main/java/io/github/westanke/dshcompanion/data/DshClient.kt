@@ -621,7 +621,9 @@ private class ReconnectingEvents(
         socket = null
         executor.shutdownNow()
     }
+
 }
+
 
 @Serializable private data class RootList(val items: List<RootView>)
 @Serializable private data class TrashList(val items: List<TrashEntry>)
@@ -659,3 +661,4 @@ private class ReconnectingEvents(
 @Serializable private data class CreatedSessionEnvelope(val session: CreatedSession)
 @Serializable private data class ErrorEnvelope(val error: ApiErrorBody)
 @Serializable private data class ApiErrorBody(val code: String, val message: String, val requestId: String? = null)
+

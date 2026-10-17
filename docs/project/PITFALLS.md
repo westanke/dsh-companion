@@ -371,3 +371,33 @@ SelectionContainer {
   停手，把父容器的布局结构打出来看 —— 元素可能压根不在你以为的那一行。
 - `SelectionContainer` / `FlowRow` 这类 inline-like 容器**只包一个需要上下排列的子节点**；
   要多个，请自己加 `Column`。
+
+### delta 帧缺 turn/step 被静默丢弃
+
+**症状**：正文正在流式渲染，底部状态条却一直显示「内容由 AI 生成，请甄别后使用」，
+思考内容该出现的地方一片空白。真机上看起来像「实时坏了」，但正文其实在正常刷新，
+只有**思考条**永远不出现。
+
+**根因（两侧都有责任）**：
+
+- 服务端 `chat-adapter.ts` 转发 `assistant/chunk` 时，`turn` / `step` 是**条件性**的：
+  `...(typeof assistantData.turn === 'number' ? { turn: assistantData.turn } : {})`。
+  内核这一版的 `assistant/chunk` 不带这两个字段，于是转出来的 delta 帧也没有。
+- 客户端 `chatDelta()` 原来写的是 `turn = value.intValue("turn") ?: return null`，
+  **缺一个字段就整帧丢弃**，且是静默的（没有任何日志）。
+
+两端一叠加：所有 delta 帧被扔掉 → `liveChat` 恒 null → `liveThinkingText()` 恒空串 →
+`ChatStatusBar` 只能走「显示 AI 标识」那个分支。**症状落在思考条，根因在事件解析。**
+
+**修法**：`turn` / `step` 只用于「按 turn/step 切段」，不参与正文渲染，缺失兜底 `0`；
+真必填的只有 `sessionId` / `index` / `text`。两侧同时兜底，回归见 `ChatDeltaToleranceTest`。
+
+**取证教训（同一天踩了两次）**：这两次排查里我两次把**自己写的计数器**当成事实：
+
+1. `frames` 计数器只在解析失败时 +1，于是 `frames=0 dropped=0` 被我读成「一帧没收到」，
+   实际含义只是「零解析失败」。改成统计**所有**收到的帧并按 type 分布后，
+   真相是 `frames=1 dropped=0 types=connection.ready×1`。
+2. 落底那次的「跳到底部按钮消失」当判据（那个条件只是「距底 ≤3 项」）。
+
+**计数器口径必须先核对再解读** —— 数字不会自己解释自己。
+

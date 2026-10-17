@@ -583,11 +583,11 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 - Version: `v2.2.41` (`versionCode` 10066)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
-- Unit tests: 47 test classes / 425 cases at the last run (0 failures). The counts move with the code, so
+- Unit tests: 48 test classes / 429 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
 - Current APK: `DSH伴侣-companion-v2.2.42.apk`, **2,965,986 bytes**,
-    SHA-256 `29338f1e3c2dd72f0a469b860c9799e2d8a7dab575f13af22b4d9d448898ce80` (kept in sync in
+    SHA-256 `6839a79a9e1db23560040024882734d1d6a098f86d26c8e074fc5695836c11f5` (kept in sync in
   `artifacts/SHA256SUMS.txt`). **This build is not released yet** — it was only packaged and
   signature-verified locally (v2 scheme, `CN=DSH Pocket Client`, the same key as v2.2.41 so it
   installs straight over it); uploading waits for on-device acceptance

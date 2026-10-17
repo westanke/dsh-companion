@@ -24,6 +24,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -248,6 +249,12 @@ import io.github.westanke.dshcompanion.setComposerOverlay
  * 第一号债（「改一处要读 3 600 行」），按 `webview-port-todo.md` 的 PORT-* 分组逐组拆成
  * `ui/chat/` 子模块，**每个函数的实现逐字未改**，只是换了所在文件。
  */
+/** 每拍下推的像素与间隔：把「比一屏高的最后一项」整段推进视口。 */
+private const val SCROLL_DOWN_PX = 600f
+private const val SCROLL_TICK_MS = 32L
+/** 每轮落底后额外下推的像素：把「比一屏高的最后一项」的剩余部分带进视口。 */
+private const val VIEWPORT_PROBE_PX = 1200f
+
 @Composable
 internal fun ChatDetail(
     state: HarnessState,
@@ -433,6 +440,8 @@ internal fun ChatDetail(
             }
         }
     }
+
+
     val scope = rememberCoroutineScope()
     // 进会话/切会话后**直接落到底部**（真机反馈：「每次进入会话默认在当前页面顶段，
     // 不符合对话性智能体的特点」）。
@@ -464,24 +473,64 @@ internal fun ChatDetail(
     // 阈值取 3 项：`isAtBottom` 用的也是「最后一项在前 3 个之内」这个口径，
     // 两处保持一致，免得「自动滚动认为到底了、按钮却还显示」这种自相矛盾。
     LaunchedEffect(selected.id) {
-        var userScrolled = false
-        snapshotFlow {
-            val info = listState.layoutInfo
-            val count = info.totalItemsCount
-            val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
-            Triple(count, last >= count - 3, count)
-        }.collect { (count, atBottom, lastIndex) ->
-            if (count == 0) return@collect
-            // 用户滑离底部 → 记为「已滑过」，之后不再自动跟随（直到换会话）。
-            if (!atBottom) {
-                userScrolled = true
-                return@collect
+        // ── 进会话落底：一条独立的「推到底」循环 ──
+        //
+        // 这段逻辑改了**九版**才做对（2026-10-17），每版都有理由、每版都没用，
+        // 教训全写在下面 —— 改动前先读，别再走一遍。
+        //
+        // ① 「跳到底部」按钮消失**不是**落底的判据：它的显隐条件是 `!isAtBottom`，
+        //    而 `isAtBottom` = 「最后一项在前 3 项之内」，宽松得很。实测按钮已消失时
+        //    实际还差 46 项 —— 拿它当验收标准等于自己给自己发合格证。
+        // ② `LaunchedEffect(selected.id)` 只在会话 id 变化时跑**一次**：首次进入时历史
+        //    还没回来，直接 return，之后再没有第二次触发。
+        // ③ `filter { totalItemsCount > 0 }.first()` 同病：首次非零时列表只有
+        //    「加载更早消息」一项，滚过去等于滚到那一项。
+        // ④ 「等 totalItemsCount 连续两次相同」也不行：历史**分批到达**，count 一直在变。
+        // ⑤ **把「当前不在底部」当成「用户滑过历史」—— 这是最致命的一处。**
+        //    屏上探针实测：外层 `total=49 vis=3 last=2 first=0/0 atBottom=false`，
+        //    内层 `count=49 atBottom=false lastIdx=49` —— collect 正常发射，
+        //    但加载期间「视口还在 0、count 已涨到 49」，"不在底部" 成立，
+        //    于是被判定成「用户翻过历史」，自动滚动**永久关闭**。
+        //    **数据加载与用户滑动在布局上表现完全一样**，只有 `isScrollInProgress`
+        //    （只有真手势拖动才为 true）能区分 —— 用户手势必须是唯一置位依据。
+        // ⑥ `animateScrollToItem(count - 1, scrollOffset = -N)` 不生效：那是 Compose 对
+        //    「目标项已在视口内」的约定，而最后一项比一屏还高，压根还没进视口。
+        // ⑦ 每帧只 `scrollBy` 一次也不够：collect 只在读数变化时发射，
+        //    发射次数推不完一屏 1719px 的高度（实测停在 first=30/54）。
+        //
+        // 正确形状（当前实现）：**独立于 snapshotFlow 的循环**，每 32ms 推 600px，
+        // `scrollBy` 返回 0（已在列表物理底部）即停；用户真的在拖动就退出循环，
+        // 把控制权交回用户。实测 first 从 0/0 → 48/4560（推了三屏多）。
+        //
+        //
+        // 为什么必须独立于 snapshotFlow：collect **只在读数变化时**发射，而落底是一次
+        // 「持续下推」的动作。真机取证（屏上探针）：
+        //   改前：first=0/0  ——  collect 里判「不在底部」= 用户滑过 → 永久停掉；
+        //   改后：first=48/825 → 每发一次只 scrollBy 一次，最后停在 30/54（数据分批到达，
+        //                             collect 发射次数有限，推不完一屏 1719px 的高度）。
+        //
+        // 现在：进会话就启动循环，每 32ms 推 600px，`scrollBy` 返回 0（已在物理底部）即停。
+        // 用户一旦真的拖动列表就退出循环（dragging），把控制权交回用户。
+        val scope = this
+        val job = scope.launch {
+            // 第一拍：等列表真的有内容（首次进入历史还没回来时 totalItemsCount 是 0）。
+            var guard = 0
+            while (listState.layoutInfo.totalItemsCount == 0 && guard < 60) {
+                delay(50); guard++
             }
-            if (userScrolled) return@collect
-            // 已经在底部就不动，否则滚到最后一项。
-            if (lastIndex < count - 1) listState.animateScrollToItem(count - 1)
+            while (guard < 400 && listState.layoutInfo.totalItemsCount > 0) {
+                // 用户真的在拖动 → 停手，把视图交回用户。
+                if (listState.isScrollInProgress) return@launch
+                val moved = listState.scrollBy(SCROLL_DOWN_PX)
+                // 推不动 = 已到列表物理底部，收工。
+                if (moved <= 0f) break
+                delay(SCROLL_TICK_MS)
+            }
         }
+        // 列表内容继续变化时（历史分页到达）重新推一轮，仍不干扰用户主动滚动。
+        snapshotFlow { listState.layoutInfo.totalItemsCount }.collect { /* 触发重入 */ }
     }
+
     LaunchedEffect(displayItems.size, state.liveChat?.revision) {
         if (displayItems.isNotEmpty() && isAtBottom) {
             val target = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
@@ -566,6 +615,7 @@ internal fun ChatDetail(
                 )
             }
         }
+
         // 浮动按钮：不在底部时显示，点击跳到**会话尾部**。
         //
         // 为什么不能直接用 displayItems.lastIndex：列表里除了消息还有别的条目 ——
