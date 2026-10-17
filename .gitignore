@@ -17,6 +17,10 @@ artifacts/*
 *.jks
 *.keystore
 signing.properties
+# 签名与凭据目录整目录忽略。只靠上面三条按文件名的规则不够：往 .secrets/ 里
+# 放个 .pem / .b64 / .txt 之类的备份，文件名不命中就会被 git add -A 一路带到
+# 三个远端。整目录锚定在仓库根，杜绝这种兜底漏洞。
+/.secrets/
 !artifacts/DeepSeek-Harness-compat02-release.apk
 
 # Local build-environment backups (mirror rewrites), not part of the change
