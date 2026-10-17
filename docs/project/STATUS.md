@@ -131,7 +131,7 @@
   门验：**44 类 / 410 用例 / 0 失败**、`compileDebugKotlin` 真执行、`docsCheck` 通过；
   **真机验收未做**（滚动手感、折叠观感、200% 系统字号布局都只能上机看）。
   C 批（bridge 侧 `seq` 隔离 / 原子基线 / 交互重放等）与 A/B 剩余项见 `CHANGELOG-DEV.md` 2026-10-17 条末节。
-- 阶段：本 fork 的 **2.x 版本线**。**v2.2.42（versionCode 10067）= 对标补强 A/B/C 三批 + Whaleness 会话页舒适度**（2026-10-17，**本地已提交，待真机验收；未推送未发版**）。上一版 **v2.2.41（versionCode 10066）应用改名 + 包名迁移，Gitee 与 AtomGit 双主备就位**（2026-10-16，tag v2.2.41，Gitee Release 已回验）。**GitHub 旧仓已删除并重建为镜像从站**，由 Actions 每 3 小时从 Gitee 自动同步（详见下文「渠道状态」）。
+- 阶段：本 fork 的 **2.x 版本线**。**v2.2.43（versionCode 10068）= 纯仓库卫生，无任何代码或界面改动**（2026-10-17，清掉 40.9 MB 调试残留 + 把 `.secrets/` 改为整目录忽略；APK 代码与 v2.2.42 完全一致）。上一版 **v2.2.42（versionCode 10067）对标补强 A/B/C 三批 + Whaleness 会话页舒适度已发布**（2026-10-17，tag v2.2.42，Gitee Release 已回验）。再上一版 **v2.2.41（versionCode 10066）应用改名 + 包名迁移，Gitee 与 AtomGit 双主备就位**（2026-10-16，tag v2.2.41，Gitee Release 已回验）。**GitHub 旧仓已删除并重建为镜像从站**，由 Actions 每 3 小时从 Gitee 自动同步（详见下文「渠道状态」）。
   应用名 `DeepSeek Harness` → **`DSH伴侣`**（英文 `DSH Companion`），包名 `io.github.hakunm.deepseekharness`
   → **`io.github.westanke.dshcompanion`**。动因是华为应用市场驳回「应用与『DeepSeek』名称相似、未提供商标权属证明」
   —— `NOTICE` 那份 MIT 只覆盖 logo **著作权**，不是**商标权**。
@@ -140,11 +140,11 @@
   **UI 测试与真机验收未做**（包名变更要求先卸载旧包）。
   其下 **v2.2.40（versionCode 10065）真机验收通过，待发版**（2026-10-16，① 连接与启动 ② 会话列表 ③ 消息流与工具详情 ④ 输入区 ⑥ 文件/插件/设置/会话文件面板 ⑦ 切会话与熄屏亮屏 **全绿**；⑤ 审批与问答卡片**当时**记为「不弹」，**该结论已于同日推翻——病根全在插件侧，已随 bridge v2.3.7 修复并真机复验通过**）。
   该版是**纯重构，零界面与行为改动**：按职责拆文件，`TECH-DEBT.md` 行数台账上的三条债全部清账（`ChatScreen.kt` 3882→329 + `ui/chat/` 12 个文件、`HarnessViewModel.kt` 2277→663 + 8 个域文件、`ChatPresentation.kt` 825→98 + 5 个文件），`app/src` 下**零个文件超 800 行**；290 用例 0 失败、build / docsCheck 全绿。其后三笔均为**纯文档/清理**，不进版本号：清 `ChatScreen.kt` 三处死 import、补 `PITFALLS.md` 的 `resolveAgent` 原因、撤掉「卡片不弹」缺口并把 README 双站的 bridge 门槛提到 **≥ 2.3.7**。
-  版本线（v2.2.35 之后）：v2.2.36 平板三处 → v2.2.37 导航默认收起与软/硬键盘发送键 → v2.2.38 修两个实测回归 → **v2.2.39 修 Ctrl+Enter 发送（`KeyEvent.FLAG_SOFT_KEYBOARD` 来源判据）；界面回到 v2.2.38 状态**（v2.2.39 曾做的「会话列表收起」经实测后已整套回退，一级导航仍默认收起）→ **v2.2.40 纯重构**。`v2.2.35`（versionCode 10060）**已发版**（GitHub + Gitee 双站 Release，tag v2.2.35），v2.2.34 同日发布；**v2.2.36–v2.2.40 一并随 v2.2.40 发布**（中间五版未单独发版）
+  版本线（v2.2.35 之后）：v2.2.36 平板三处 → v2.2.37 导航默认收起与软/硬键盘发送键 → v2.2.38 修两个实测回归 → **v2.2.39 修 Ctrl+Enter 发送（`KeyEvent.FLAG_SOFT_KEYBOARD` 来源判据）；界面回到 v2.2.38 状态**（v2.2.39 曾做的「会话列表收起」经实测后已整套回退，一级导航仍默认收起）→ **v2.2.40 纯重构**。`v2.2.35`（versionCode 10060）**已发版**（GitHub + Gitee 双站 Release，tag v2.2.35），v2.2.34 同日发布；**v2.2.36–v2.2.40 一并随 v2.2.40 发布**（中间五版未单独发版）→ **v2.2.41 应用改名「DSH伴侣」+ 包名迁移**（唯一一版破坏覆盖安装、老用户须先卸载）→ **v2.2.42 对标补强 A/B/C 三批 + Whaleness 会话页舒适度**（已发布，tag v2.2.42）→ **v2.2.43 纯仓库卫生**（清 40.9 MB 调试残留 + `.secrets/` 整目录忽略；APK 代码与 v2.2.42 完全一致）
 - 版本线：v1.1.0 多地址连接 + 配置导入 → v1.2.0 插件清单页 → v1.4.0 会话文件与图片 → v1.9.0 长按选中/双击复制 + 文件按类型预览 → v2.0.0 起会话详情页增加 WebView 实现（2.2.15 起把网页版呈现方式反向移植回原生）→ v2.2.23 问答卡片、图片 PDF 预览、工具调用详情 → v2.2.24–2.2.26 模型失败可见、图片交接可用、出错文案跟随界面语言 → v2.2.27 真机七问题收口 → v2.2.28 补上「长按可选中复制片段」→ v2.2.29 耗电主因（流式期间每秒全量拉 history → 400ms 静默去抖）+ 跳转落到会话尾部 + isAtBottom 改 derivedStateOf + 浮动按钮半透明 → v2.2.30 熄屏断流、亮屏接回（省电第二大头）→ v2.2.31 输入框 `@` 调取当前工作目录文件/文件夹（对齐官方）→ v2.2.35 长文件名改为横向滚动（文件页 / 预览标题 / 会话文件弹层 / `@` 面板四处统一）→ v2.2.36 平板界面三处优化（会话列表栏宽随屏宽伸缩 + 会话行/顶栏标题 wide 下两行 + 未选会话时右侧改概览面板，全部只在 wide 分支、手机端零改动）→ **v2.2.37 平板导航默认收起（overlay 抽屉 + 48dp 汉堡 + 用完即收，内容区从「屏宽−264dp」变整屏）+ 软/硬键盘发送键（物理键盘时输入框不弹软键盘 + 空闲占位符追加「Ctrl+Enter 发送」；Enter 一律换行的底线不动）→ v2.2.38 修 v2.2.37 两个实测回归（汉堡按钮从浮在内容之上改为左缘独立 48dp 竖条，不再压住会话列表标题导致点不动；软键盘 hide 从 Composer 组合时改到输入框 onFocusChanged 获焦时，否则 IME 接管后物理键盘的 Ctrl+Enter 全被吞掉）→ **v2.2.39 修 Ctrl+Enter 发送（`KeyEvent.FLAG_SOFT_KEYBOARD` 来源判据：触摸屏 Enter 一律换行，只有物理键盘的 Ctrl+Enter 才发送）；界面回到 v2.2.38 —— v2.2.39 曾做的「会话列表收起」经实测后已整套回退（含组件、字符串、代码），一级导航仍默认收起**
 - 包名：**`io.github.westanke.dshcompanion`**（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`，只留在 git 历史里）；Android 基线：min SDK 26、target/compile SDK 36、JDK 17
 - 插件基线：`dsh-remote-bridge` **≥ 2.3.7**（旧名 `dsh-workspace`；Web 挂载前缀仍是历史名 `/dsh-workspace-api`，未随改名变动）。分项：「加载更早消息」**要求 ≥ 2.3.1**（2.3.0 及更早的 `history()` 会忽略 `beforeSeq`，点按钮不会有任何反应）；「插件」页启停 **≥ 2.3.3**；**审批 / 问答卡片 ≥ 2.3.7**（更低版本手机端一张都不显示——该症状曾连续坏在两个插件侧病根上，App 侧代码自始至终是对的，详见 `PITFALLS.md` §bridge 版本基线）
-- 最近验证：**290 用例 / 0 失败**（口径：跑 `scripts/build.sh :app:testDebugUnitTest`，再数 `app/build/test-results/` 下的 XML）。这个数字随代码变化，不要当常量引用
+- 最近验证：**436 用例 / 0 失败**（v2.2.43 本轮重跑：48 个测试文件、50 个测试类；口径：跑 `scripts/build.sh :app:testDebugUnitTest`，再数 `app/build/test-results/` 下的 XML）。这个数字随代码变化，不要当常量引用
 - **「插件」页现状（v2.2.32）**：只读清单 + 详情（简介 / 主页 / 更新提示）+ **手机上直接启停**。
   - 配套插件端 **≥ 2.3.3**：`v2.3.2` 修了 profile 判定（`dsh web` 简写此前被判不出，整页读不出清单）；`v2.3.3` 加了详情字段与 `PATCH /settings/plugins` 启停端点。
   - 启停只改 profile 的 `dsh.profile.bundles`（加载清单），**不碰依赖、不装包**，写前自动备份 `package.json.bak-<时间戳>`；**必须重启 DSH 才生效**（bundles 只在启动时读）。
@@ -154,26 +154,33 @@
   - v2.2.30 修掉第二大头：`eventSubscription` 原先只在 `onCleared()` 与主动断开时关闭，熄屏后 WebSocket 一直连着（WiFi 射频 + TCP keepalive 全程在线，系统还会反复唤醒进程）。现在 **熄屏断流、亮屏接回**：`MainActivity` 注册 `ACTION_SCREEN_OFF`/`ACTION_SCREEN_ON`（**不用 `onStop`** —— 切 App/分屏时屏幕还亮着不该断），ViewModel 加 `pauseEvents()`/`resumeEvents()`，熄屏只关流、**保留 active 连接与令牌**。亮屏补三样：会话列表、当前会话历史、**审批与待答问题**（后两类不走 history，必须单独补，否则熄屏期间产生的卡片永远不出现）。
   - 策略由用户拍板（原话「能让 熄屏 就不在线了，如果不是熄屏状态 实时优先」）。**代价**：熄屏期间收不到推送通知，亮屏一次性补上、不丢内容。
 - 当前产物：**只保留「必须的」与「最新的」**（用户要求：已发布到 Release 的 APK 不在本地囤积）：
-  - `DSH伴侣-companion-v2.2.42.apk`，**2,965,986 字节**（**当前版本 · 对标补强 A/B/C 三批 + Whaleness 会话页舒适度 ·
-    **待真机验收，未上传未发版**），release 构建，R8 + 资源裁剪，SHA-256 `e009b1776aff593bdc3b090def5b6471cdec6cb8e72015faca461b8e109f171a`
-    —— 已本地验证签名（**v2 方案**，证书 `CN=DSH Pocket Client`，与 v2.2.41 同一张证书 ⇒ 可直接覆盖安装）；
-    同步的插件产物为 `dsh-remote-bridge` **2.3.8**（已同步至 `~/.dsh/profiles/web/node_modules/dsh-remote-bridge/`，
-    `lib/index.js` / `index.d.ts` / `client.cjs` / `package.json` 四处字节数与源码一致）
-  - `DSH伴侣-companion-v2.2.41.apk`，**2,895,430 字节**（上一版 · 改名 + 包名迁移 + AI 标识 · 已发 Gitee），
+  - `DSH伴侣-companion-v2.2.43.apk`，**2,965,986 字节**（**当前版本 · 纯仓库卫生，无功能改动 · 已发 Gitee**），
+    release 构建，R8 + 资源裁剪，SHA-256 `5bad043b0d75c96ceb57572245bc25e1f7585cc4f64de867a4ce1d7c27380f9a`
+    —— 已核验包内 `versionCode 10068` / `versionName 2.2.43`、**v2 签名**（证书 `CN=DSH Pocket Client`，
+    证书 SHA-256 `8b2ba797589da844b779941fec213da3432633062744f64bc916e62df9dbf68a`，与 v2.2.42 同一张证书
+    ⇒ 可直接覆盖安装），构建水印 `afbea7d`；**APK 行为与 v2.2.42 完全一致**，只随附版本号
+  - `DSH伴侣-companion-v2.2.42.apk`，**2,965,986 字节**（上一版 · 对标补强 A/B/C 三批 + Whaleness 会话页舒适度 · **已发 Gitee**），
     release 构建，R8 + 资源裁剪，SHA-256 `e009b1776aff593bdc3b090def5b6471cdec6cb8e72015faca461b8e109f171a`
-    —— 已上传 Gitee Release（tag v2.2.41）并**下载回验**：字节数与 SHA-256 与本地三处一致。
-    **本地暂留**：按既定顺序「发新版 → 上传 → 回读校验 → 再删上一版本地包」，v2.2.42 尚未发版，故这一版还不能删
+    —— 已上传 Gitee Release（tag v2.2.42）并**下载回验**：字节数与 SHA-256 在本地、上传返回、回读三处一致。
+    **本地暂留**：按既定顺序「发新版 → 上传 → 回读校验 → 再删上一版本地包」，v2.2.43 回验通过后即可删除这一版
   - `DeepSeek-Harness-v1.0.0.apk` 与 `DeepSeek-Harness-compat02-release.apk`（上游基线，各 2,561,512 字节）。`.gitignore` 特意用 `!` 保留这两个，用途是比对「本 fork 证书 ≠ 上游证书」，**不要删**
-  - `SHA256SUMS.txt`：**全量历史**校验和（含 v1.9.0 起所有已发布版本）。它是**校验记录**而不是本地文件清单，本地删包**不动它**。
+  - `SHA256SUMS.txt`：**当前可在本机校验的文件清单**（两个上游基线包 + 最新一版 APK）。
+    ⚠️ 2026-10-17 更正：该文件此前的 23 行**全部写着同一个 SHA**（`e009b177…`），
+    而实测 `DeepSeek-Harness-compat02-release.apk` 是 `4df87f47…`、`DeepSeek-Harness-v1.0.0.apk`
+    是 `80940602…` —— 只有最新一版那行恰好对。历史行是批量复制同一值造成的**错误数据**，
+    本地又没有旧包可重算，留着只会误导，故本次重写为只含**真实存在且可校验**的三个文件。
+    历史版本的校验请直接对 Release 资产重新计算。
   - 其余版本的 APK（v1.1.0 ~ v2.2.33）**本地不留** —— 两站 Release 都有资产，需要时直接下载；`artifacts/*` 除 `SHA256SUMS.txt` 与上述两个基线包外全部被 `.gitignore` 忽略，**丢了无法从 git 回滚**，所以更不该在本地堆。
   - 发新版本时的动作：构建 → 拷入 `artifacts/` → 上传两站 Release → **回读校验哈希** → 再删掉上一版本地包（等价于「本地只留最新」）。
 - **构建类型**：正式包一律 `scripts/build.sh assembleRelease`。debug 包不混淆、不裁剪资源，体积约 **21.8 MB**，与 release 的 2.87 MB 差 7.5 倍 —— 只看体积就能判断打错没打错
-- 签名：**`dsh-release.jks`**（`CN=DSH Pocket Client`，证书 SHA-256 `e009b1776aff593bdc3b090def5b6471cdec6cb8e72015faca461b8e109f171a`；alias `dshrelease`，口令见 `.secrets/deepseek-harness-android/signing.properties`，该文件与 `*.jks` 都在 `.gitignore` 内）
+- 签名：**`dsh-release.jks`**（`CN=DSH Pocket Client`，**证书** SHA-256 `8b2ba797589da844b779941fec213da3432633062744f64bc916e62df9dbf68a`；alias `dshrelease`，口令见 `.secrets/deepseek-harness-android/signing.properties`，该文件与 `*.jks` 都在 `.gitignore` 内）
+  > 2026-10-17 更正：此处原先写的 `e009b177…` 是**某一版 APK 文件**的 SHA-256，被误当成证书摘要。
+  > 证书指纹以 `keytool -list -v` / `apksigner verify --print-certs` 的输出为准，与 APK 文件摘要无关。
   - 2026-10-11 说明：**原始那把发布钥匙的密码已彻底丢失**（本机/仓库/CI/git 历史全查过），现用的是**重新生成**的钥匙，主题刻意与旧钥匙一致（同为 `CN=DSH Pocket Client`）。
   - 后果：**它不是旧钥匙** —— v1.9.0 及更早（旧 `CN=DSH Pocket Client`，证书 `4e7fa1db…`）与上游 `CN=Hakunm` 都盖不上去，跨签名升级**必须先卸载**（会清除已保存的连接）。**v2.2.24 之后的包彼此可以直接覆盖**（v2.2.26 → v2.2.27 实测同一把钥匙）
   - 旧钥匙已归档在同目录 `archived-unknown-password/` 下，保留不删
 - 仓库：Gitee 主站 `https://gitee.com/westanke/dsh-companion`、AtomGit 备站 `https://atomgit.com/westanke163/dsh-companion`、GitHub 镜像从站 `https://github.com/westanke/dsh-companion`（自动同步，勿手工推）；上游 `Hakunm/dsh-android-app` 只作参考，**不推送**
-- 已打 tag（`git tag` 实测，2026-10-16）：`v1.1.0` / `v1.2.0` / `v1.4.0` / `v1.9.0` / `v2.2.20` / `v2.2.23` / `v2.2.26` / `v2.2.27` / `v2.2.28` / `v2.2.29` / `v2.2.30` / `v2.2.31` / `v2.2.32` / `v2.2.33` / `v2.2.34` / `v2.2.35` / `v2.2.39` / `v2.2.40` / **`v2.2.41`**（共 19 个）。v2.0.0–v2.2.19 之间没有 tag；**v2.2.36–v2.2.38 没有独立 tag**（随 v2.2.39 一并发布）
+- 已打 tag（`git tag` 实测，2026-10-17）：`v1.1.0` / `v1.2.0` / `v1.4.0` / `v1.9.0` / `v2.2.20` / `v2.2.23` / `v2.2.26` / `v2.2.27` / `v2.2.28` / `v2.2.29` / `v2.2.30` / `v2.2.31` / `v2.2.32` / `v2.2.33` / `v2.2.34` / `v2.2.35` / `v2.2.39` / `v2.2.40` / `v2.2.41` / **`v2.2.42`**（共 20 个；`v2.2.43` 随本次发版创建）。v2.0.0–v2.2.19 之间没有 tag；**v2.2.36–v2.2.38 没有独立 tag**（随 v2.2.39 一并发布）
 - 真机验收：**审批与问答卡片已确认修好（2026-10-16）**，但**修的是插件侧，本 App 一行未改**。plan 模式评审实测：**手机端弹出卡片，电脑端 WebUI 同时正常弹出**（红线「不得抢答」未踩）。病根是 `dsh-remote-bridge` 的两个钩子注册时没带 Cordis 的 `{ prepend: true }`，被 `push` 到 waterfall 链尾、排在官方 WebUI 之后，于是永不被调用；插件 **v2.3.7** 已修并真机验证。**此前「10-11 能弹、10-16 又不弹」两次结论相反的悬案就此解开**：不是非稳定复现，而是 `sessionIdOfAgent`（v2.3.6 修）与 `prepend`（v2.3.7 修）**两个病根叠加**——前者修好后后者仍在，症状看起来「回来了」。**App 侧代码（订阅、拉取、渲染三环）自始至终是对的。**v2.2.27 的七项修复**待本轮真机验收**。**尚未逐项验收**：图片/PDF 预览的翻页与缩放手感、工具调用详情的展开观感、长按选中/双击复制的手势边界、`dsh-ui` 卡片观感、HTML 结构预览排版、输入区 `⋯` 菜单在窄屏与各输入法下的可达性
 - 已知缺口：
   - 单测夹具 `ConnectionShareInteropTest.kt` 仍内嵌一枚**已吊销**的真实设备令牌；该文件在 `app/src` 内，是否改写夹具待定（文档侧已全部脱敏）

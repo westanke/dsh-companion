@@ -3,6 +3,57 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## v2.2.43（versionCode 10068）· 仓库卫生：清掉 40.9 MB 调试残留 + 堵住 `.secrets` 泄露口子（2026-10-17）
+
+> **本版无任何代码或界面改动**，APK 与 v2.2.42 完全一致，只多了版本号。真正的改动都在
+> `.gitignore` 与仓库文件树上。
+
+### 基于什么
+
+用户要求清查仓库根目录下 `.wm` 类文件夹的用途、判断能否删除。排查发现它们不是资产，
+而是 v2.2.42 从「四打」排到「十一打」逐版真机排查时留下的**解包取证目录**：
+
+- `.wm` ~ `.wm8`、`.apkcheck`、`.apkcheck2`：各存一份从构建出的 APK 里 unzip 出来的
+  `classes.dex`，用来核对「这次改动到底有没有打进包」；
+- `.m3` / `.mdlib`：把 `multiplatform-markdown-renderer` 的 AAR/JAR 解包成 `.class`，
+  用来查表格渲染相关的类结构与方法签名。
+
+它们是一次性产物，但 `.gitignore` 里没有对应规则，某次 `git add -A` 把它们一并提交了。
+
+### 为什么
+
+1. **体积**：146 个文件、40.9 MB 常驻版本库，每个 clone 都要白拖；而且它们看起来像
+   「有意保留的资产」，后来者不敢删，只会在旁边继续堆。
+2. **泄露口子（更要紧）**：`.gitignore` 保护 `.secrets/` 的只有 `*.jks`、`*.keystore`、
+   `signing.properties` 三条**按文件名**的规则，目录本身从未被忽略。实测往里放一个
+   `secret.txt`，`git check-ignore` 不命中、`git status` 能看见，一次 `git add -A` 就会
+   推到 Gitee / AtomGit / GitHub 三个远端 —— 而那目录里是发布签名密钥与两份口令文件。
+
+### 干了什么
+
+- `79d015c`：`git rm -r --cached` 并物理删除 12 个目录（146 文件 / 40.9 MB），
+  `.gitignore` 增补根锚定规则 `/.wm*/`、`/.apkcheck*/`、`/.m3/`、`/.mdlib/` 并注明用途；
+- `afbea7d`：`.gitignore` 第 23 行新增 `/.secrets/` **整目录忽略**，注释写明为什么
+  不能只靠逐文件名规则；
+- 顺带清掉本机 `.gradle`（32 M 构建缓存）与 `.kotlin`（56 K 编译日志），两者早已被忽略、
+  不在提交内，删前先 `gradle --stop` 停掉空闲守护进程；
+- 未改动 `.secrets` 内任何文件、未碰源码与构建脚本。
+
+### 测什么
+
+- `docsCheck`：8 文档 / 46 任务一致；
+- 忽略规则**正向**：`git check-ignore` 对 `.secrets/`、其子目录与 `dsh-release.jks` 均命中；
+- 忽略规则**负向**：`app/`、`docs/`、`scripts/`、`.gitignore` 未命中，没有误伤；
+- **漏洞回归**：复现原攻击路径（真建 `.secrets/__probe__/secret.txt`），现已命中 `/.secrets/`，
+  且 `git status` 中该文件出现条数为 0，探针随后删除；
+- `.secrets` 四个文件逐一复核完好（`dsh-release.jks` 3826 B、归档旧钥匙 2656 B、
+  两份 `signing.properties` 1212 B / 455 B），字节数与清理前一致；
+- 全量单测本轮重跑，类数 / 用例数 / 失败数见 `TESTING.md`。
+
+### 未做
+
+真机验收 —— 无界面改动，不需要上机。
+
 ## v2.2.42（versionCode 10067）· 对标补强：A/B/C 三批 + Whaleness 会话页舒适度（2026-10-17）
 
 ### 基于什么

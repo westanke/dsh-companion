@@ -758,8 +758,23 @@ android {
         //   测了什么：testDebugUnitTest 44 类 / 410 用例 / 0 失败、docsCheck 8 文档 / 46 任务一致、
         //     lintDebug 通过、compileDebugKotlin 真执行（不是 UP-TO-DATE）。
         //   未做：真机验收 —— 所有界面改动均未上机，等发话。
-        versionCode = 10067
-        versionName = "2.2.42"
+        // v2.2.43（versionCode 10068）：**纯仓库卫生，无任何代码或界面改动**。
+        //   基于什么：清查仓库根目录下 `.wm` 类文件夹时发现，v2.2.42 从「四打」排到「十一打」
+        //     留下的 12 个「解包取证」目录（.wm~.wm8 / .apkcheck / .apkcheck2 / .m3 / .mdlib）
+        //     被一次 git add -A 误提交，共 146 文件 / 40.9 MB；同时 .gitignore 对 .secrets/
+        //     只有 *.jks / *.keystore / signing.properties 三条按文件名的规则。
+        //   为什么：前者让每个 clone 白拖 41 MB 垃圾，且看起来像有意保留的资产、后来者不敢删；
+        //     后者是真实泄露口子 —— 往 .secrets/ 放一个 secret.txt 就会随 git add -A 进三个远端，
+        //     而那目录里是发布签名密钥（dsh-release.jks）与两份口令文件。
+        //   干了什么：commit 79d015c 删净 12 个目录并补 /.wm*/ /.apkcheck*/ /.m3/ /.mdlib/ 四条规则；
+        //     commit afbea7d 补 /.secrets/ 整目录忽略（第 23 行）。本版只随附版本号，
+        //     **APK 代码与 v2.2.42 完全一致**，没有任何功能或界面差异。
+        //   测了什么：docsCheck 8 文档 / 46 任务一致；忽略规则正负向实测（真建 .wm9 / .apkcheck3 /
+        //     .m3 / .mdlib 四个目录均命中，docs/ 与 app/ 未误伤）；漏洞回归（.secrets/__probe__/
+        //     secret.txt 已不被 git 看见）；全量单测本轮重跑，数字见 TESTING.md。
+        //   未做：真机验收 —— 无界面改动，不需要上机。
+        versionCode = 10068
+        versionName = "2.2.43"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。

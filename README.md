@@ -283,7 +283,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.42.apk
+DSH伴侣-companion-v2.2.43.apk
 ```
 
 安装要求：
@@ -529,16 +529,17 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.42`（`versionCode` 10067）
+- 当前版本：`v2.2.43`（`versionCode` 10068）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：48 个测试类 / 436 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.42.apk`，**2,965,986 字节**，
-  SHA-256 `e009b1776aff593bdc3b090def5b6471cdec6cb8e72015faca461b8e109f171a`（`artifacts/SHA256SUMS.txt` 同步）。
-  **这一版尚未发版** —— 本地打包 + 签名验证（v2 方案，证书 `CN=DSH Pocket Client`，与 v2.2.41 同证书、可覆盖安装），
-  等真机验收后再上传。当前包已含**真机反馈全部修复**（GFM flavour 补齐、表格改两列、时间戳底距加大），
-  并带**构建水印**：设置页「关于」的版本行下会显示 `构建 0044f2c` —— 装完看到这串就说明装对了
+- 当前 APK：`DSH伴侣-companion-v2.2.43.apk`，**2,965,986 字节**，
+  SHA-256 `5bad043b0d75c96ceb57572245bc25e1f7585cc4f64de867a4ce1d7c27380f9a`（`artifacts/SHA256SUMS.txt` 同步）。
+  **这一版已发布** —— v2 签名（证书 `CN=DSH Pocket Client`，与 v2.2.42 同一张证书 ⇒ 可直接覆盖安装）。
+  注意：**本版没有任何功能或界面改动**，APK 行为与 v2.2.42 完全一致，只随附版本号；
+  真正的改动是清掉误提交的 40.9 MB 调试残留、把 `.secrets/` 改为整目录忽略。
+  构建水印：设置页「关于」的版本行下会显示 `构建 afbea7d` —— 装完看到这串就说明装对了
 - 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用。证书没变，但 **v2.2.41 起包名变了**，
   `v2.2.40` 及更早仍需先卸载）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)

@@ -290,7 +290,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.42.apk
+DSH伴侣-companion-v2.2.43.apk
 ```
 
 Requirements:
@@ -580,17 +580,20 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.41` (`versionCode` 10066)
+- Version: `v2.2.43` (`versionCode` 10068)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
 - Unit tests: 48 test classes / 436 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.42.apk`, **2,965,986 bytes**,
-    SHA-256 `e009b1776aff593bdc3b090def5b6471cdec6cb8e72015faca461b8e109f171a` (kept in sync in
-  `artifacts/SHA256SUMS.txt`). **This build is not released yet** — it was only packaged and
-  signature-verified locally (v2 scheme, `CN=DSH Pocket Client`, the same key as v2.2.41 so it
-  installs straight over it); uploading waits for on-device acceptance
+- Current APK: `DSH伴侣-companion-v2.2.43.apk`, **2,965,986 bytes**,
+    SHA-256 `5bad043b0d75c96ceb57572245bc25e1f7585cc4f64de867a4ce1d7c27380f9a` (kept in sync in
+  `artifacts/SHA256SUMS.txt`). **Released** — v2 scheme, `CN=DSH Pocket Client`, the same key as
+  v2.2.42 so it installs straight over it. This release has **no functional or UI change**: the
+  APK behaves exactly like v2.2.42 and only carries the new version number. What actually changed
+  is repository hygiene (40.9 MB of accidentally committed debug artifacts removed, and
+  `.secrets/` is now ignored as a whole directory). Build watermark: the About row in Settings
+  shows `构建 afbea7d`
 - Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25). The key did not change, but the
   **package name did in v2.2.41**, so `v2.2.40` and earlier still require an uninstall first
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)
