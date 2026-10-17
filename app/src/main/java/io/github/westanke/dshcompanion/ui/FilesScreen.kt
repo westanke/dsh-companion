@@ -95,6 +95,7 @@ import io.github.westanke.dshcompanion.R
 import io.github.westanke.dshcompanion.data.FileEntry
 import io.github.westanke.dshcompanion.data.PreviewKind
 import io.github.westanke.dshcompanion.data.previewKind
+import io.github.westanke.dshcompanion.ui.chat.HtmlStructurePreview
 import io.github.westanke.dshcompanion.createEntry
 import io.github.westanke.dshcompanion.loadDirectory
 import io.github.westanke.dshcompanion.loadTrash
@@ -339,12 +340,28 @@ private fun FileRow(entry: FileEntry, viewModel: HarnessViewModel) {
                 .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.small),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                if (entry.kind == "directory") Icons.Outlined.Folder else Icons.AutoMirrored.Outlined.InsertDriveFile,
-                null,
-                modifier = Modifier.size(21.dp),
-                tint = if (entry.kind == "directory") MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (entry.kind == "directory") {
+                Icon(
+                    Icons.Outlined.Folder,
+                    null,
+                    modifier = Modifier.size(21.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            } else {
+                // 普通文件优先用**系统自己的类型图标**（装了什么应用就显示什么图标，
+                // 见 FileTypeIcon.kt），解析不出才退回通用文档图标。
+                FileTypeIcon(
+                    fileName = entry.name,
+                    fallback = {
+                        Icon(
+                            Icons.AutoMirrored.Outlined.InsertDriveFile,
+                            null,
+                            modifier = Modifier.size(21.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    },
+                )
+            }
         }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             // 文件名放不下时**横向滚动**（跑马灯），而不是被省成 `DeepSeek-Harness-…`。
@@ -404,6 +421,14 @@ private fun EditorPane(
     val kind = previewKind(document.entry.name, document.contentType)
     val binaryPreview = kind == PreviewKind.IMAGE || kind == PreviewKind.PDF
     var markdownPreview by remember(document.entry.path) { mutableStateOf(markdown) }
+    // HTML 与 Markdown 同样处理：**默认给结构预览**，想看源码再切。
+    //
+    // 在此之前 `PreviewKind.HTML` 只被「会话附件」面板消费（ChatSessionFiles.kt），
+    // 文件浏览器这边没有分支 —— 于是点开 .html 落到通用源码视图，用户看到一屏
+    // `<style>` 原文（真机实测，2026-10-17）。同一个文件从两个入口点进去表现不同，
+    // 属于「两处必须同一套规则」没兑现。
+    val html = kind == PreviewKind.HTML && document.text != null
+    var htmlPreview by remember(document.entry.path) { mutableStateOf(html) }
     var textScale by remember(document.entry.path) { mutableStateOf(1f) }
     val applyZoom: (Float) -> Unit = { factor ->
         textScale = (textScale * factor).coerceIn(MIN_TEXT_SCALE, MAX_TEXT_SCALE)
@@ -436,23 +461,11 @@ private fun EditorPane(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            if (html) {
+                PreviewToggleButtons(htmlPreview, { htmlPreview = false }, { htmlPreview = true })
+            }
             if (markdown && document.text != null) {
-                IconButton(onClick = { markdownPreview = false }) {
-                    Icon(
-                        Icons.Outlined.Code,
-                        stringResource(R.string.markdown_source),
-                        tint = if (!markdownPreview) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                IconButton(onClick = { markdownPreview = true }) {
-                    Icon(
-                        Icons.Outlined.Visibility,
-                        stringResource(R.string.markdown_preview),
-                        tint = if (markdownPreview) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                PreviewToggleButtons(markdownPreview, { markdownPreview = false }, { markdownPreview = true })
             }
             IconButton(
                 onClick = viewModel::saveDocument,
@@ -547,6 +560,15 @@ private fun EditorPane(
         } else if (document.text == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 EmptyState(Icons.AutoMirrored.Outlined.InsertDriveFile, stringResource(R.string.binary_file))
+            }
+        } else if (html && htmlPreview) {
+            Column(
+                Modifier.fillMaxSize()
+                    .pinchToZoom(document.entry.path, applyZoom)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 18.dp, vertical = 14.dp),
+            ) {
+                HtmlStructurePreview(document.text)
             }
         } else if (markdown && markdownPreview) {
             Column(

@@ -532,10 +532,10 @@ keyPassword=...
 - 当前版本：`v2.2.42`（`versionCode` 10067）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
-- 单元测试：48 个测试类 / 429 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
+- 单元测试：47 个测试类 / 432 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
 - 当前 APK：`DSH伴侣-companion-v2.2.42.apk`，**2,965,986 字节**，
-  SHA-256 `6839a79a9e1db23560040024882734d1d6a098f86d26c8e074fc5695836c11f5`（`artifacts/SHA256SUMS.txt` 同步）。
+  SHA-256 `fd6b02d92b0ca25f4b9e72bd86c52fae18549603bb774729312cc90b888f4ee6`（`artifacts/SHA256SUMS.txt` 同步）。
   **这一版尚未发版** —— 本地打包 + 签名验证（v2 方案，证书 `CN=DSH Pocket Client`，与 v2.2.41 同证书、可覆盖安装），
   等真机验收后再上传。当前包已含**真机反馈全部修复**（GFM flavour 补齐、表格改两列、时间戳底距加大），
   并带**构建水印**：设置页「关于」的版本行下会显示 `构建 0044f2c` —— 装完看到这串就说明装对了
