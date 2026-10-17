@@ -181,6 +181,7 @@
 - 插件侧的定位过程值得一读：`dsh-remote-bridge/docs/project/PITFALLS.md` §waterfall 不 prepend 就等于没注册（含 Cordis 源码行号）——最反直觉的一点是，**提问钩子的源码注释里早就写对了机理，只是注册时漏了这个选项**，且失败完全静默、两侧日志都不说一句话。另一份 `RETRO-question-card.md` 复盘的结论是：**卡片代码从头到尾都是对的**，错的是排查方法（先解释现象、却没先确认现象真的发生过）
 - 阻塞项：`PARITY.md` 中仍有后续 DSH WebUI 能力未对等；`IME-001` 继续扩大不同厂商键盘实机覆盖
 - 下一步：真机验收 v2.2.27 的七项修复与上一条列的未验收项；按需补齐 DSH WebUI 对等能力（设置五大组、终端、插件启停等需要先改插件开 REST 通道）
+- **v2.2.42 已发布（2026-10-17）**：Gitee Release 已上线，三个资产（APK / SHA256SUMS.txt / RELEASE_NOTES）全部就位并**下载回验**——字节数 2,965,986 与 SHA-256 `e009b177…f171a` 与本地、上传返回三处一致。main + tag `v2.2.42` 已推 Gitee 与 AtomGit；配套插件 `dsh-remote-bridge` v2.3.9 已推两站。
 - **渠道状态（2026-10-16，三端拓扑：Gitee 主 / AtomGit 备 / GitHub 镜像从站）**：
   - **Gitee = 主站**：代码、tag v2.2.41、Release（含 APK / SHA256SUMS.txt / RELEASE_NOTES 三个资产）全部就位，
     资产已**下载回验**，字节数 2,895,430 与 SHA-256 `5317b009…f957` 与本地三处一致。
