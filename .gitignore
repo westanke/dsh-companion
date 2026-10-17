@@ -30,3 +30,13 @@ signing.properties
 .c4
 *.pyc
 __pycache__/
+
+# 调试取证残留，随用随删、不纳入仓库。
+# .wm* / .apkcheck*：把构建出的 APK 里 classes.dex 解出来，用 dexdump/strings 核对
+#   「这次改动到底有没有打进包」；每重打一版就新开一个，v2.2.42 期间攒到 .wm8。
+# .m3 / .mdlib：把 markdown-renderer 的 AAR/JAR 解包成 .class，查方法签名与类结构。
+# 前导斜杠锚定在仓库根，避免误伤子目录里的同名路径。
+/.wm*/
+/.apkcheck*/
+/.m3/
+/.mdlib/
