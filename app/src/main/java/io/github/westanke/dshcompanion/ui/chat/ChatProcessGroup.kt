@@ -133,7 +133,10 @@ private fun ProcessGroupRow(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(6.dp))
                 .clickable { expanded = !expanded }
-                .padding(horizontal = 6.dp, vertical = 5.dp),
+                // 7dp：5dp 时折叠头（含「耗时 1 分 12 秒 · 3 项上下文」那段摘要）与上下
+                // 内容都贴得太近 —— 真机反馈「时间重叠」指的其实是这里，
+                // 前几版一直在改消息流与 footer 的间距，找错了对象。
+                .padding(horizontal = 6.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {

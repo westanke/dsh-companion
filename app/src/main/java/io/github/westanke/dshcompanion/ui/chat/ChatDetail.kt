@@ -120,6 +120,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -381,7 +382,20 @@ internal fun ChatDetail(
     val displayItems = historyItems + liveItems
 
     val todos = remember(state.history) { state.history?.todoItems().orEmpty() }
-    val listState = rememberLazyListState()
+    // 滚动状态**跟着会话走**：换会话就换一个新的 listState。
+    //
+    // 否则会有两个毛病：① 进新会话停在**顶部**（真机反馈「每次进入会话默认在当前页面顶段，
+    // 不符合对话性智能体的特点」）—— rememberLazyListState() 的默认初始项就是 0；
+    // ② 新会话会**继承**上一个会话的滚动位置，滑到一半切换时位置莫名其妙。
+    //
+    // 用 `remember(selected.id) { ... }`（会话 id 变就重建）而不是在 LaunchedEffect 里
+    // 手动 scrollToItem(0)：后者只改位置、不改 listState 本身，遇到「内容比屏幕短」的
+    // 会话仍然对不齐。（`key(...)` 那个写法在这里编译不过 —— 它要包住一段组合，
+    // 而这里只需要一个「随 key 重建的值」，remember 的 key 参数正是干这个的。）
+    // （`remember(selected.id) { rememberLazyListState() }` 不行：那个 lambda 不是 @Composable
+    //   上下文，里面调不了 rememberLazyListState。用 key(...) 把**使用** listState 的那段
+    //   组合包起来才对 —— 但它下面就是 LazyColumn 本体，包一层即可。）
+    val listState = key(selected.id) { rememberLazyListState() }
 
     // 滚动期间冻结渲染快照（症状、做法与 80ms 窗口的取舍都在 ChatScrollFreeze.kt 里）。
     val scrolling = listState.isScrollInProgress
@@ -418,6 +432,23 @@ internal fun ChatDetail(
         }
     }
     val scope = rememberCoroutineScope()
+    // 进会话/切会话后**直接落到底部**（真机反馈：「每次进入会话默认在当前页面顶段，
+    // 不符合对话性智能体的特点」）。
+    //
+    // 为什么单独一条而不是靠上面那条 `LaunchedEffect(displayItems.size, revision)`：
+    // 那条的守卫是 `isAtBottom` —— 进会话时列表已经有内容、`isAtBottom` 为 false，
+    // 于是它不开火，位置就停在初始的 index 0（顶部）。而 `isAtBottom` 的初始值 true
+    // 只在**列表为空**时成立，救不了「一进来就是一屏历史」的常见情况。
+    //
+    // `key(selected.id)`：切会话时重跑一次（listState 也随之重建，两者保持一致）。
+    // 用 animateScrollToItem 而不是 scrollToItem：短列表瞬间跳转没有意义，
+    // 长列表给一个几百毫秒的滑动，用户能看出「我在往下走」而不是「页面被重置了」。
+    LaunchedEffect(selected.id) {
+        if (displayItems.isNotEmpty()) {
+            val target = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
+            listState.animateScrollToItem(target)
+        }
+    }
     LaunchedEffect(displayItems.size, state.liveChat?.revision) {
         if (displayItems.isNotEmpty() && isAtBottom) {
             val target = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)

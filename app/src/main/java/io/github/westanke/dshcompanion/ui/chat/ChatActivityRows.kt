@@ -435,7 +435,11 @@ internal fun ActivityRow(item: ChatDisplayItem) {
 
     val fallbackName = stringResource(R.string.tool_call)
 
-    Column(Modifier.fillMaxWidth().animateContentSize()) {
+    // 底部 8dp：这一行（扳手图标 + 「执行了命令」+ 预览）原来只有 3dp 的 Row 内边距，
+    // 与**下一条消息**贴在一起 —— 真机反馈圈出的正是这块（见图
+    // `dsh-study/实施-2026-10-17/截图/图3-工具行重叠.jpg`）。
+    // 与消息流的 spacedBy(8dp) 取同一个值：两处间距不一致时，视觉上会「忽松忽紧」。
+    Column(Modifier.fillMaxWidth().padding(bottom = 8.dp).animateContentSize()) {
 
         Row(
 

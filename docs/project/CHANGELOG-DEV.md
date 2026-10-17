@@ -36,6 +36,54 @@
 **真机验收** —— 所有界面改动均未上机；待验收清单见
 `dsh-study/实施-2026-10-17/交付说明.md` 第七节。
 
+## 2026-10-17 · 真机反馈六修：进会话落到底部 + 时间与消息重叠（未升版本号）
+
+### 基于什么
+
+用户反馈（附截图，红色圈出）：「**显示时间与消息重叠**」+「每次进入会话，默认在当前页面顶段，
+不符合对话性智能体的特点」。
+
+### 为什么
+
+**进会话停在顶部**：`rememberLazyListState()` 的初始项就是 0，而原有的自动滚动守卫是
+`isAtBottom` —— 进会话时列表已经有内容、`isAtBottom` 为 false，于是那条不触发，
+位置就停在顶部。（流式期间能滚到底，是因为那时 `isAtBottom` 恰好为真 —— 所以以前没发现。）
+
+**时间与消息重叠**：时间戳是一个占满一行的 `Text`，**分叉按钮**是紧随其后的另一个 `Row`，
+而那个 Row 没有底部间距、`TextButton` 的 `contentPadding` 又是 `vertical = 0.dp` ——
+两者连成一坨，再贴上下一条消息。前几版一直在改 footer 的 `top/bottom` 与消息流间距，
+**找错了对象**（该改的是分叉按钮那一行）。
+
+### 干了什么
+
+1. **滚动状态跟着会话走**：`listState = key(selected.id) { rememberLazyListState() }`
+   —— 换会话即重建，不再继承上一个会话的位置；
+2. **进会话直接落底**：新增 `LaunchedEffect(selected.id)`，有内容就
+   `animateScrollToItem(totalItemsCount - 1)`（不用瞬间跳转，给几百毫秒滑动，
+   用户能看出「我在往下走」而不是「页面被重置」）；
+3. **分叉按钮行补底部间距** 8dp（与消息流 `spacedBy(8.dp)` 同值）；
+4. `ChatActivityRow` 的 Column 补 `bottom = 8.dp`（工具行与下一条消息之间）。
+
+### 踩到并修掉的两个编译错误（如实记）
+
+- `remember(selected.id) { rememberLazyListState() }` —— 那个 lambda 不是 @Composable 上下文，
+  里面调不了 `rememberLazyListState()`；
+- `key(...)` 忘了 import `androidx.compose.runtime.key`。
+
+最终用 `key(selected.id) { rememberLazyListState() }`（Compose 的 `key` 正是为「按 key 重建」
+设计的），并把这个取舍写进注释。
+
+### 测什么
+
+`:app:testDebugUnitTest` **47 类 / 425 用例 / 0 失败**（用例数不变，本次是纯布局改动）；
+`docsCheck` 8 文档 / 46 任务一致；`lintDebug` 通过。
+
+### 未做
+
+- **保留用户的滚动位置**（进会话时如果上次滑到中间，是否该回到中间）—— 当前是「总是落底」，
+  这是对话型产品的常规取舍；若你想改成「记住每个会话的位置」，说一声我加（需要按会话存 index）。
+- 未上真机复验。
+
 ## 2026-10-17 · 真机反馈五修：状态条合并（思考 / AI 标识二选一）（未升版本号）
 
 ### 基于什么

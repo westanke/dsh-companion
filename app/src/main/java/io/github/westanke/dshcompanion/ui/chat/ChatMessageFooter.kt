@@ -72,7 +72,12 @@ internal fun ChatMessageFooter(
     // 点击只上报序号；**确认对话框由 ChatDetail 那一层持有**（同时只可能有一个待确认的分叉）。
     val forkSeq = forkPointOf(item)
     if (forkSeq != null && onForkAt != null) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        // 底部 8dp：这一行原来紧贴**下一条消息**（TextButton 的 contentPadding 又是 vertical=0），
+        // 时间戳与分叉按钮连成一坨 —— 真机反馈「显示时间与消息重叠」指的就是这块。
+        Row(
+            Modifier.fillMaxWidth().padding(bottom = 8.dp),
+            horizontalArrangement = Arrangement.End,
+        ) {
             TextButton(
                 onClick = { onForkAt.invoke(forkSeq) },
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
