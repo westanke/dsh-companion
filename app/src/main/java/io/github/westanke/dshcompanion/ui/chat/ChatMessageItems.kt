@@ -344,6 +344,17 @@ internal fun ChatItem(
 
     SelectionContainer {
 
+    // 2026-10-17 八修：这里必须有一层 **Column**。
+    //
+    // SelectionContainer 把直接子节点当**兄弟**排布（inline-like），所以在没有 Column 的
+    // 情况下，正文与 [ChatMessageFooter] 会**并排成同一行** —— 真机截图里 09:03 时间戳
+    // 跑到屏幕左边、与绿色气泡重叠，就是这么来的（第五版把 footer 从 fillMaxWidth()
+    // 改成 wrapContentWidth() 之后更明显：宽度不再撑满，它直接顶到左边去了）。
+    //
+    // 包一层 Column 之后：正文在上、时间戳与分叉入口在下，各自占一行，互不挤压。
+    // SelectionContainer 仍然覆盖全部子节点，长按选词不受影响。
+    Column(Modifier.fillMaxWidth()) {
+
     when (item.kind) {
 
         ChatItemKind.USER -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -416,7 +427,10 @@ internal fun ChatItem(
     }
 
     // 时间戳与「从这条分叉」都在这一行里（拆到 ChatMessageFooter.kt 是为了守住 800 行预算）。
+    // 在上面那层 Column 里 —— 与正文**上下排列**而不是并排（八修的根因）。
     ChatMessageFooter(item = item, onForkAt = onForkAt)
+
+    } // Column：让正文与时间戳上下排列（SelectionContainer 会把子节点并排）
 
     } // SelectionContainer：长按选词，双击（外层 Box）复制整条
 

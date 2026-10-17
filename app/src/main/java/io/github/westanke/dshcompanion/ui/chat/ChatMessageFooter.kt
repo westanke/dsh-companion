@@ -64,6 +64,21 @@ internal fun ChatMessageFooter(
     val isMessage = item.kind == ChatItemKind.USER || item.kind == ChatItemKind.ASSISTANT
     if (!isMessage) return
 
+    // 2026-10-17 八修：时间戳与分叉入口包在**一个 Row** 里，由 Row 按消息类型对齐
+    // （用户消息 End 靠右、助手 Start 靠左），行宽随内容自适应。
+    //
+    // 为什么必须是 Row 而不是裸 Text：
+    // - 裸 Text + `fillMaxWidth()`：行高横向跨出 item 边界，与下一个 item 的气泡顶部相叠
+    //   （第一至四版踩的坑）；
+    // - 裸 Text + `wrapContentWidth()`：宽度不撑满 → 直接顶到屏幕左边，与并排的气泡错位
+    //   （第五版踩的坑，真机截图里 09:03 跑到左侧与绿色气泡重叠）。
+    //
+    // Row 兼顾两者：内部 Text 用 `weight(1f, fill = false)` 保持自适应宽度，
+    // 外层靠 Arrangement 把它推到该在的那一侧。
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = if (item.kind == ChatItemKind.USER) Arrangement.End else Arrangement.Start,
+    ) {
     // `item.time == null` 的是流式项（还没落盘），不显示时间。
     item.time?.let { stamp ->
         // 按时间戳缓存 label：避免每次重组都重建 SimpleDateFormat（热路径上的分配）。
@@ -73,21 +88,15 @@ internal fun ChatMessageFooter(
         }
         Text(
             label,
-            // 2026-10-17 六修（第五次反馈「显示时间与消息重叠」后的根治）：
-            //
-            // 原来这条是 **fillMaxWidth()** 的全宽 Text，行高一直横向延伸到 item 边界，
-            // 于是与**下一个 item** 的气泡顶部叠在一起。前四版都在调它的 top/bottom padding
-            // （3 → 6 → 8 → 10dp）—— 全都没用，因为间距根本不是这里产的：item 之间由
-            // LazyColumn 的 `spacedBy(8.dp)` 负责，全宽 Text 的行高却跨过了那个边界。
-            //
-            // 现在两个手段一起用（缺一不可，这是第六版才凑齐的）：
-            // ① `wrapContentWidth()` —— 行高只包住文字本身，不再横向延伸到 item 边界
-            //    （这是根治：行高跨边界才是与下一个 item 的气泡顶部相叠的原因）；
-            // ② `bottom = 8dp` —— 第五版我把它归零了，结果时间戳（labelSmall ≈ 13dp 行高）
-            //    与下一条消息之间只剩 spacedBy(8.dp)，对一条文字仍然太紧，用户第六次反馈。
-            //    有了①之后，bottom 不会再被推出边界，可以放心加。
-            modifier = modifier
-                .wrapContentWidth()
+            // padding 的账（改了六轮才收敛，留着免得又被改回去）：
+            // - `fillMaxWidth()` 会让行高横向跨出 item 边界、与下一个 item 的气泡顶部相叠；
+            // - padding 归零又太紧（labelSmall 行高约 13dp，只剩 spacedBy(8.dp) 不够）；
+            // - 现在靠外层 Row 的 `weight(1f, fill=false)` 保证宽度自适应，
+            //   padding 保持 top=6 / bottom=8 —— 两个问题都不再出现。
+            modifier = Modifier
+                // Row 内用 weight(fill=false)：宽度自适应内容（不跨出 item 边界），
+                // 但仍占满 Row 的可用宽度，配合 Arrangement 完成左右对齐。
+                .weight(1f, fill = false)
                 .padding(top = 6.dp, bottom = 8.dp, start = 4.dp, end = 4.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelSmall,
@@ -98,7 +107,7 @@ internal fun ChatMessageFooter(
     val forkSeq = forkPointOf(item)
     if (forkSeq != null && onForkAt != null) {
         // 同理：不设 bottom padding（与下一条消息的距离由 spacedBy 负责）。
-        Row(modifier, horizontalArrangement = Arrangement.End) {
+        Row(horizontalArrangement = Arrangement.End) {
             TextButton(
                 onClick = { onForkAt.invoke(forkSeq) },
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
@@ -112,4 +121,5 @@ internal fun ChatMessageFooter(
             }
         }
     }
+    } // Row：时间戳与分叉入口按消息类型左右对齐
 }
