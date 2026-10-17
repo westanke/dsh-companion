@@ -334,3 +334,40 @@ merge 爆 47 个冲突），直接删仓再用 **GitHub Importer 从 Gitee 导�
 - 任何「异步取数据 → 写进共享状态」的路径，都要问一句「这段时间里上下文会不会变」。
 - **领号必须在发出请求的那一层**，不能挪进协程：协程启动有延迟，挪进去就漏掉了
   「发出后立刻切换」这个最典型的窗口（这条反直觉，但正是它的价值所在）。
+
+---
+
+### SelectionContainer 把子节点当兄弟排布
+
+**症状**：消息正文与时间戳**并排成同一行**，时间戳被挤到屏幕左边、与气泡重叠。
+用户原话连着改了八轮：「显示时间与消息重叠」（第 1–8 轮反馈，措辞每次略有不同）。
+
+**根因**：`ChatItem` 的结构是
+
+```kotlin
+SelectionContainer {
+    when (item.kind) { ... }          // 正文
+    ChatMessageFooter(item, onForkAt)  // 时间戳 + 分叉入口
+}
+```
+
+`SelectionContainer` 是 **inline-like** 布局：它把**直接子节点当兄弟排布**，不是叠成上下。
+所以正文与 footer 一直是同一行 —— 之前看不出来，是因为 footer 那时是 `fillMaxWidth()` 的
+全宽 Text，撑满后看着像在下一行（其实是被挤到了一边）。一旦把它改成自适应宽度，
+并排关系立刻暴露。
+
+**现在怎么办**：`SelectionContainer` 内部加一层 `Column(Modifier.fillMaxWidth())`，
+正文在上、footer 在下；footer 内部再用 `Row` 按消息类型对齐
+（用户消息 `Arrangement.End`、助手 `Arrangement.Start`），内部 `Text` 用
+`weight(1f, fill = false)` 兼顾「宽度自适应」与「左右对齐」。
+
+**为什么值得单独立一条**：这个坑连续八轮没找到，前七轮全在**给一个排错了位的元素调 padding**
+（3 → 6 → 8 → 10dp → 归零 → 加回来 → 分叉按钮也加 → 消息流 spacedBy 也加），
+每一版都「有理由」却全无效。`SelectionContainer` 的这个特性代码里**没有任何注释提示**，
+只有把布局结构打出来才看得见。
+
+**铁律**：
+- **改样式前先确认元素在布局树里的位置**。同一个组件多轮调间距仍无效时，
+  停手，把父容器的布局结构打出来看 —— 元素可能压根不在你以为的那一行。
+- `SelectionContainer` / `FlowRow` 这类 inline-like 容器**只包一个需要上下排列的子节点**；
+  要多个，请自己加 `Column`。

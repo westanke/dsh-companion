@@ -182,6 +182,7 @@ web/           ← WebView 容器（chat.html 兜底路径）
 - `AtomGit 账号名与 API 版本`
 - `长文本正则与重复分组`
 - `过期响应覆盖新上下文`
+- `SelectionContainer 把子节点当兄弟排布`
 
 > 新坑位：名字加进上面清单 + 原文写进 `PITFALLS.md` 并补 `### 同名` 锚点。
 
