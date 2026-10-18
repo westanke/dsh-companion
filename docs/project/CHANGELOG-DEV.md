@@ -3,6 +3,44 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## 未发版（versionCode 10069）· 工具专用块 + 权限档位 Pill：对标官方 Web 第一梯队（2026-10-18）
+
+### 基于什么
+
+《官方Web界面与APP功能对比》（`workspace/资料调研/官方Web界面与APP功能对比_2026-10-18.md`）
+第一梯队两项：工具调用专用块（diff / terminal / read）与发送区常驻的权限档位 Pill。
+工具名分布按本机真实会话日志实测（3000 条 tool/call：bash 71%、edit 9%、
+read/read_image 8%、write 2%）—— 三种专用块覆盖 ~88% 的调用。
+
+### 干了什么
+
+- **A1 数据层**：新 `data/ChatToolBlocks.kt` —— `toolBlockView()` 按 name+arguments 把
+  `ToolCallDetail` 分发为 `Read / Terminal / Diff / Generic` 四种视图模型；
+  ANSI 转义剥离（CSI + OSC，残缺序列不吞正文）、read 结果 `<content>` 包装剥取、
+  行号判据（`N: ` 前缀）都是纯函数。**解析失败一律回落 Generic**。
+- **A2-A5 UI**：新 `ui/chat/ChatToolBlocks.kt` —— ReadBlock（暗底路径头 + 正文）、
+  TerminalBlock（`$ cmd` 提示符行 + 暗底输出）、DiffBlock（edit 旧/新 `-`/`+` 着色对照、
+  write 全文「新建」）。接入 `ToolCallDetailBlock`：专用块接管输入/输出主体；
+  Generic 分支原样走旧渲染；非 Generic 的**失败输出**仍以 error 块补显（isError 是内核
+  独立标记，不因专用块丢失）。头部（名称/状态/耗时）不动。
+- **B 权限 Pill**：新 `ui/chat/ChatPermissionPill.kt` —— 发送区上方常驻当前档位
+  （锁图标 + 档位名），点击弹档位菜单；数据与动作与顶栏 ⋯ 菜单**同源**
+  （`permissionSelect()` 投影 + `selectPermissionPreset`），完整访问仍过
+  `FullAccessConfirmDialog` 二次确认。无权限投影时整条不渲染。
+- **C chat.html 同步**：`toolEntry` 增加同款四分支（终端 `$ cmd` 行、read 路径头+正文、
+  edit/write `-`/`+` 对照）；文件 2 517 → 2 575 行，**先入 TECH-DEBT 台账再写码**，
+  并立约：chat.html 不再吸收新功能。
+- 文案：中英 strings 各 +7 键。
+
+### 测了什么
+
+- 新 `ChatToolBlocksTest` 16 例：分发（bash/read/read_image/edit/write/未知）、
+  畸形输入回落（坏 JSON / 非对象 / 空 result）、ANSI 剥离（CSI/OSC/残缺）、行号判据。
+  首跑抓到 2 个真实问题：残缺 CSI 序列会吞掉参数字节（实现 bug，已修）；
+  「空参数」对 bash/read 是合法输入应正常分发（测试断言错，已修）。
+- 全量 `testDebugUnitTest`：53 类 / 478 用例 / 0 失败；`docsCheck` 8 文档一致。
+- 行数门禁：ChatDetail 807 → 压回 800 内；`ArchitectureGuardTest` 绿。
+
 ## v2.2.43（versionCode 10068）· 仓库卫生：清掉 40.9 MB 调试残留 + 堵住 `.secrets` 泄露口子（2026-10-17）
 
 > **本版无任何代码或界面改动**，APK 与 v2.2.42 完全一致，只多了版本号。真正的改动都在

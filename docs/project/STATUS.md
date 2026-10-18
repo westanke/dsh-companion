@@ -1,5 +1,22 @@
 # 当前状态
 
+- 日期：2026-10-18
+- **在途（对标官方 Web 第一梯队，versionCode 10069 / 2.2.44，未发版）**：
+  **工具专用块 + 权限档位 Pill**（依据 `workspace/资料调研/官方Web界面与APP功能对比_2026-10-18.md`，
+  执行清单见 `PLAN-2026-10-18-对比落地.md`）：
+  ① 工具调用专用块：`data/ChatToolBlocks.kt` 按 name 分发 Read / Terminal / Diff / Generic
+  （bash 71% / edit 9% / read 8% / write 2%，本机 3000 条实测），ANSI 剥离、解析失败一律
+  回落 Generic；`ui/chat/ChatToolBlocks.kt` 三种专用块接入 `ToolCallDetailBlock`，
+  非 Generic 的失败输出仍以 error 块补显。
+  ② 权限档位 Pill：`ui/chat/ChatPermissionPill.kt` 发送区上方常驻当前档位，点击切换，
+  与 ⋯ 菜单同源同动作（完整访问仍二次确认）；无投影不渲染。
+  ③ chat.html `toolEntry` 同款四分支同步（2 517 → 2 575 行，**先入 TECH-DEBT 台账**，
+  并立约 chat.html 不再吸收新功能）。
+  ④ Goal 入口**本轮不做**：核实发现桥上无 goal API（对比文档「goal API 已在桥上」不实），
+  需先在 dsh-remote-bridge 补 BFF。
+  门验：**53 类 / 478 用例 / 0 失败**（新 `ChatToolBlocksTest` 16 例，首跑抓到实现 bug：
+  残缺 CSI 序列吞参数字节）；docsCheck 一致；行数门禁绿（ChatDetail 807 → 800）。
+  未做：真机验收（专用块观感、Pill 交互）—— 等发话。
 - 日期：2026-10-17
 - **在途（真机反馈五修，未升版本号）**：**状态条合并**（用户要求：「把『内容由 AI 生成，请甄别后使用』
   与显示思考过程的重叠在一栏显示，有思考内容时显示思考，没有时再显示这个」）——

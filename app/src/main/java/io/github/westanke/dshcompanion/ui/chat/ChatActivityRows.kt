@@ -627,3 +627,57 @@ internal fun ActivityRow(item: ChatDisplayItem) {
  * 不设高度上限会把整屏撑爆，连「往上翻」都做不到。
 
  */
+
+/**
+ * 「已达到输出 token 上限」那条提示（内核 `turn-max-tokens` 节点）。
+ *
+ * ## 为什么不复用 [TurnFailureRow]
+ *
+ * 截断**不是失败**：已有的输出是有效内容，用户接着发一句「继续」就能往下走。
+ * 内核也把两者分成不同的会话节点（`turn-max-tokens` 与 `turn-error`），
+ * 颜色也不同（warn 而非 error）。共用一条红的会让人以为整轮白跑。
+ *
+ * ## 为什么它必须留在消息流里、且不被折进过程组
+ *
+ * 内核的 `TURN_PROCESS_INDEPENDENT_KINDS` 把 `turn-max-tokens` 列为
+ * 「独立于过程折叠」的节点 —— 折进「执行了命令、已读取文件」那种摘要里，
+ * 用户就看不见「我的回答被截断了」这件事，只会觉得 AI 忽然不说话了。
+ * 本项目对应的是 `ChatDisplayGroups.isProcessItem`：它默认把所有非
+ * CONTEXT/REASONING/TOOL 的 kind 当**消息**，所以 TRUNCATED 天然独立。
+ *
+ * ## 文案来源
+ *
+ * 与内核 `message.maxTokens` / `message.maxTokens.hint` 逐字一致，
+ * 中英各一份资源 —— data 层不写死任何语言（与 [ChatTurnFailure.titleRes] 同一原则）。
+ */
+@Composable
+internal fun TruncatedNoticeRow() {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp, vertical = 4.dp)
+            .background(MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.shapes.small)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Icon(
+            Icons.Outlined.WarningAmber,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = MaterialTheme.colorScheme.onTertiaryContainer,
+        )
+        Column(Modifier.padding(start = 10.dp)) {
+            Text(
+                stringResource(R.string.turn_max_tokens_title),
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Text(
+                stringResource(R.string.turn_max_tokens_hint),
+                modifier = Modifier.padding(top = 2.dp),
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}

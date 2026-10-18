@@ -23,6 +23,7 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
@@ -130,6 +131,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.rememberCoroutineScope
 import io.github.westanke.dshcompanion.data.ChatDisplayEntry
 import io.github.westanke.dshcompanion.data.groupChatDisplay
+import io.github.westanke.dshcompanion.debug.DiagLog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
@@ -179,6 +181,7 @@ import io.github.westanke.dshcompanion.data.ChatContentParts
 import io.github.westanke.dshcompanion.data.ChatAttachment
 import io.github.westanke.dshcompanion.data.ChatTurnFailure
 import io.github.westanke.dshcompanion.data.localizedErrorRes
+import io.github.westanke.dshcompanion.truncationItems
 import io.github.westanke.dshcompanion.data.ChatDisplayItem
 import io.github.westanke.dshcompanion.data.ChatItemKind
 import io.github.westanke.dshcompanion.data.ToolCallDetail
@@ -245,9 +248,8 @@ import io.github.westanke.dshcompanion.setComposerOverlay
  * 列表层 [SessionPane] · 消息项 [ChatItem] · 审批/问答 [ApprovalPanel] / [QuestionCard] ·
  * 输入区/思考条 [Composer] / [ChatThinkBar] · 会话文件面板 [SessionFilesSheet]。
  *
- * 从 `ui/ChatScreen.kt`（3882 行）拆出。原文件是 `docs/project/TECH-DEBT.md` 登记的
- * 第一号债（「改一处要读 3 600 行」），按 `webview-port-todo.md` 的 PORT-* 分组逐组拆成
- * `ui/chat/` 子模块，**每个函数的实现逐字未改**，只是换了所在文件。
+ * 从 `ui/ChatScreen.kt`（3882 行）拆出（曾是 TECH-DEBT 第一号债），实现逐字未改、
+ * 只按 `webview-port-todo.md` 的 PORT-* 分组换了所在文件。
  */
 /** 每拍下推的像素与间隔：把「比一屏高的最后一项」整段推进视口。 */
 private const val SCROLL_DOWN_PX = 600f
@@ -263,12 +265,41 @@ internal fun ChatDetail(
     modifier: Modifier,
     wide: Boolean = false,
 ) {
+    // ── 诊断插桩（debug 包独有，release 下 DiagLog 全静默）───────────────
+    // 与 `ui/ChatScreen.kt` 的路由日志配对：那条记「声明要走原生」，
+    // 这条记「原生页真的被组合了」。两条都出现 = 原生页确实在渲染，
+    // 那么「effect 没跑」就是原生页内部的问题；只有路由那条而没有这条，
+    // 说明用户看到的其实是 WebView 页（`state.useWebChat` 为真），
+    // 上一轮加在这里的 Log.i 探针一条不打是必然结果。
+    //
+    // 每进入/切走一次会话打一条：selectedSessionId 是判据，与下方
+    // `remember(selected.id)`、`key(selected.id)` 的重建时机天然对齐。
     val selected = state.sessions.find { it.id == state.selectedSessionId }
     if (selected == null) {
+        // 空态也要留证据，但它只在「真的没选中会话」时出现一次 —— 用 effect 打，
+        // 免得每次重组都刷（真机实测：插桩第一版在组合体里直接打日志，
+        // 一次进会话就刷出 300+ 条 COMPOSE，把 ROUTE/SCROLL 这些有用的淹了）。
+        LaunchedEffect(state.selectedSessionId) {
+            DiagLog.i(
+                DiagLog.Cat.COMPOSE,
+                "ChatDetail 空态：selectedSessionId=${state.selectedSessionId} 未匹配到会话",
+            )
+        }
         Box(modifier, contentAlignment = Alignment.Center) {
             EmptyState(Icons.Outlined.ChatBubbleOutline, stringResource(R.string.select_session))
         }
         return
+    }
+    // 只在**进入这个会话时**打一条，不是每次重组都打。
+    //
+    // 为什么用 LaunchedEffect(selected.id) 而不是直接写在组合体里：后者一次进会话
+    // 就刷出 300+ 条（真机实测 2026-10-18），ROUTE / SCROLL 那些真正要看的被淹掉。
+    // 重组次数本身是另一个话题，不该由这条日志承担。
+    LaunchedEffect(selected.id) {
+        DiagLog.i(
+            DiagLog.Cat.COMPOSE,
+            "ChatDetail 渲染：会话 ${selected.id}（wide=$wide useWebChat=${state.useWebChat}）",
+        )
     }
     // 待确认的分叉点由**这一层**持有：消息流里同时只可能有一个待确认的分叉，
     // 让每条消息各持一个对话框状态，只会让它们互相看不见。
@@ -388,7 +419,7 @@ internal fun ChatDetail(
     val historyItems = remember(state.history, showContext) {
         visibleHistoryItems(state.history, showContext)
     }
-    val displayItems = historyItems + liveItems
+    val displayItems = historyItems + liveItems + state.truncationItems(selected.id)
 
     val todos = remember(state.history) { state.history?.todoItems().orEmpty() }
     // 滚动状态**跟着会话走**：换会话就换一个新的 listState。
@@ -432,7 +463,9 @@ internal fun ChatDetail(
     // 「本次产生的文件」三类固定条目，它们随状态有无而增减（hasMore 会变、
     // 提示可以被关掉），手算的 +2 一旦漏掉某一项，误判「已经到底」就会让自动
     // 跟随突然开火，把正在翻历史的人又拽回底部 —— 那正是本条最初要修的问题。
-    val isAtBottom by remember {
+    // 保留 State 句柄而不是只留解包后的值：下面的 `rememberWantsBottom` 要对它
+    // 做 snapshotFlow（「用户滚到底 → 恢复贴底意图」），需要能订阅它。
+    val isAtBottomState = remember {
         derivedStateOf {
             val visible = listState.layoutInfo.visibleItemsInfo
             if (visible.isEmpty()) true else {
@@ -440,7 +473,10 @@ internal fun ChatDetail(
             }
         }
     }
+    val isAtBottom by isAtBottomState
 
+    // 粘性「想待在底部」意图（= 注释承诺却从未实现的 userScrolled）；判据见 rememberWantsBottom。
+    val wantsBottom = rememberWantsBottom(listState, isAtBottomState, selected.id)
 
     val scope = rememberCoroutineScope()
     // 进会话/切会话后**直接落到底部**（真机反馈：「每次进入会话默认在当前页面顶段，
@@ -466,51 +502,27 @@ internal fun ChatDetail(
     // 因为历史是**分批到达**的（第一页 → 后续页 → 流式补齐），count 一直在变，
     // 任何「等某个稳定时刻再滚一次」的判据都会在某一批到达前就结束。
     //
-    // 持续贴底的守卫是 `!userScrolled`：用户一旦**主动滑过**（离底超过阈值）就停手，
-    // 不再打扰翻历史；没滑过就一直跟着新内容贴底 —— 这正是聊天产品的常规行为
-    // （新消息到达时视图跟着走）。
-    //
-    // 阈值取 3 项：`isAtBottom` 用的也是「最后一项在前 3 个之内」这个口径，
-    // 两处保持一致，免得「自动滚动认为到底了、按钮却还显示」这种自相矛盾。
+    // 持续贴底的守卫是粘性意图 `wantsBottom`（见上），阈值口径与 `isAtBottom`
+    // 保持一致（最后一项在前 3 项之内），免得两者自相矛盾。
     LaunchedEffect(selected.id) {
+        // ── 诊断插桩 + 落底循环 ──
+        //
+        // 这条 effect 是「进会话落底」的入口，上一轮的核心疑点
+        // （改了九版、屏上探针实测 collect 正常发射却停在 first=30/54）就在它身上。
+        //
+        // 两样东西都搬去了 `ChatScrollDiag.kt`，这里只留指针：
+        // ① **九版教训**（每一版为什么没用、正确形状是什么）→ 见那个文件的
+        //    「进会话落底：九版教训与正确形状」段。它比代码更值得先读。
+        // ② **诊断日志** → 同文件的一排 logScrollXxx 函数。塞回来的话这个文件
+        //    会超 800 行预算，而为一个调试特性去 TECH-DEBT.md 立债务账，
+        //    是把诊断码和业务债混为一谈。
+        logScrollEffectStart(selected.id, listState.layoutInfo.totalItemsCount)
         // ── 进会话落底：一条独立的「推到底」循环 ──
         //
-        // 这段逻辑改了**九版**才做对（2026-10-17），每版都有理由、每版都没用，
-        // 教训全写在下面 —— 改动前先读，别再走一遍。
-        //
-        // ① 「跳到底部」按钮消失**不是**落底的判据：它的显隐条件是 `!isAtBottom`，
-        //    而 `isAtBottom` = 「最后一项在前 3 项之内」，宽松得很。实测按钮已消失时
-        //    实际还差 46 项 —— 拿它当验收标准等于自己给自己发合格证。
-        // ② `LaunchedEffect(selected.id)` 只在会话 id 变化时跑**一次**：首次进入时历史
-        //    还没回来，直接 return，之后再没有第二次触发。
-        // ③ `filter { totalItemsCount > 0 }.first()` 同病：首次非零时列表只有
-        //    「加载更早消息」一项，滚过去等于滚到那一项。
-        // ④ 「等 totalItemsCount 连续两次相同」也不行：历史**分批到达**，count 一直在变。
-        // ⑤ **把「当前不在底部」当成「用户滑过历史」—— 这是最致命的一处。**
-        //    屏上探针实测：外层 `total=49 vis=3 last=2 first=0/0 atBottom=false`，
-        //    内层 `count=49 atBottom=false lastIdx=49` —— collect 正常发射，
-        //    但加载期间「视口还在 0、count 已涨到 49」，"不在底部" 成立，
-        //    于是被判定成「用户翻过历史」，自动滚动**永久关闭**。
-        //    **数据加载与用户滑动在布局上表现完全一样**，只有 `isScrollInProgress`
-        //    （只有真手势拖动才为 true）能区分 —— 用户手势必须是唯一置位依据。
-        // ⑥ `animateScrollToItem(count - 1, scrollOffset = -N)` 不生效：那是 Compose 对
-        //    「目标项已在视口内」的约定，而最后一项比一屏还高，压根还没进视口。
-        // ⑦ 每帧只 `scrollBy` 一次也不够：collect 只在读数变化时发射，
-        //    发射次数推不完一屏 1719px 的高度（实测停在 first=30/54）。
-        //
-        // 正确形状（当前实现）：**独立于 snapshotFlow 的循环**，每 32ms 推 600px，
-        // `scrollBy` 返回 0（已在列表物理底部）即停；用户真的在拖动就退出循环，
-        // 把控制权交回用户。实测 first 从 0/0 → 48/4560（推了三屏多）。
-        //
-        //
-        // 为什么必须独立于 snapshotFlow：collect **只在读数变化时**发射，而落底是一次
-        // 「持续下推」的动作。真机取证（屏上探针）：
-        //   改前：first=0/0  ——  collect 里判「不在底部」= 用户滑过 → 永久停掉；
-        //   改后：first=48/825 → 每发一次只 scrollBy 一次，最后停在 30/54（数据分批到达，
-        //                             collect 发射次数有限，推不完一屏 1719px 的高度）。
-        //
-        // 现在：进会话就启动循环，每 32ms 推 600px，`scrollBy` 返回 0（已在物理底部）即停。
-        // 用户一旦真的拖动列表就退出循环（dragging），把控制权交回用户。
+        // 这段逻辑改了**九版**才做对。每一版为什么没用、正确形状是什么、
+        // 以及「为什么必须独立于 snapshotFlow」，全部写在
+        // `ChatScrollDiag.kt` 的「进会话落底：九版教训与正确形状」段 ——
+        // **改动前先读那一段**，别再走一遍。
         val scope = this
         val job = scope.launch {
             // 第一拍：等列表真的有内容（首次进入历史还没回来时 totalItemsCount 是 0）。
@@ -518,22 +530,61 @@ internal fun ChatDetail(
             while (listState.layoutInfo.totalItemsCount == 0 && guard < 60) {
                 delay(50); guard++
             }
+            if (listState.layoutInfo.totalItemsCount == 0) {
+                logScrollNoContent(selected.id)
+                return@launch
+            }
+            logScrollLoopStart(guard, listState.layoutInfo.totalItemsCount)
+            var ticks = 0
+            var moved = 1f
             while (guard < 400 && listState.layoutInfo.totalItemsCount > 0) {
-                // 用户真的在拖动 → 停手，把视图交回用户。
-                if (listState.isScrollInProgress) return@launch
-                val moved = listState.scrollBy(SCROLL_DOWN_PX)
+                // 用户接管了（真拖过）→ 停手，把视图交回用户。
+                // 判据用粘性意图而不是 `isScrollInProgress`：后者对**程序滚动**
+                // （本函数自己的 scrollBy、跟随用的 animateScrollToItem）同样为真。
+                if (!wantsBottom) {
+                    logScrollLoopAbortedByUser(ticks)
+                    return@launch
+                }
+                moved = listState.scrollBy(SCROLL_DOWN_PX)
+                ticks++
+                logScrollTick(ticks, moved, listState)
                 // 推不动 = 已到列表物理底部，收工。
-                if (moved <= 0f) break
+                if (moved <= 0f) {
+                    logScrollLoopFinished(ticks)
+                    break
+                }
                 delay(SCROLL_TICK_MS)
             }
+            // moved 仍是正的 = 拍数用完还没到底（列表极长或 scrollBy 被抵消）。
+            if (moved > 0f) logScrollLoopExhausted(ticks, listState.layoutInfo.totalItemsCount)
         }
         // 列表内容继续变化时（历史分页到达）重新推一轮，仍不干扰用户主动滚动。
-        snapshotFlow { listState.layoutInfo.totalItemsCount }.collect { /* 触发重入 */ }
+        snapshotFlow { listState.layoutInfo.totalItemsCount }.collect { count ->
+            // 只记「变化」不记「值」：历史分批到达会让 count 连续变，
+            // 逐值写会把日志刷爆；而每次变化都值得知道（它决定要不要重新推一轮）。
+            logScrollCountEmitted(count)
+        }
     }
 
+    // 贴底跟随的「上一次决策」：决策没变就不重复落盘（真机实测：不记这个的话
+    // 一个流式会话一小时能刷 200+ 条同样的行，把日志淹没）。见 logScrollFollow 的 KDoc。
+    var lastFollowDecision by remember(selected.id) { mutableStateOf<String?>(null) }
+
     LaunchedEffect(displayItems.size, state.liveChat?.revision) {
-        if (displayItems.isNotEmpty() && isAtBottom) {
-            val target = (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0)
+        // 流式期间的贴底跟随。守卫是**粘性意图** `wantsBottom`，不是瞬时 `isAtBottom`
+        // —— 后者一有新内容就翻 false，会把跟随永久锁死（见 PITFALLS）。
+        val total = listState.layoutInfo.totalItemsCount
+        val target = (total - 1).coerceAtLeast(0)
+        lastFollowDecision = logScrollFollow(
+            state = listState,
+            entries = displayEntries.size,
+            liveItems = liveItems.size,
+            wantsBottom = wantsBottom,
+            atBottomNow = isAtBottom,
+            animated = liveItems.isEmpty(),
+            lastDecision = lastFollowDecision,
+        )
+        if (displayItems.isNotEmpty() && wantsBottom) {
             if (liveItems.isNotEmpty()) listState.scrollToItem(target)
             else listState.animateScrollToItem(target)
         }
@@ -667,11 +718,8 @@ internal fun ChatDetail(
             }
         }
         }
-        // 待回答问题（ask_user_question）。
-        //
-        // 位置与审批面板同一块地方（消息区下方、输入区上方），但**不顶掉输入区**：
-        // 审批是内核阻塞着等决定，用户此刻没别的事可做；而方案 A 只做 `continued` 的问题 ——
-        // Agent 已经继续跑了，答复是补交，把输入框拿走只会让用户连话都发不出去。
+        // 待回答问题（ask_user_question）：与审批面板同一块地方，但**不顶掉输入区** ——
+        // 审批是内核阻塞着等决定；而 `continued` 的问题是补交，拿走输入框用户连话都发不出。
         if (state.questions.isNotEmpty()) {
             Column(
                 Modifier
@@ -692,11 +740,15 @@ internal fun ChatDetail(
                 }
             }
         }
-        // 状态条：思考条与「内容由 AI 生成」标识**合并成同一条**（用户要求，2026-10-17）。
-        // 原来两个是并排的两行，思考一来就把标识挤到上面去，那一栏就散了。
-        // 现在：有思考内容时显示思考（可展开），没有思考时才显示标识 —— 两者共用同一条窄带，
-        // 位置固定在消息区下方、输入区上方。
+        // 状态条：思考与「内容由 AI 生成」合并同一条（用户要求，2026-10-17）——
+        // 有思考时显示思考（可展开），没有时显示标识；位置固定在消息区下方、输入区上方。
         ChatStatusBar(liveThinking)
+        // 权限档位 Pill（官方 Web 对标；与 ⋯ 菜单同源同动作）。
+        PermissionPill(
+            permission = state.history?.permissionSelect(),
+            enabled = canWrite && !state.busy,
+            onSelect = viewModel::selectPermissionPreset,
+        )
         when (val approvals = state.approvalState) {
             ApprovalUiState.None -> Composer(
                 value = message,

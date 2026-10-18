@@ -170,9 +170,11 @@ import io.github.westanke.dshcompanion.data.ChatTurnFailure
 import io.github.westanke.dshcompanion.data.localizedErrorRes
 import io.github.westanke.dshcompanion.data.ChatDisplayItem
 import io.github.westanke.dshcompanion.data.ChatItemKind
+import io.github.westanke.dshcompanion.data.ToolBlockView
 import io.github.westanke.dshcompanion.data.ToolCallDetail
 import io.github.westanke.dshcompanion.data.formatToolDuration
 import io.github.westanke.dshcompanion.data.prettyToolArguments
+import io.github.westanke.dshcompanion.data.toolBlockView
 import io.github.westanke.dshcompanion.data.LiveChatBlock
 import io.github.westanke.dshcompanion.data.ChatLinkTarget
 import io.github.westanke.dshcompanion.data.ChatQuestion
@@ -307,37 +309,56 @@ internal fun ToolCallDetailBlock(tool: ToolCallDetail) {
 
         }
 
-        val arguments = prettyToolArguments(tool.arguments)
+        // 专用块分发（官方 Web 的 ReadBlock / TerminalBlock / DiffBlock 对标）：
+        // read/bash/edit/write 走各自的专用视图；其余工具与所有解析失败走 Generic ——
+        // Generic 只接管「输入」段，输出段仍由下面的原逻辑渲染（少显示 = 回归）。
+        val view = remember(tool) { toolBlockView(tool) }
+        if (view is ToolBlockView.Generic) {
+            val arguments = view.formattedArguments
+            if (arguments.isBlank()) {
+                Text(
 
-        if (arguments.isBlank()) {
+                    stringResource(R.string.tool_detail_no_args),
 
-            Text(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
 
-                stringResource(R.string.tool_detail_no_args),
+                    style = MaterialTheme.typography.labelSmall,
 
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                ToolTextBlock(
 
-                style = MaterialTheme.typography.labelSmall,
+                    label = stringResource(R.string.tool_detail_input),
 
-            )
+                    text = arguments,
 
+                    isError = false,
+
+                    maxHeightDp = 160,
+
+                )
+            }
         } else {
+            ToolSpecialBlock(view)
+            // 专用块接管了输入/输出主体，但非 Generic 的**失败输出**仍要原样可见：
+            // isError 是内核的独立标记，专用块的正文并不总包含它（如 edit 的成功不带回显）。
+            if (tool.failed && !tool.result.isNullOrBlank()) {
+                ToolTextBlock(
 
-            ToolTextBlock(
+                    label = stringResource(R.string.tool_detail_error),
 
-                label = stringResource(R.string.tool_detail_input),
+                    text = tool.result,
 
-                text = arguments,
+                    isError = true,
 
-                isError = false,
+                    maxHeightDp = 260,
 
-                maxHeightDp = 160,
-
-            )
-
+                )
+            }
         }
 
-        when {
+        // 输出段：Generic 才走原逻辑；专用块已在内部渲染输出/运行态。
+        if (view is ToolBlockView.Generic) when {
 
             tool.result == null -> Text(
 

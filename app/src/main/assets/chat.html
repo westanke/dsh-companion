@@ -73,6 +73,12 @@ td,th{max-width:0;word-break:break-word}
 .fail .hd{display:flex;gap:7px;align-items:center;font-weight:700;color:var(--danger)}
 .fail .code{color:var(--muted);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;font-weight:400}
 .fail .msg{margin-top:5px;white-space:pre-wrap;word-break:break-word;color:var(--fg);line-height:1.55}
+/* 输出 token 上限：黄色警示，与 .fail 的红**明确区分** —— 截断不是失败。
+   文案与内核 message.maxTokens / message.maxTokens.hint 逐字一致。 */
+.maxtok{border-left:3px solid var(--warn);background:var(--warn-bg);
+  border-radius:0 10px 10px 0;padding:9px 11px;margin:8px 0 12px;font-size:13.5px}
+.maxtok .hd{display:flex;gap:7px;align-items:center;font-weight:700;color:var(--warn)}
+.maxtok .msg{margin-top:5px;white-space:pre-wrap;word-break:break-word;color:var(--fg);line-height:1.55}
 /* ── 工具调用组 ──
    组头一行（动作摘要，如「运行了代码，修改了文件」），组内每条也只占一行；
    完整参数与结果要点开单条才显示。这样几十次调用也只占一个块。
@@ -99,6 +105,15 @@ td,th{max-width:0;word-break:break-word}
   font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
   white-space:pre-wrap;word-break:break-word}
 .tres.err{color:var(--danger)}
+/* 工具专用块（对标官方 Web）：终端提示符行 / diff 增删行着色 */
+.tcmd{margin:4px 0 0;padding:3px 8px;background:#1d232c;color:#d7dce3;border-radius:6px 6px 0 0;
+  font:12px/1.5 ui-monospace,Menlo,monospace;white-space:pre;overflow-x:auto}
+.ttres{margin:0 0 4px;background:#14171c;border-radius:0 0 6px 6px}
+.dl{white-space:pre-wrap;word-break:break-word}
+.dl.del{color:#ff8a80}.dl.add{color:#9be29b}
+.tpath{margin:4px 0 0;padding:3px 8px;background:#14171c;color:#8fa3bf;border-radius:6px 6px 0 0;
+  font:11px/1.5 ui-monospace,Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tread{margin:0 0 4px;background:#14171c;color:#d7dce3;border-radius:0 0 6px 6px}
 /* 思考条：消息区下方、输入区上方的一条固定位置，不随消息滚动。
    有思考时显示一行（右侧省略号截断），没有时整条隐藏。 */
 #thinkbar{flex:0 0 auto;display:flex;gap:7px;align-items:center;
@@ -949,9 +964,9 @@ function addAct(label, text) {
 
 /* 从一条历史 `turn/end` 事件里解出失败；不是失败就返回 null。
  *
- * 与原生 ChatPresentation.turnEndItem 同一判据：只认 reason.kind === 'error'
- * 与「登出导致的 aborted」两种。max-tokens 刻意排除 —— 内核把它渲染成
- * 黄色警示（"回答被截断，已有输出保留在对话中"），那不是失败，
+ * 与原生 ChatHistoryMapping.turnEndItem 同一判据：只认 reason.kind === 'error'
+ * 与「登出导致的 aborted」两种。max-tokens 不在这里 —— 它不是失败，
+ * 由 isMaxTokens + addMaxTokensNotice 单独渲染成**黄色**警示。
  * 报成红框会让用户以为白跑了一轮。 */
 function turnFailureFrom(ev) {
   var d = evData(ev);
@@ -984,6 +999,40 @@ function turnFailureFrom(ev) {
  *   .msg = 服务端原话。429 限流那句话就躺在这儿，request id 也在这儿，
  *          用户截图发回来就是唯一能排查现场的凭据。
  */
+/* 输出 token 上限的判据：内核 `turn/end` 的 reason.kind === 'max-tokens'。
+ *
+ * 与 turnFailureFrom 分开是**有意的**：截断不是失败。内核自己也是这么分的
+ * —— 它给的是独立的 `turn-max-tokens` 节点，而不是 `turn-error`
+ * （见内核 TURN_PROCESS_INDEPENDENT_KINDS）。 */
+function isMaxTokens(ev) {
+  var d = evData(ev);
+  var r = (d && typeof d === "object" && d.reason) || null;
+  return !!r && typeof r === "object" && r.kind === "max-tokens";
+}
+
+/* 「已达到输出 token 上限」那条黄色提示。
+ *
+ * 以前这里**刻意排除**它，注释写的理由是「内核把它渲染成黄色警示」。
+ * 那个理由不成立：本页是客户端自渲染，内核不会替客户端画任何东西 ——
+ * 于是这条提示在手机上**整条消失**（真机实测 2026-10-18）。
+ * 现在两边都画：原生 `TruncatedNoticeRow` 与本函数。 */
+function addMaxTokensNotice() {
+  dropEmpty();
+  var d = document.createElement("div");
+  d.className = "maxtok";
+  var hd = document.createElement("div");
+  hd.className = "hd";
+  hd.textContent = "已达到输出 token 上限";
+  d.appendChild(hd);
+  var m = document.createElement("div");
+  m.className = "msg";
+  m.textContent = "回答被截断，已有输出保留在对话中。发送“继续”可让模型接着输出。";
+  d.appendChild(m);
+  sink().appendChild(d);
+  toBottom(true);
+  return d;
+}
+
 function addTurnFailure(f) {
   if (!f) return null;
   dropEmpty();
@@ -1083,17 +1132,66 @@ function toolEntry(e) {
   d.appendChild(sum);
   var body = document.createElement('div');
   body.className = 'tbody';
-  if (e.argsFull && e.argsFull !== e.arg) {
-    var a = document.createElement('pre');
-    a.className = 'targs';
-    a.textContent = e.argsFull;
-    body.appendChild(a);
-  }
-  if (e.hasResult) {
+  /* 专用块（官方 Web 对标）：read / bash / edit / write 按工具名定制渲染，
+     其余工具与解析失败一律走原样 —— 专用块是增强不是依赖。 */
+  var parsed = null;
+  try { parsed = e.argsFull ? JSON.parse(e.argsFull) : null; } catch (err) { parsed = null; }
+  if (typeof parsed !== "object" || !parsed) parsed = null;
+  var isRead = (e.name === 'read' || e.name === 'read_image') && e.result;
+  var isBash = e.name === 'bash' && parsed && typeof parsed.command === 'string';
+  var isEdit = e.name === 'edit' && parsed && typeof parsed.new_string === 'string';
+  var isWrite = e.name === 'write' && parsed && typeof parsed.content === 'string';
+  if (isBash) {
+    var c = document.createElement('div');
+    c.className = 'tcmd';
+    c.textContent = '$ ' + parsed.command;
+    body.appendChild(c);
+    if (e.hasResult) {
+      var o = document.createElement('div');
+      o.className = 'tres ttres' + (e.isError ? ' err' : '');
+      o.textContent = String(e.result || '').replace(/\u001B\[[0-9;]*[A-Za-z]/g, '').replace(/\u001B\][^\u0007]*(\u0007|\u001B\\)/g, '');
+      body.appendChild(o);
+    }
+  } else if (isRead) {
+    var p = document.createElement('div');
+    p.className = 'tpath';
+    p.textContent = (parsed && parsed.file_path) || '';
+    var b = String(e.result);
+    var ct = b.indexOf('<content>');
+    if (ct >= 0) b = b.slice(ct + 9, b.lastIndexOf('</content>')).replace(/^\n+/, '');
     var r = document.createElement('div');
-    r.className = 'tres' + (e.isError ? ' err' : '');
-    r.textContent = e.result || '';
-    body.appendChild(r);
+    r.className = 'tres tread';
+    r.textContent = b;
+    body.appendChild(p); body.appendChild(r);
+  } else if (isEdit || isWrite) {
+    var fp = document.createElement('div');
+    fp.className = 'tpath';
+    fp.textContent = (parsed.file_path || '') + (isWrite ? ' · 新建' : '');
+    body.appendChild(fp);
+    function dl(txt, cls) {
+      var n = document.createElement('div');
+      n.className = 'tres tread';
+      n.innerHTML = String(txt).split('\n').map(function (l) {
+        return '<div class="dl ' + cls + '">' + (cls === 'del' ? '- ' : '+ ') + esc(l) + '</div>';
+      }).join('');
+      return n;
+    }
+    if (isEdit && parsed.old_string) body.appendChild(dl(parsed.old_string, 'del'));
+    var nt = isEdit ? parsed.new_string : parsed.content;
+    body.appendChild(dl(nt, 'add'));
+  } else {
+    if (e.argsFull && e.argsFull !== e.arg) {
+      var a = document.createElement('pre');
+      a.className = 'targs';
+      a.textContent = e.argsFull;
+      body.appendChild(a);
+    }
+    if (e.hasResult) {
+      var r2 = document.createElement('div');
+      r2.className = 'tres' + (e.isError ? ' err' : '');
+      r2.textContent = e.result || '';
+      body.appendChild(r2);
+    }
   }
   d.appendChild(body);
   return d;
@@ -1551,9 +1649,10 @@ function renderHistory(hist) {
       /* 终局失败：reason.kind === 'error'（或登出导致的 aborted）。
          判据与原生 ChatPresentation.turnEndItem、插件 turnFailureOf 三处一致 ——
          任何一处放宽，用户就会在没失败时看到红框；任何一处收紧，失败又被咽掉。
-         max-tokens 不在这里：那是"回答被截断"，按普通收尾处理。 */
+         max-tokens 不在这里：那是"回答被截断"，走下面 else-if 那条黄色警示。 */
       var f = turnFailureFrom(ev);
       if (f) { flushThink(); flushTools(); addTurnFailure(f); }
+      else if (isMaxTokens(ev)) { flushThink(); flushTools(); addMaxTokensNotice(); }
     }
   });
 

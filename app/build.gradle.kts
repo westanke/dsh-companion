@@ -773,8 +773,18 @@ android {
         //     .m3 / .mdlib 四个目录均命中，docs/ 与 app/ 未误伤）；漏洞回归（.secrets/__probe__/
         //     secret.txt 已不被 git 看见）；全量单测本轮重跑，数字见 TESTING.md。
         //   未做：真机验收 —— 无界面改动，不需要上机。
-        versionCode = 10068
-        versionName = "2.2.43"
+        // v2.2.44（versionCode 10069）：工具专用块 + 权限档位 Pill（对标官方 Web 第一梯队）。
+        //   基于什么：《官方Web界面与APP功能对比 2026-10-18》第一梯队两项；
+        //     工具名分布按本机真实会话日志实测（3000 条：bash 71% / edit 9% / read 8% / write 2%）。
+        //   干了什么：data/ChatToolBlocks.kt（分发 + ANSI 剥离，失败回落 Generic）；
+        //     ui/chat/ChatToolBlocks.kt（Read/Terminal/Diff 三种专用块，接入 ToolCallDetailBlock）；
+        //     ui/chat/ChatPermissionPill.kt（发送区常驻权限档位，与 ⋯ 菜单同源同动作）；
+        //     chat.html toolEntry 同款四分支（2 517 → 2 575 行，先入 TECH-DEBT 台账）。
+        //   测了什么：新 ChatToolBlocksTest 16 例；全量 53 类 / 478 用例 / 0 失败；
+        //     docsCheck 8 文档一致；行数门禁绿（ChatDetail 压回 800 内）。
+        //   未做：真机验收 —— 专用块观感与 Pill 点击交互均未上机，等发话。
+        versionCode = 10069
+        versionName = "2.2.44"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。
@@ -790,6 +800,17 @@ android {
         // 只保留 git 哈希：它在多次重打之间必然不同，足够一锤定音；
         // 时间戳需要 android.text / java.time，在 defaultConfig 里都解析不到，不值当为它引依赖。
         buildConfigField("String", "BUILD_TIME", "\"\"")
+
+        // ── 诊断日志总开关（debug/DiagLog.kt）──────────────────────────────
+        // 基于什么：`docs/project/PITFALLS.md` 实测过 vivo 真机 logcat 抓不到
+        // 自有 App 的 `Log.i`，上一轮只能把探针数字渲染到屏幕上取证、用完就删。
+        // 本轮要做会话页两条实现路径（原生 ChatDetail vs WebView ChatWebScreen）
+        // 与窗口/屏幕变化的持续观察，把那条一次性探针固化成三通道日志
+        // （logcat / filesDir/diag.log / 屏上浮层）。
+        // 为什么放 defaultConfig：debug 与 release 的默认值都从这里取，
+        // release 包 `DIAG_LOG=false` → 三个通道全静默、零行为变化；
+        // 要临时在 release 上开，改 buildTypes 里这一行即可，不碰代码。
+        buildConfigField("boolean", "DIAG_LOG", "false")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
@@ -808,6 +829,11 @@ android {
     buildTypes {
         debug {
             signingConfig = signingConfigs.findByName("dedicated")
+            // 诊断日志三通道在 debug 包全开：logcat / filesDir/diag.log / 屏上浮层。
+            // release 保持 defaultConfig 的 false（见上方 DIAG_LOG 注释）。
+            // 注意：同名的 buildConfigField 会覆盖 defaultConfig 的值，这正是要的效果 ——
+            // 想在哪一类包里开日志，就改哪一处，不用动代码。
+            buildConfigField("boolean", "DIAG_LOG", "true")
         }
         release {
             isMinifyEnabled = true

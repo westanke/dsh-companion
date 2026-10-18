@@ -25,6 +25,11 @@
 
 > 新增超预算文件必须**先入本表再写码**。这是硬门槛，不是建议。
 
+2026-10-18 登记（本轮先记账后写码）：`app/src/main/assets/chat.html` 现 **2 575 行**
+（WebView 兜底页，即 DEBT-001 的主体，历史遗留超预算）。本轮工具专用块同步净增 58 行
+（2 517 → 2 575：4 条 CSS 规则 + `toolEntry` 内 read/bash/edit/write 四分支）。
+约定：**chat.html 不再吸收新功能**，后续增量要么拆 `assets/chat/` 多文件，要么随 DEBT-001 退役。
+
 ## 本轮清账记录（2026-10-16）
 
 原台账登记了两条债，本轮全部清掉。记在这里是为了让「为什么台账空着」有据可查：
@@ -55,7 +60,7 @@
 
 | ID | 债务 | 位置 | 为什么现在不动 | 清账条件 |
 |---|---|---|---|---|
-| DEBT-001 | 网页版与原生双实现并存 | `app/src/main/assets/chat.html`（2 476 行）+ `ui/chat/` | 网页版是兜底资产，真机验证过；先完成原生反向移植 | 原生功能覆盖 `PARITY.md` 全项且网页版使用率归零 |
+| DEBT-001 | 网页版与原生双实现并存 | `app/src/main/assets/chat.html`（2 575 行，2026-10-18 起）+ `ui/chat/` | 网页版是兜底资产，真机验证过；先完成原生反向移植 | 原生功能覆盖 `PARITY.md` 全项且网页版使用率归零 |
 | DEBT-002 | README 双站无自动对账 | `README.md` / `README.en.md` | `docsCheck` 只覆盖 `docs/project/`；Kotlin/Gradle 侧无 README 解析器 | 扩展 `docsCheck` 增加 README 版本号/测试数一致性检查 |
 | DEBT-003 | 无 lint baseline / 静态检查配置 | 仓库根 | 当前 `lintDebug` 在 CI 跑但无 baseline，warning 数不宜当门禁 | 建立 `lint-baseline.xml` 后把新增 warning 当门禁 |
 | DEBT-004 | ~~无 `@patch` 补丁登记表自动化~~ **已由单测兑现** | 全仓 | **2026-10-17 起由 `ArchitectureGuardTest` 的 `@patch` 扫描顶住**：五字段齐全 + `test` 指向的测试类真实存在 + id kebab-case 且唯一，随 `testDebugUnitTest` 进 CI | 把同一套校验搬进 `docsCheck`，与文档一致性门禁合流 |

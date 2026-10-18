@@ -322,6 +322,8 @@
     <string name="import_entry_hint">Generate the text on your computer, send it to yourself, then paste it here</string>
     <string name="import_explanation">Built for when you are already away and cannot see the computer screen: generate a short configuration text on the computer (send it to yourself or keep it in a private note), then paste it here. No QR code and no camera needed.</string>
     <string name="import_hint">Paste the configuration text starting with DSH1:</string>
+    <string name="import_from_file">Read from a file</string>
+    <string name="import_file_unreadable">No configuration text could be read from that file. Try another file holding text starting with DSH1:</string>
     <string name="import_and_connect">Import and connect</string>
     <string name="import_invalid">This configuration text could not be recognized. Make sure it was copied completely and not truncated.</string>
     <string name="import_security_note">This text is effectively a key. Send it only to yourself — never to a group chat or a public place.</string>
@@ -405,6 +407,17 @@
     <string name="gen_ui_debug_title">dsh-ui card diagnostics</string>
     <string name="gen_ui_debug_desc">When on, each assistant message gets a small grey line explaining why a card did not render as a component.</string>
     <string name="gen_ui_debug_footnote">Tap the grey line to expand it, long-press to copy. If you see a warning sign or “fences seen but not recognised”, send a screenshot.</string>
+    <!-- Diag log: window / session-operation / screen-change tracing -->
+    <string name="turn_max_tokens_title">Output token limit reached</string>
+    <string name="turn_max_tokens_hint">The reply was cut off; earlier output is preserved in the conversation. Send “continue” to let the model resume.</string>
+    <string name="diag_log_heading">Operation log</string>
+    <string name="diag_log_title">Record window and session operations</string>
+    <string name="diag_log_desc">Records opening sessions, page switches, scroll-to-bottom, screen on/off and window size changes. While on, a diagnostic overlay appears in the top-right corner showing the most recent operations.</string>
+    <string name="diag_log_footnote">Debug builds only — this switch does nothing in a release build. The log is also written to an internal file; tap "Read log" below to copy it out.</string>
+    <string name="diag_log_read">Read log</string>
+    <string name="diag_log_read_desc">Copy the recorded operation log to the clipboard so it can be pasted into a report.</string>
+    <string name="diag_log_empty">No log yet. Turn the switch on above, then operate for a few steps.</string>
+    <string name="diag_log_copied">Log copied</string>
     <string name="session_files_empty">This session has not mentioned any openable file path yet.</string>
     <string name="session_files_partial">Only the loaded messages were scanned; tap “Load older messages” first to cover earlier ones.</string>
     <string name="session_file_count">%1$d×</string>
@@ -445,6 +458,15 @@
     <string name="tool_detail_no_args">This tool took no arguments</string>
     <string name="tool_detail_no_result">No result yet</string>
     <string name="tool_detail_empty_result">Empty result</string>
+
+    <!-- Specialized tool blocks (official Web ReadBlock / TerminalBlock / DiffBlock) -->
+    <string name="tool_read_title">File</string>
+    <string name="tool_terminal_title">Terminal</string>
+    <string name="tool_diff_new_file">File</string>
+    <string name="tool_diff_remove">Removed</string>
+    <string name="tool_diff_add">Added</string>
+    <string name="tool_diff_replace_all">Replace all</string>
+    <string name="tool_permission_pill">Permission</string>
 
     <!-- Error text, localized by error code (see data/ErrorMessages.kt).
          The messages the server and the kernel hand us are English; these are what people read.
