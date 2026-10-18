@@ -1,7 +1,13 @@
 # 当前状态
 
 - 日期：2026-10-18
-- **在途（对标官方 Web 第一梯队，versionCode 10069 / 2.2.44，未发版）**：
+- **在途（chat.html 拆分，未升版本号）**：**壳 + 6 JS + 1 CSS 逐字拆分** ——
+  chat.html 2575 → **355 行壳**，样式与脚本搬进 `assets/chat/`（chat.css / core / render /
+  tools / interact / cards / bridge），加载顺序 core 最先；file:// 相对子资源天然可用，
+  **Kotlin 侧零改动**。搬迁等价性机检：拼接内容与原 `<script>` 区块 **diff 为零**，
+  node 语法全过；单测回归 0 失败；APK 内 7 资产齐全。interact.js 803 行超预算 3 行
+  （台账已登记，下批拆 renderHistory 收掉）。**真机回归未做**（WebView 兜底路径）—— 等发话。
+  约定升级：新功能直接落 `chat/` 对应域文件，不再回填 chat.html。- **在途（对标官方 Web 第一梯队，versionCode 10069 / 2.2.44，未发版）**：
   **工具专用块 + 权限档位 Pill**（依据 `workspace/资料调研/官方Web界面与APP功能对比_2026-10-18.md`，
   执行清单见 `PLAN-2026-10-18-对比落地.md`）：
   ① 工具调用专用块：`data/ChatToolBlocks.kt` 按 name 分发 Read / Terminal / Diff / Generic

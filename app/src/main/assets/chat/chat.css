@@ -1,0 +1,302 @@
+/*
+ * dsh-companion WebView 兜底页样式 —— 自 chat.html <style> 区块逐字搬出（2026-10-18）。
+ * 拆分判据与图谱见 docs/project/TECH-DEBT.md DEBT-001；
+ * chat.html 壳只留 HTML 骨架与资源引用，不再吸收样式与脚本。
+ */
+
+:root{
+  --bg:#fff; --fg:#1b1b1f; --muted:#6b6b76; --line:#e4e4ea;
+  --user:#e8f0fe; --user-fg:#1b3a5c; --card:#f7f7fa; --accent:#2f6fed;
+  --warn:#c2740a; --warn-bg:#fff6e5; --danger:#c0392b; --ok:#1e8e3e;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#151517;--fg:#e8e8ed;--muted:#9a9aa5;--line:#2e2e33;
+        --user:#1d2a3d;--user-fg:#cfe2ff;--card:#1c1c1f;--accent:#7aa2f7;
+        --warn:#e0a458;--warn-bg:#2a2118;--danger:#e06c5f;--ok:#6cc179;}
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%}
+body{display:flex;flex-direction:column;background:var(--bg);color:var(--fg);
+  font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans CJK SC",sans-serif;
+  overflow:hidden;overscroll-behavior:none}
+/* 每个可滚容器都要单独声明。早先只在 body 上写了 overscroll-behavior:none，
+   但 #log 自己能滚，滑到内容边缘继续拖时系统照样弹出侧边栏 ——
+   表现为「会话里上滑，偶尔左边滑出侧边栏」。 */
+#log,#todos .body,#files .body{overscroll-behavior:contain}
+/* 长路径 / 长代码行会横向撑开，滑到边界后的余下拖动也会被系统当成侧滑。
+   统一禁止横向溢出：代码块自己内部滚，不让整页横移。 */
+body{overflow-x:hidden}
+.md,.msg{max-width:100%}
+pre{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+td,th{max-width:0;word-break:break-word}
+#bar{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top) + 8px) 10px 8px;
+  border-bottom:1px solid var(--line);flex:0 0 auto;background:var(--bg)}
+#title{flex:1;min-width:0;font-weight:600;font-size:14px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+#dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex:0 0 auto}
+#dot.on{background:var(--ok)}
+#dot.off{background:var(--danger)}
+.iconbtn{width:34px;height:34px;flex:0 0 auto;border:0;border-radius:8px;background:transparent;
+  color:var(--fg);font-size:17px;line-height:1;cursor:pointer;display:grid;place-items:center}
+.iconbtn:active{background:var(--card)}
+.iconbtn:disabled{opacity:.35}
+#log{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 6px}
+/* 左右分栏，像聊天软件一样一眼看出谁说的。
+   关键取舍：**助手消息不设宽度上限**。它里面常有表格、代码块与卡片，
+   塞进窄气泡会被挤成一条条细缝，比原来更难读；所以只让它靠左、不限量宽。
+   用户消息短，靠右 + 底色 + 限宽 78%，视觉上自然形成两边。 */
+.msg{margin:0 0 12px;max-width:100%;display:flex;flex-direction:column}
+.m-user{align-items:flex-end}
+.m-assistant,.m-system{align-items:flex-start}
+.m-user .bubble{background:var(--accent);color:#fff;border-radius:14px 14px 3px 14px;
+  padding:9px 13px;max-width:78%;white-space:pre-wrap;word-break:break-word}
+.m-assistant .bubble{max-width:100%}
+.m-system .bubble{color:var(--muted);font-size:13px;padding:2px 4px}
+.m-user .role{align-self:flex-end;margin:0 2px 4px}
+.m-assistant .role{align-self:flex-start;margin:0 2px 4px}
+.role{font-size:11px;color:var(--muted)}
+/* 用户气泡里的长代码块/表格别把气泡撑爆 */
+.m-user .bubble pre{max-width:100%}
+.act{border-left:2px solid var(--line);padding:5px 0 5px 10px;margin:0 0 10px;color:var(--muted);font-size:13.5px}
+.act summary{cursor:pointer;list-style:none;display:flex;gap:7px;align-items:center;font-weight:600}
+.act summary::-webkit-details-marker{display:none}
+.act .caret{transition:transform .15s;flex:0 0 auto;font-size:10px}
+.act[open] .caret{transform:rotate(90deg)}
+.act .body{margin-top:6px;white-space:pre-wrap;word-break:break-word;color:var(--fg)}
+/* ── 一轮运行的终局失败 ──
+   以前这一行压根到不了手机端：插件把 turn/end 的 reason 整段丢掉，
+   客户端收到的与「正常跑完」一模一样 —— 于是转圈转到天荒地老。
+   所以它必须显眼：红色、带图标、标题加粗，并且**不能折叠**。 */
+.fail{border-left:3px solid var(--danger);background:rgba(192,57,43,.08);
+  border-radius:0 10px 10px 0;padding:9px 11px;margin:8px 0 12px;font-size:13.5px}
+.fail .hd{display:flex;gap:7px;align-items:center;font-weight:700;color:var(--danger)}
+.fail .code{color:var(--muted);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;font-weight:400}
+.fail .msg{margin-top:5px;white-space:pre-wrap;word-break:break-word;color:var(--fg);line-height:1.55}
+/* 输出 token 上限：黄色警示，与 .fail 的红**明确区分** —— 截断不是失败。
+   文案与内核 message.maxTokens / message.maxTokens.hint 逐字一致。 */
+.maxtok{border-left:3px solid var(--warn);background:var(--warn-bg);
+  border-radius:0 10px 10px 0;padding:9px 11px;margin:8px 0 12px;font-size:13.5px}
+.maxtok .hd{display:flex;gap:7px;align-items:center;font-weight:700;color:var(--warn)}
+.maxtok .msg{margin-top:5px;white-space:pre-wrap;word-break:break-word;color:var(--fg);line-height:1.55}
+/* ── 工具调用组 ──
+   组头一行（动作摘要，如「运行了代码，修改了文件」），组内每条也只占一行；
+   完整参数与结果要点开单条才显示。这样几十次调用也只占一个块。
+   组头刻意**不报次数** —— 摘要已经把「做了什么」说清楚了，次数是给日志看的。 */
+.act.tools .tnames{color:var(--muted);font-weight:400;font-size:12px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.tlist{margin-top:5px}
+.ti{border-top:1px solid var(--line)}
+.ti>summary{display:flex;gap:7px;align-items:center;cursor:pointer;list-style:none;
+  padding:5px 0;font-size:12.5px;font-weight:400;color:var(--muted)}
+.ti>summary::-webkit-details-marker{display:none}
+.ti .caret{font-size:9px;transition:transform .15s;flex:0 0 auto}
+.ti[open] .caret{transform:rotate(90deg)}
+.ti .tn{font-weight:600;color:var(--fg);flex:0 0 auto}
+.ti .ta1{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font:12px ui-monospace,SFMono-Regular,Menlo,monospace}
+.ti .tst{flex:0 0 auto;font-size:11px}
+.ti .tst.ok{color:var(--ok)}
+.ti .tst.err{color:var(--danger)}
+.tbody{padding:2px 0 8px 16px}
+.targs{margin:4px 0;max-height:160px;overflow:auto;
+  font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+.tres{margin:4px 0;max-height:220px;overflow:auto;color:var(--muted);
+  font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+  white-space:pre-wrap;word-break:break-word}
+.tres.err{color:var(--danger)}
+/* 工具专用块（对标官方 Web）：终端提示符行 / diff 增删行着色 */
+.tcmd{margin:4px 0 0;padding:3px 8px;background:#1d232c;color:#d7dce3;border-radius:6px 6px 0 0;
+  font:12px/1.5 ui-monospace,Menlo,monospace;white-space:pre;overflow-x:auto}
+.ttres{margin:0 0 4px;background:#14171c;border-radius:0 0 6px 6px}
+.dl{white-space:pre-wrap;word-break:break-word}
+.dl.del{color:#ff8a80}.dl.add{color:#9be29b}
+.tpath{margin:4px 0 0;padding:3px 8px;background:#14171c;color:#8fa3bf;border-radius:6px 6px 0 0;
+  font:11px/1.5 ui-monospace,Menlo,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tread{margin:0 0 4px;background:#14171c;color:#d7dce3;border-radius:0 0 6px 6px}
+/* 思考条：消息区下方、输入区上方的一条固定位置，不随消息滚动。
+   有思考时显示一行（右侧省略号截断），没有时整条隐藏。 */
+#thinkbar{flex:0 0 auto;display:flex;gap:7px;align-items:center;
+  margin:0;padding:6px 14px;border-top:1px solid var(--line);
+  background:var(--card);color:var(--muted);font-size:12.5px}
+#thinkbar[hidden]{display:none}
+#thinkbar .spin{flex:0 0 auto;animation:spin 1.2s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+#thinkbar .tt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.md>p:first-child{margin-top:0}.md>p:last-child{margin-bottom:0}
+.md h1,.md h2,.md h3,.md h4{margin:14px 0 7px;line-height:1.3}
+.md h1{font-size:1.3em}.md h2{font-size:1.18em}.md h3{font-size:1.08em}.md h4{font-size:1em}
+.md ul,.md ol{margin:7px 0;padding-left:22px}
+.md li{margin:3px 0}
+.md blockquote{margin:8px 0;padding:2px 0 2px 12px;border-left:3px solid var(--line);color:var(--muted)}
+.md a{color:var(--accent);text-decoration:underline;word-break:break-all}
+.md hr{border:0;border-top:1px solid var(--line);margin:12px 0}
+/* markdown 表格：与卡片内表格同一套做法 —— 滚动容器套在**外面**，
+   table 自己保持 display:table。
+ *
+ * 这里原先写的就是 display:block（和 2.2.4 在 .card table 上修掉的是**同一个错误**），
+ * 当时只修了卡片那处、漏了这里 —— 于是普通 markdown 表格也被压成一字一列
+ * （真机截图里表头「环节」是竖着排的）。同一个坑踩两次，这次两处一起收口。 */
+.md .tw{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
+.md table{border-collapse:collapse;margin:9px 0;font-size:13px;min-width:100%}
+.md th,.md td{border:1px solid var(--line);padding:5px 9px;text-align:left;vertical-align:top}
+.md th{background:var(--card)}
+.md img{max-width:100%;border-radius:8px}
+pre{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:11px;margin:9px 0;overflow-x:auto;position:relative}
+pre code{font:13px/1.55 ui-monospace,SFMono-Regular,"JetBrains Mono",Menlo,Consolas,monospace;
+  white-space:pre;display:block}
+:not(pre)>code{background:var(--card);border:1px solid var(--line);border-radius:5px;
+  padding:1px 5px;font:12.5px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.copy{position:absolute;top:6px;right:6px;border:1px solid var(--line);background:var(--bg);
+  color:var(--muted);border-radius:6px;font-size:11px;padding:3px 7px;cursor:pointer;opacity:0;
+  transition:opacity .15s}
+pre:hover .copy{opacity:1}
+.approve{border:1px solid var(--warn);background:var(--warn-bg);border-radius:12px;
+  padding:12px;margin:0 0 12px}
+.approve .hd{font-weight:700;color:var(--warn);font-size:14px;display:flex;gap:7px;align-items:center}
+.approve .cmd{margin-top:8px;background:var(--bg);border:1px solid var(--line);border-radius:8px;
+  padding:8px;font:12px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;
+  word-break:break-all;max-height:150px;overflow:auto}
+.approve .btns{display:flex;gap:8px;margin-top:11px}
+.approve button{flex:1;border:0;border-radius:9px;padding:10px;font-weight:600;font-size:14px;cursor:pointer}
+.approve .no{background:var(--card);color:var(--fg);border:1px solid var(--line)}
+.approve .yes{background:var(--ok);color:#fff}
+/* ── 问答卡（ask_user_question）──
+   外形**复用**审批卡那一套（.approve）：同一种「需要你出手」的卡片就该长得一样，
+   两处不一致这件事用户已经报过一次。只用主色把语义分开：
+   审批=危险，请核对命令；问答=等你回答，没有危险。 */
+.approve.ask{border-color:var(--accent)}
+.approve.ask .hd{color:var(--accent)}
+.approve.ask .hd.done{color:var(--ok)}
+.approve .q{margin-top:10px}
+.approve .qh{font-weight:700;font-size:13.5px;color:var(--accent)}
+.approve .qt{font-size:14px;line-height:1.5}
+.approve .qd{color:var(--muted);font-size:12.5px;margin-top:2px}
+.approve .opt{display:flex;gap:8px;align-items:flex-start;margin-top:7px;cursor:pointer}
+.approve .opt input{margin:3px 0 0;flex:0 0 auto}
+.approve .opt span{min-width:0}
+.approve .opt em{display:block;color:var(--muted);font-style:normal;font-size:12.5px}
+.approve textarea.custom{width:100%;margin-top:7px;border:1px solid var(--line);border-radius:8px;
+  padding:8px;background:var(--bg);color:var(--fg);font:inherit;font-size:14px;resize:vertical}
+#todos{margin:0 12px 10px;padding:10px 12px;background:var(--card);border:1px solid var(--line);
+  border-radius:10px;font-size:13px;flex:0 0 auto;max-height:34vh;overflow:auto}
+/* details 默认没有 marker，用自己的箭头。展开时限制高度，折叠时只占一行。 */
+#todos>summary,#files>summary{list-style:none;cursor:pointer;display:flex;gap:8px;
+  align-items:center;font-weight:600}
+#todos>summary::-webkit-details-marker,#files>summary::-webkit-details-marker{display:none}
+#todos>summary .caret,#files>summary .caret{transition:transform .15s;flex:0 0 auto;font-size:10px}
+#todos[open]>summary .caret,#files[open]>summary .caret{transform:rotate(90deg)}
+#todos>summary .cnt,#files>summary .cnt{margin-left:auto;color:var(--muted);font-size:12px;font-weight:400}
+#todos>div{margin-top:7px}
+#todos .it{display:flex;gap:8px;padding:3px 0;align-items:flex-start}
+#todos .ic{flex:0 0 auto;margin-top:1px}
+#todos .done{color:var(--muted);text-decoration:line-through}
+#todos .busy{color:var(--accent)}
+#todos[hidden]{display:none}
+#comp{flex:0 0 auto;border-top:1px solid var(--line);background:var(--bg);
+  padding:6px 8px calc(env(safe-area-inset-bottom) + 6px)}
+#warn{font-size:12px;color:var(--muted);padding:0 3px 6px}
+/* 输入区：**一整条药丸**，+ 和发送都在里面。
+   早先是三个独立控件（圆形 + 按钮 / 圆角输入框 / 圆形发送键）横排，
+   输入框被两个圆按钮夹着，既没占满宽度、圆角也对不齐，看着别扭。 */
+#row{display:flex;align-items:flex-end;gap:2px;width:100%;
+  border:1px solid var(--line);border-radius:22px;background:var(--card);
+  padding:3px 4px 3px 2px;min-height:44px}
+#row:focus-within{border-color:var(--accent)}
+/* 输入框自己不再画边框和圆角 —— 外框由 #row 统一画。 */
+#ta{flex:1;min-width:0;min-height:36px;max-height:120px;padding:8px 4px;
+  border:0;border-radius:0;background:transparent;color:var(--fg);
+  font:inherit;font-size:15px;resize:none;outline:0;line-height:1.4}
+#send{width:34px;height:34px;flex:0 0 auto;border:0;border-radius:50%;
+  background:var(--accent);color:#fff;font-size:14px;cursor:pointer;
+  display:grid;place-items:center;margin-bottom:1px}
+/* 禁用时不再整体压透明度（那样会连底色一起淡掉）；改成透明底 + 灰字，
+   位置和大小都不跳，用户看得出来「现在还不能发」但不觉得是残废控件。 */
+#send:disabled{background:transparent;color:var(--muted);opacity:1}
+/* 占位符超长时省略成一行，绝不换行 —— 换行会被输入框高度裁掉半截。
+   只作用于 ::placeholder，不影响用户实际输入的多行换行。 */
+#ta::placeholder{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#cmd{display:flex;flex-wrap:wrap;gap:6px;padding:0 2px 7px}
+#cmd button{border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:14px;
+  padding:4px 11px;font-size:12.5px;cursor:pointer}
+#toast{position:fixed;left:50%;bottom:88px;transform:translateX(-50%);background:var(--fg);
+  color:var(--bg);padding:9px 17px;border-radius:20px;font-size:13.5px;z-index:50;
+  opacity:0;pointer-events:none;transition:opacity .2s;max-width:82vw;text-align:center}
+#toast.show{opacity:.96}
+#empty{color:var(--muted);text-align:center;padding:38px 20px;font-size:14px}
+/* 诊断条：只在异常时出现，平时 hidden，不干扰正常聊天 */
+/* 诊断条早先是 position:fixed; bottom:0，直接压在输入框上——
+   「发送」按钮点不到。改成插在消息流末尾，不悬浮，就不会再挡任何东西。 */
+#diag{margin:8px 12px 4px;background:var(--warn-bg);color:var(--warn);
+  border:1px solid var(--warn);border-radius:8px;font-size:12px;padding:7px 12px;
+  cursor:pointer;flex:0 0 auto}
+#diag[hidden]{display:none}
+/* 提示气泡原来 bottom:88px，同样会压到输入区，抬到输入框之上 */
+#toast{bottom:104px}
+/* ── dsh-ui 卡片 ── */
+.card{border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0;background:var(--card)}
+.card .t{font-weight:700;font-size:14px;margin-bottom:8px}
+.card .c{padding:7px 0}
+.card .c + .c{border-top:1px solid var(--line)}
+.card .kv{display:flex;gap:10px;font-size:13px;padding:3px 0}
+.card .kv .k{color:var(--muted);flex:0 0 80px}
+.card .kv .v{flex:1;word-break:break-word}
+/* 卡片内表格：窄屏放不下就横向滚，压列宽会让每格都读不了。
+ *
+ * 滚动容器必须套在**外面**，不能让 table 自己 display:block。
+ * 早先就是后者 —— table 一旦变成 block 就脱离了表格布局算法，
+ * 列宽算不出来，几列会叠在同一位置（真机上「问题」和「改法」两列叠成一团，
+ * 表头挤成「问题法」）。正确做法：外层 .tw 负责滚动，table 保持 display:table。
+ */
+.card .tw{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
+/* 宽度必须是**下限**不是**定值**。
+ * 早先写 width:100%，那是硬约束：单元格又设了 nowrap，内容比容器宽时列被强行压窄，
+ * 文字只能溢出格子、压到右边一列上（真机截图里 ✓ 徽标压在「Office 文档（officecli）」）。
+ * 改成 min-width:100% —— 内容窄时铺满宽度，内容宽时表格自然撑开、由外层 .tw 横向滚。 */
+.card table{border-collapse:collapse;font-size:12.5px;min-width:100%}
+.card th,.card td{border:1px solid var(--line);padding:5px 8px;text-align:left;
+  white-space:nowrap;vertical-align:top}
+/* 单元格里的徽标与左边文字留一点缝，别贴着。 */
+.card td .badge{margin-left:2px}
+.card th{background:var(--bg);font-weight:600}
+/* 列表 / 步骤 / 时间线 */
+.card .gs{margin:4px 0;padding-left:20px;font-size:13px}
+.card .gs li{margin:3px 0}
+.card .tl{list-style:none;padding-left:0}
+.card .tl li{border-left:2px solid var(--line);padding:2px 0 2px 10px;margin:5px 0}
+.card .tm{color:var(--muted);font-size:12px;margin-right:5px}
+/* 徽标 / 进度条 */
+.card .badge{display:inline-block;border:1px solid var(--line);border-radius:10px;
+  padding:2px 9px;font-size:12px;background:var(--bg)}
+.card .badge.ok{border-color:var(--ok);color:var(--ok)}
+.card .badge.warn{border-color:var(--warn);color:var(--warn)}
+.card .pg{display:flex;align-items:center;gap:8px;font-size:12.5px}
+.card .pgbar{flex:1;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.card .pgbar i{display:block;height:100%;background:var(--accent)}
+/* 提示块：按 tone 上色，正文在 content 字段 */
+.card .co{border-radius:9px;padding:9px 11px;font-size:13px;
+  background:var(--card);border:1px solid var(--line)}
+.card .co .cot{font-weight:600;margin-bottom:3px}
+.card .co.ok{border-color:var(--ok)}
+.card .co.warn{background:var(--warn-bg);border-color:var(--warn);color:var(--warn)}
+.card .co.err{border-color:var(--danger);color:var(--danger)}
+/* 差异 */
+.card .tf{font:12px ui-monospace,Menlo,monospace;color:var(--muted);margin-top:4px}
+.card .dl{font:12.5px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;word-break:break-all}
+.card .dl.add{color:var(--ok)}
+.card .dl.del{color:var(--danger)}
+.card .gd{border:0;border-top:1px solid var(--line);margin:8px 0}
+/* 未识别类型：标题淡一点，内容仍按可读键值对列出 */
+.card .unk{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+/* ── 待发附件 ── */
+#atts{display:flex;flex-wrap:wrap;gap:6px;padding:0 2px 7px}
+#atts[hidden]{display:none}
+#atts .a{display:flex;align-items:center;gap:5px;border:1px solid var(--line);
+  background:var(--card);border-radius:14px;padding:3px 5px 3px 9px;font-size:12px;max-width:100%}
+#atts .a .nm{max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#atts .a .x{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:14px;padding:0 3px;line-height:1}
+#atts .a img{width:22px;height:22px;object-fit:cover;border-radius:5px}
+#attachBtn{width:34px;height:34px;flex:0 0 auto;border:0;border-radius:50%;
+  background:transparent;color:var(--muted);font-size:20px;cursor:pointer;
+  display:grid;place-items:center;margin-bottom:1px}
+#attachBtn:active{background:var(--line)}

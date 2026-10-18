@@ -41,6 +41,33 @@ read/read_image 8%、write 2%）—— 三种专用块覆盖 ~88% 的调用。
 - 全量 `testDebugUnitTest`：53 类 / 478 用例 / 0 失败；`docsCheck` 8 文档一致。
 - 行数门禁：ChatDetail 807 → 压回 800 内；`ArchitectureGuardTest` 绿。
 
+## 未发版（同 v2.2.44 批次追加）· chat.html 拆分：壳 + 6 JS + 1 CSS，逐字搬迁零行为变化（2026-10-18）
+
+### 基于什么
+
+上一条目立约「chat.html 不再吸收新功能」后，用户指示研究并执行拆分。可行性研究确认三个前提：
+① WebView 走 `loadUrl("file:///android_asset/chat.html")` 且 `allowFileAccess = true`，
+相对子资源天然可用，无需动 Kotlin；② 无 `evaluateJavascript` 抢跑时序；③ 全仓无按行引用。
+
+### 干了什么
+
+- chat.html 2575 行 → **355 行壳**（HTML 骨架 + 6 `<script src>` + 1 `<link>`）；
+- 拆出 `assets/chat/`：chat.css 302 / core.js 582 / render.js 175 / tools.js 203 /
+  interact.js 803 / cards.js 223 / bridge.js 269；
+- 切分判据是**功能域**（全局状态基础设施 / 渲染 / 工具组 / 交互与连接 / dsh-ui 卡片 / 附件与桥导出）；
+- 普通脚本共享全局作用域（core 必须最先加载），刻意不用 ES module（file:// 下 import 被 CORS 拦）。
+
+### 测了什么
+
+- **逐字等价机检**：6 个 JS 内容拼接与原 `<script>` 区块 diff 为零（三处切点空行对齐后）；
+- `node --check` 六文件 + 拼接整体语法全过；
+- 全量单测回归 0 失败；assembleDebug 产包内 7 个资产齐全（unzip -l 核对）；
+- interact.js 803 行超预算 3 行，已在 TECH-DEBT 台账登记（下批拆 renderHistory 收掉）。
+
+### 未做
+
+- 真机回归（WebView 兜底路径全功能过一遍）—— 等发话。
+
 ## v2.2.43（versionCode 10068）· 仓库卫生：清掉 40.9 MB 调试残留 + 堵住 `.secrets` 泄露口子（2026-10-17）
 
 > **本版无任何代码或界面改动**，APK 与 v2.2.42 完全一致，只多了版本号。真正的改动都在
