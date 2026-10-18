@@ -24,6 +24,8 @@ var ws = null, wsRetry = 0, closed = false;
 var running = false, canWrite = false;
 var pend = {};
 var CMD = [];
+/* @ 补全要的会话工作目录信息；原生 init 多传这三个字段，旧版 chat.html 忽略未知字段不报错。 */
+var ROOT = "", CWD = "", CWDABS = "";
 
 /* ── 启动烙印 ──
    把「脚本是否执行到哪」直接写进标题栏。

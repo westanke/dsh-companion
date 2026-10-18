@@ -431,7 +431,7 @@ function setRunning(on) {
      早先写的是「输入消息…  Enter 发送 / Shift+Enter 换行」，在 346px 宽的窄屏上
      被撑成两行，而输入框只有一行多的高度 —— 第二行直接被裁掉，看着像残字。
      何况手机上有发送按钮，Enter/Shift+Enter 那套是桌面习惯，本来就多余。 */
-  ta.placeholder = running ? "运行中… 发送即插话" : "输入消息…";
+  ta.placeholder = running ? "运行中… 发送即插话" : "描述你想要构建的内容";
   $("send").disabled = !ta.value.trim() || !canWrite;
 }
 
@@ -447,15 +447,15 @@ function connectWS() {
   } catch (e) { scheduleReconnect(); return; }
   ws = sock;
 
-  sock.onopen = function () { wsRetry = 0; $("dot").className = "on"; };
-  sock.onclose = function () { $("dot").className = "off"; scheduleReconnect(); };
+  sock.onopen = function () { wsRetry = 0; setConn(true); };
+  sock.onclose = function () { setConn(false); scheduleReconnect(); };
   sock.onerror = function () { try { sock.close(); } catch (e) {} };
   sock.onmessage = function (m) {
     var ev;
     try { ev = JSON.parse(m.data); } catch (e) { return; }
     if (!ev) return;
 
-    if (ev.type === "connection.ready") { $("dot").className = "on"; return; }
+    if (ev.type === "connection.ready") { setConn(true); return; }
     if (ev.sessionId && SID && ev.sessionId !== SID) return;
 
     var d = ev.data || {};
@@ -587,6 +587,9 @@ function rid() {
 function send(steer) {
   var text = ta.value.trim();
   if (!text) return;
+  /* 斜杠命令面板是输入提示，发出去就让它落回，别卡在输入框上方。 */
+  var cb = $("cmd"); if (cb) cb.hidden = true;
+  var mb = $("mention"); if (mb) mb.hidden = true;
   if (!canWrite) { toast("设备没有 chat.write 权限"); return; }
 
   ta.value = "";
@@ -648,6 +651,7 @@ function sheet(html, onOk) {
        多一个「应用」只会让人以为要先选再确认（而且它永远取第一个选项）。 */
     (onOk ? '<button class="approve yes" data-ok style="flex:1;padding:11px">应用</button>' : '') +
     '</div>';
+  ov.className = "sheet-ov";
   ov.appendChild(bx);
   document.body.appendChild(ov);
 
@@ -679,28 +683,51 @@ function openSheet() {
     var cur = (models && models.current) || {};
     var groups = (models && models.groups) || [];
 
-    var mopts = [];
-    groups.forEach(function (g) {
-      (g.models || []).forEach(function (m) {
-        mopts.push({ v: (g.id || g.name) + "|" + m.id, n: m.name || m.id, h: g.name });
-      });
-    });
     var popts = presets.map(function (p) {
       return { v: p.id, n: p.name };
     });
     var curPre = "";
     if (models && models.current) curPre = cur.model;
 
+    /* 模型按厂家（group）树型分组：每个厂家一行小标题 + 组内模型 radio。
+       对齐原生 ModelSheet 的分组展示（groups 本身就是 厂家→模型 树）。 */
+    var mhtml = groups.map(function (g) {
+      var items = (g.models || []).map(function (m) {
+        var v = (g.id || g.name) + "|" + m.id;
+        return '<label style="display:flex;gap:9px;align-items:center;padding:6px 0">' +
+          '<input type="radio" name="mdl" value="' + esc(v) + '"' +
+          (m.id === curPre ? " checked" : "") + ">" +
+          '<span>' + esc(m.name || m.id) + "</span></label>";
+      }).join("");
+      return '<div style="padding:0 16px 4px">' +
+        '<div style="font-size:12px;color:var(--muted);font-weight:600;padding:6px 0 2px">' +
+        esc(g.name || g.id) + "</div>" + items + "</div>";
+    }).join("");
+
     var html =
       '<div style="padding:12px 16px 4px;font-weight:700">模型</div>' +
       '<div style="padding:0 16px 8px;color:var(--muted);font-size:13px">当前：' +
         esc((cur.provider || "?") + " · " + (cur.model || "?")) + "</div>" +
-      '<div style="padding:0 16px 8px">' + options(mopts, "mdl", curPre) + "</div>" +
+      mhtml +
       '<div style="border-top:1px solid var(--line);margin:6px 0"></div>' +
       '<div style="padding:12px 16px 4px;font-weight:700">智能体</div>' +
-      '<div style="padding:0 16px 8px">' + options(popts, "pre", "") + "</div>";
+      '<div style="padding:0 16px 8px">' + options(popts, "pre", "") + "</div>" +
+      '<div style="border-top:1px solid var(--line);margin:10px 0 6px"></div>' +
+      '<div style="padding:0 16px 8px;display:flex;gap:10px">' +
+      '<button class="approve no" data-act="traj" style="flex:1;padding:11px">工具轨迹</button>' +
+      '<button class="approve no" data-act="stats" style="flex:1;padding:11px">统计</button></div>';
 
-    sheet(html, function (box) {
+    var sh = sheet(html, function (box) {
+      /* 工具轨迹 / 统计：先关掉本层 sheet 再开新的（sheet 不允许嵌套）。 */
+      box.querySelectorAll("[data-act]").forEach(function (b) {
+        b.onclick = function () {
+          var act = b.getAttribute("data-act");
+          document.querySelectorAll(".sheet-ov").forEach(function (n) {
+            if (n.parentNode) n.parentNode.removeChild(n);
+          });
+          (act === "traj" ? openTrajectory : openStats)();
+        };
+      });
       var m = box.querySelector('input[name=mdl]:checked');
       var jobs = [];
       if (m && m.value.split("|")[1] !== cur.model) {
@@ -720,6 +747,125 @@ function openSheet() {
       return Promise.all(jobs);
     });
   }).catch(function (e) { toast("读取失败：" + e.message); });
+}
+
+/* ── 工具轨迹 ──
+ * 把历史事件按**轮次**折成时间轴，与原生 ChatTrajectorySheet / Trajectory.kt 同源：
+ * 全部来自历史，不认的事件也保留；并按官方 Web 口径过滤噪音
+ * （step/start、step/end、turn/start、session-log-*、agent/inbox/*、tool/result）。 */
+function openTrajectory() {
+  var hist = lastHistory;
+  var evs = (hist && hist.events) || [];
+  if (!evs.length) { toast("暂无历史"); return; }
+
+  /* 轨迹页是「给人查的」：每一轮里到底发生了什么都要列出来。
+     但 step/turn 边界帧与内部日志是纯噪音（真实会话 265 事件里占一半），先滤掉，
+     其余按 turn 分组，turn 取不到的归到「轮次之间」（垫底）。 */
+  var NOISE = { "step/start": 1, "step/end": 1, "turn/start": 1, "tool/result": 1 };
+  function kindLabel(t) {
+    if (t === "user/message") return "用户";
+    if (t === "assistant/message" || t === "assistant/chunk") return "助手";
+    if (t === "tool/call") return "工具";
+    if (t === "deliverable") return "交付物";
+    if (t === "turn/end") return "轮次结束";
+    return "其他";
+  }
+  var groups = {};
+  evs.forEach(function (e) {
+    var ev = e.event || e;
+    var t = ev.type || "";
+    if (NOISE[t]) return;
+    if (/^session-log-/.test(t)) return;
+    if (/^agent\/inbox\//.test(t)) return;
+    var d = evData(ev) || {};
+    var turn = parseInt(d.turn != null ? String(d.turn) : "0", 10);
+    if (isNaN(turn)) turn = 0;
+    /* 非对话事件且取不到 turn 的，才归「轮次之间」；user/assistant 永远留在对话里。 */
+    if (turn === 0 && t !== "user/message" && t !== "assistant/message") turn = 0;
+    var seq = typeof ev.seq === "number" ? ev.seq : 0;
+    var time = typeof ev.time === "number" ? ev.time : 0;
+    var label = (t === "tool/call") ? toolNameOf(d) : null;
+    (groups[turn] = groups[turn] || []).push({
+      seq: seq, time: time, type: t, kind: kindLabel(t), label: label, raw: d
+    });
+  });
+
+  var turns = Object.keys(groups).map(Number).sort(function (a, b) {
+    /* 「轮次之间」(turn=0) 永远垫底。 */
+    if (a === 0 && b !== 0) return 1;
+    if (b === 0 && a !== 0) return -1;
+    return a - b;
+  });
+
+  if (!turns.length) { toast("暂无轨迹"); return; }
+
+  function trajRow(node) {
+    var head = '<span style="color:var(--muted);font-size:12px">#' + node.seq + "</span> " +
+      '<span style="font-weight:600">' + esc(node.kind) + "</span>" +
+      (node.label ? ' <span style="color:var(--accent)">' + esc(node.label) + "</span>" : "") +
+      ' <span style="color:var(--muted);font-size:11px">' + esc(node.type) + "</span>";
+    var pretty = "";
+    try { pretty = JSON.stringify(node.raw, null, 2); } catch (e) { pretty = String(node.raw); }
+    return '<details style="border-top:1px solid var(--line);padding:7px 0">' +
+      '<summary style="cursor:pointer;list-style:none;display:flex;gap:8px;align-items:center">' +
+      '<span style="font-size:9px">▶</span>' + head + "</summary>" +
+      '<pre style="white-space:pre-wrap;word-break:break-word;margin:6px 0 0;' +
+      'font:11px/1.5 ui-monospace,Menlo,monospace;color:var(--muted);' +
+      'max-height:240px;overflow:auto;background:var(--card);padding:8px;border-radius:6px">' +
+      esc(pretty) + "</pre></details>";
+  }
+
+  var html = '<div style="padding:14px 16px 4px;font-weight:700">工具轨迹</div>' +
+    '<div style="padding:0 16px 8px;color:var(--muted);font-size:12px">' +
+    "按轮次展开，点节点看当时收到的原始事件</div>";
+  turns.forEach(function (turn) {
+    var nodes = groups[turn].sort(function (a, b) { return a.seq - b.seq; });
+    var toolN = nodes.filter(function (n) { return n.type === "tool/call"; }).length;
+    var title = turn === 0 ? "轮次之间" : ("轮次 " + turn);
+    html += '<details style="padding:6px 0" open>' +
+      '<summary style="cursor:pointer;list-style:none;font-weight:700;display:flex;gap:8px;align-items:center">' +
+      '<span style="font-size:10px">▶</span>' + esc(title) +
+      ' <span style="color:var(--muted);font-weight:400;font-size:12px">· ' +
+      nodes.length + " 事件" + (toolN ? " · " + toolN + " 次工具调用" : "") + "</span></summary>" +
+      '<div style="padding:4px 0 8px">' + nodes.map(trajRow).join("") + "</div></details>";
+  });
+
+  sheet(html, null);
+}
+
+/* ── 会话统计 ──
+ * 执行维度：轮次 / 助手消息 / 工具调用 / 事件数 / 数据截至。
+ * 与原生 SessionStats.kt 同源（直接数历史事件，不猜 token 用量——
+ * 历史事件里有没有 usage 从本仓不可证，给个估算数字比没有更坏）。 */
+function openStats() {
+  var evs = (lastHistory && lastHistory.events) || [];
+  var turns = 0, assistants = 0, tools = 0, lastSeq = null;
+  evs.forEach(function (e) {
+    var ev = e.event || e;
+    var t = ev.type || "";
+    if (t === "user/message") turns += 1;
+    else if (t === "assistant/message") assistants += 1;
+    else if (t === "tool/call") tools += 1;
+    if (typeof ev.seq === "number") {
+      if (lastSeq == null || ev.seq > lastSeq) lastSeq = ev.seq;
+    }
+  });
+
+  function row(label, value) {
+    return '<div style="display:flex;padding:9px 0;border-top:1px solid var(--line)">' +
+      '<span style="flex:1;color:var(--fg)">' + esc(label) + "</span>" +
+      '<span style="font-weight:700">' + esc(String(value)) + "</span></div>";
+  }
+
+  var html = '<div style="padding:14px 16px 4px;font-weight:700">会话统计</div>' +
+    (evs.length ? (row("用户轮次", turns) + row("助手消息", assistants) +
+      row("工具调用", tools) + row("事件总数", evs.length) +
+      (lastSeq != null ? row("数据截至", "#" + lastSeq) : "")) :
+      '<div style="padding:12px 0;color:var(--muted)">暂无数据</div>') +
+    '<div style="padding:12px 0 4px;color:var(--muted);font-size:12px;line-height:1.5">' +
+    "Token 用量与上下文压力需内核提供 usage，本页拿不到，故不显示估算值。</div>";
+
+  sheet(html, null);
 }
 
 /* ── 斜杠命令 ── */
@@ -745,22 +891,132 @@ function refreshCommands() {
   });
 }
 
+/* ── @ 文件补全 ──
+ * 对齐原生 MentionQuery + mentions 弹窗：输入框里打「@」且它前面是行首或空白时，
+ * 从会话工作目录（rootId/cwd）列举文件/文件夹，点选后把「@查询串」替换成绝对路径。
+ * 列举走 api()（WebView 下经 App.request 桥到原生，和原生 DshClient.entries 同一端点）。 */
+function atActiveStart(v) {
+  /* 从末尾往回扫，谁先遇到谁说了算；@ 前是行首或空白才命中（避开 foo@bar.com）。 */
+  var i = v.length - 1;
+  while (i >= 0) {
+    var ch = v[i];
+    if (ch === "@") return (i === 0 || /\s/.test(v[i - 1])) ? i : -1;
+    if (/\s/.test(ch)) return -1;
+    i--;
+  }
+  return -1;
+}
+
+/* 目录判断：原生 FileEntry.kind 取值不定（dir / directory / folder…），兼容归一。 */
+function isDirKind(k) {
+  return /^dir|directory|folder$/i.test(k || "");
+}
+
+var mentionItems = [], mentionSel = 0, mentionStart = -1;
+
+function refreshMention() {
+  var box = $("mention");
+  if (!box) return;
+  var v = ta.value;
+  var at = atActiveStart(v);
+  if (at < 0 || !ROOT) { box.hidden = true; return; }
+  var q = v.slice(at + 1).toLowerCase();
+  mentionStart = at;
+  var hit = mentionItems.filter(function (e) {
+    return e.name.toLowerCase().indexOf(q) >= 0;
+  });
+  if (!hit.length) {
+    box.hidden = false;
+    box.innerHTML = '<div class="empty">本会话目录没有匹配的文件</div>';
+    return;
+  }
+  mentionSel = 0;
+  box.hidden = false;
+  box.innerHTML = hit.map(function (e, i) {
+    var ic = e.kind === "dir" ? "📁" : "📄";
+    return '<button data-i="' + i + '" aria-selected="' + (i === 0) + '">' +
+      '<span class="ic">' + ic + "</span>" +
+      '<span class="nm">' + esc(e.name) + "</span>" +
+      '<span class="pa">' + esc(e.path) + "</span></button>";
+  }).join("");
+  box.querySelectorAll("button[data-i]").forEach(function (b) {
+    b.onclick = function () { applyMention(parseInt(b.getAttribute("data-i"), 10)); };
+  });
+}
+
+function applyMention(i) {
+  var box = $("mention");
+  var v = ta.value;
+  if (atActiveStart(v) < 0 || !mentionItems[i]) { if (box) box.hidden = true; return; }
+  var e = mentionItems[i];
+  /* 目录结尾补「/」不补空格（用户大概率继续往里选）；文件结尾补一个空格把词结束掉。
+     插入绝对路径：有 cwdAbsolute 走它，否则用列举返回的 entryPath（相对授权根，原生同样降级）。 */
+  var head = CWDABS ? (CWDABS.replace(/\/+$/, "") + "/") : "";
+  var inserted = (CWDABS ? head + e.path.replace(/^\/+/, "") : e.path);
+  if (e.kind !== "dir") inserted += " ";
+  ta.value = v.slice(0, mentionStart) + inserted;
+  if (box) box.hidden = true;
+  ta.focus();
+  ta.dispatchEvent(new Event("input"));
+}
+
+function loadMentionEntries() {
+  if (!ROOT) return;
+  api("/roots/" + encodeURIComponent(ROOT) + "/entries?path=" + encodeURIComponent(CWD.trim("/")), "GET")
+    .then(function (r) {
+      var entries = (r && r.entries) || [];
+      mentionItems = entries.map(function (e) {
+        return { name: e.name, path: e.path, kind: isDirKind(e.kind) ? "dir" : "file" };
+      });
+    })
+    .catch(function () { mentionItems = []; });
+}
+
 /* ── 交互绑定 ── */
 ta.addEventListener("input", function () {
   ta.style.height = "auto";
   ta.style.height = Math.min(ta.scrollHeight, 120) + "px";   /* 与 #ta 的 max-height 保持一致 */
   $("send").disabled = !ta.value.trim() || !canWrite;
   refreshCommands();
+  refreshMention();
 });
 ta.addEventListener("keydown", function (e) {
+  var mbox = $("mention");
+  if (mbox && !mbox.hidden && mentionItems.length) {
+    /* @ 补全打开时：上下移动、回车/Tab 选中、Esc 关掉，都不走发送。 */
+    if (e.key === "ArrowDown") { e.preventDefault(); mentionSel = (mentionSel + 1) % mentionItems.length; highlightMention(); return; }
+    if (e.key === "ArrowUp")   { e.preventDefault(); mentionSel = (mentionSel - 1 + mentionItems.length) % mentionItems.length; highlightMention(); return; }
+    if (e.key === "Escape")    { e.preventDefault(); mbox.hidden = true; return; }
+    if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); applyMention(mentionSel); return; }
+  }
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(false); }
 });
+function highlightMention() {
+  var box = $("mention");
+  if (!box) return;
+  box.querySelectorAll("button[data-i]").forEach(function (b) {
+    b.setAttribute("aria-selected", parseInt(b.getAttribute("data-i"), 10) === mentionSel ? "true" : "false");
+  });
+}
 bind("send").onclick = function () { send(false); };
 bind("steer").onclick = function () { send(true); };
 bind("back").onclick = function () {
   if (App && App.close) App.close(); else history.back();
 };
 bind("more").onclick = openSheet;
+/* 刷新：对标原生顶栏 Refresh 图标 —— 重新拉取历史整块重画。 */
+bind("refresh").onclick = function () {
+  var b = $("refresh");
+  if (b) b.disabled = true;
+  refreshHistory().then(function () { toast("已刷新"); })
+    .catch(function () {})
+    .then(function () { if (b) setTimeout(function () { b.disabled = false; }, 600); });
+};
+/* 文件：原生顶栏同款 FolderOpen 入口；WebView 模式没有「打开原生文件 Sheet」的桥方法，
+   能力边界与 PARITY 审计一致 —— 提示回本机原生端查看，不越界造一个半成品面板。 */
+bind("files").onclick = function () {
+  toast("本会话文件请在原生端「本会话的文件」查看");
+};
 bind("attachBtn").onclick = function () {
   if (!canWrite) { toast("设备没有 chat.write 权限"); return; }
   var s = sheet(

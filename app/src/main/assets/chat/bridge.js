@@ -134,6 +134,11 @@ window.dshChat = {
     TOKEN = cfg.token || "";
     SID = cfg.sessionId || "";
     if (!SID) note("init 里没有 sessionId —— 原生没选中会话");
+    /* @ 补全：原生把会话工作目录信息一起过来了（rootId + cwd + 可选 cwdAbsolute）。
+       chat.html 据此向 roots/{rootId}/entries 列举文件，对齐原生 MentionQuery。 */
+    ROOT = cfg.rootId || "";
+    CWD = cfg.cwd || "";
+    CWDABS = cfg.cwdAbsolute || "";
     canWrite = !cfg.scopes || cfg.scopes.indexOf("chat.write") >= 0;
     $("title").textContent = cfg.title || SID || "会话";
     $("warn").textContent = cfg.warn || "";
@@ -145,6 +150,7 @@ window.dshChat = {
       note("开始拉取");
       loadCommands()
         .then(function () { note("命令已载入"); })
+        .then(function () { loadMentionEntries(); })   /* 预拉 cwd 文件，等用户打 @ 时直接可用 */
         .then(function () { return refreshHistory(); })
         .then(function () { note("历史已载入"); })
         .then(function () { return refreshApprovals(); })
@@ -266,4 +272,15 @@ window.showApproval = function (j) { addApproval(typeof j === "string" ? JSON.pa
 window.showQuestion = function (j) { addQuestion(typeof j === "string" ? JSON.parse(j) : j); };
 window.setTodos = setTodos;
 window.setRunning = setRunning;
-window.setConnectionStatus = function (on) { $("dot").className = on ? "on" : "off"; };
+window.setConnectionStatus = function (on) { setConn(on); };
+/* 顶栏状态文字：对标原生的 StatusLabel（实时事件已连接 / 已断开）。
+   点随连接变化变色，并短暂浮现一行中文说明再淡出，平时隐藏不抢标题位置。 */
+function setConn(on) {
+  var dot = $("dot"); if (dot) dot.className = on ? "on" : "off";
+  var st = $("status"); if (!st) return;
+  st.textContent = on ? "实时事件已连接" : "实时事件已断开";
+  st.className = "status " + (on ? "on" : "off");
+  st.hidden = false;
+  clearTimeout(st._t);
+  st._t = setTimeout(function () { st.hidden = true; }, 2200);
+}

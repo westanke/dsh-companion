@@ -36,6 +36,7 @@ import io.github.westanke.dshcompanion.data.displayItems
 import io.github.westanke.dshcompanion.data.parseGenUi
 import io.github.westanke.dshcompanion.data.splitMessageBody
 import io.github.westanke.dshcompanion.data.todoItems
+import io.github.westanke.dshcompanion.debug.DiagLog
 import io.github.westanke.dshcompanion.web.ActiveChatBridge
 import io.github.westanke.dshcompanion.web.ChatWebBridge
 import io.github.westanke.dshcompanion.selectSession
@@ -80,6 +81,21 @@ fun ChatWebScreen(
     }
     var web by remember { mutableStateOf<WebView?>(null) }
     var pageReady by remember { mutableStateOf(false) }
+
+    // ── 诊断插桩：WebView 页的入口 ──
+    //
+    // 与 ChatScreen 的路由日志、ChatDetail 的渲染日志构成三分支证据：
+    // 走 WebView 时只有这一条会打出来。
+    //
+    // 用 effect 而不是写在组合体里：真机实测（2026-10-18）前者一次进会话刷出
+    // 十几条「（同前，已重复 N 次）」，把 onPageStarted/onPageFinished 这些
+    // 真正要看的 WebView 回调挤没了。键取 sessionId —— 只有换会话才值得记。
+    LaunchedEffect(state.selectedSessionId) {
+        DiagLog.i(
+            DiagLog.Cat.WEB,
+            "ChatWebScreen 渲染：sid=${state.selectedSessionId} useWebChat=${state.useWebChat}",
+        )
+    }
 
     // ── 原生侧自证面板 ──
     //
@@ -193,11 +209,13 @@ fun ChatWebScreen(
                         override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
                             super.onPageStarted(view, url, favicon)
                             mark("onPageStarted: " + url)
+                            DiagLog.i(DiagLog.Cat.WEB, "onPageStarted url=$url")
                         }
 
                         override fun onPageFinished(view: WebView, url: String) {
                             super.onPageFinished(view, url)
                             mark("onPageFinished: 加载结束")
+                            DiagLog.i(DiagLog.Cat.WEB, "onPageFinished url=$url pageReady=true")
                             // 只翻标记：真正的 init 由 LaunchedEffect 在 key 变化后发出，
                             // 在这里直接发会和那一条撞车（页面会收到两次 init）。
                             pageReady = true
@@ -213,7 +231,9 @@ fun ChatWebScreen(
                             if (!request.isForMainFrame) return
                             // 只写 logcat 等于没写：真机上没人读得到，
                             // 而这一条恰恰是「assets 到底加载没加载」的直接答案。
-                            mark("❌ 加载失败 ${error.errorCode}: ${error.description}")
+                            val detail = "❌ 加载失败 ${error.errorCode}: ${error.description}"
+                            mark(detail)
+                            DiagLog.e(DiagLog.Cat.WEB, "主文档加载失败 url=${request.url} $detail")
                             android.util.Log.e(
                                 "DshChatWebView",
                                 "main frame failed: ${error.errorCode} ${error.description}",
@@ -237,6 +257,7 @@ fun ChatWebScreen(
                     mark("factory：开始 loadUrl")
                     loadUrl("file:///android_asset/chat.html")
                     mark("factory：loadUrl 已调用")
+                    DiagLog.i(DiagLog.Cat.WEB, "WebView 创建完成，loadUrl(file:///android_asset/chat.html)")
                     web = this
                 }
             },
@@ -321,6 +342,11 @@ fun ChatWebScreen(
             .put("apiBase", "")                     // 留空 → 页面不会自建 fetch / WebSocket
             .put("scopes", org.json.JSONArray(scopes))
             .put("title", session?.title ?: session?.workspaceTitle ?: id.take(12))
+            // @ 补全要的会话工作目录：chat.html 据此向 roots/{rootId}/entries 列举文件，
+            // 对齐原生 MentionQuery（旧版 chat.html 忽略未知字段，向后兼容）。
+            .put("rootId", session?.rootId ?: "")
+            .put("cwd", session?.cwd ?: "")
+            .put("cwdAbsolute", session?.cwdAbsolute ?: "")
             .put("running", viewModel.selectedSessionRunning())
             .put("onLive", true)
             // 待办随首帧一起给，省掉一次等待；页面随后仍会按 projections 自行刷新。

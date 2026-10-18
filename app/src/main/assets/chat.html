@@ -5,15 +5,18 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>DSH</title>
 <style>
+/* 配色对齐原生 design-system（MASTER.md + Theme.kt）：奶白底 + teal 强调 + 暖橙警示 + 暖灰。
+   原生色值：Paper #F9F9F7 / Oat #F0EFEC / Ink #131313 / Muted #74726D /
+   Teal #006A60 / Clay #C6613F / Error #B3261E。暗色一一对应。 */
 :root{
-  --bg:#fff; --fg:#1b1b1f; --muted:#6b6b76; --line:#e4e4ea;
-  --user:#e8f0fe; --user-fg:#1b3a5c; --card:#f7f7fa; --accent:#2f6fed;
-  --warn:#c2740a; --warn-bg:#fff6e5; --danger:#c0392b; --ok:#1e8e3e;
+  --bg:#F9F9F7; --fg:#131313; --muted:#74726D; --line:#D7D5CF;
+  --card:#F0EFEC; --accent:#006A60; --accent-fg:#FFFFFF;
+  --warn:#C6613F; --warn-bg:#FBEDE7; --danger:#B3261E; --ok:#006A60;
 }
 @media (prefers-color-scheme:dark){
-  :root{--bg:#151517;--fg:#e8e8ed;--muted:#9a9aa5;--line:#2e2e33;
-        --user:#1d2a3d;--user-fg:#cfe2ff;--card:#1c1c1f;--accent:#7aa2f7;
-        --warn:#e0a458;--warn-bg:#2a2118;--danger:#e06c5f;--ok:#6cc179;}
+  :root{--bg:#181816;--fg:#F3F2ED;--muted:#BEBBB3;--line:#41413D;
+        --card:#2A2A27;--accent:#83D5C8;--accent-fg:#003730;
+        --warn:#FFB59B;--warn-bg:#33241C;--danger:#FFB4AB;--ok:#83D5C8;}
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%}
@@ -32,8 +35,10 @@ pre{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
 td,th{max-width:0;word-break:break-word}
 #bar{display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top) + 8px) 10px 8px;
   border-bottom:1px solid var(--line);flex:0 0 auto;background:var(--bg)}
-#title{flex:1;min-width:0;font-weight:600;font-size:14px;overflow:hidden;
-  text-overflow:ellipsis;white-space:nowrap}
+#title{flex:1;min-width:0;font-weight:600;font-size:15px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;
+  /* 对标原生 displaySmall/headlineSmall：屏幕标题用平台衬线体（design-system MASTER.md）。 */
+  font-family:Georgia,"Times New Roman","Noto Serif CJK SC",serif;letter-spacing:0}
 #dot{width:7px;height:7px;border-radius:50%;background:var(--muted);flex:0 0 auto}
 #dot.on{background:var(--ok)}
 #dot.off{background:var(--danger)}
@@ -49,7 +54,10 @@ td,th{max-width:0;word-break:break-word}
 .msg{margin:0 0 12px;max-width:100%;display:flex;flex-direction:column}
 .m-user{align-items:flex-end}
 .m-assistant,.m-system{align-items:flex-start}
-.m-user .bubble{background:var(--accent);color:#fff;border-radius:14px 14px 3px 14px;
+/* 用户气泡：原生中用 primary（Ink #131313）实体色，而非强调 teal —— 这是「我发的」标识，
+   与助手侧的无底文字形成明确对比；teal 留给链接/可点元素这类「强调动作」。 */
+/* 圆角对标原生 Material shapes.medium（8dp）；右下小角保留以区分「我发的」。 */
+.m-user .bubble{background:var(--fg);color:var(--bg);border-radius:8px 8px 3px 8px;
   padding:9px 13px;max-width:78%;white-space:pre-wrap;word-break:break-word}
 .m-assistant .bubble{max-width:100%}
 .m-system .bubble{color:var(--muted);font-size:13px;padding:2px 4px}
@@ -217,9 +225,19 @@ pre:hover .copy{opacity:1}
 /* 占位符超长时省略成一行，绝不换行 —— 换行会被输入框高度裁掉半截。
    只作用于 ::placeholder，不影响用户实际输入的多行换行。 */
 #ta::placeholder{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#cmd{display:flex;flex-wrap:wrap;gap:6px;padding:0 2px 7px}
+#cmd{display:none}
+#cmd:not([hidden]){display:flex;flex-wrap:wrap;gap:6px;padding:0 2px 7px}
 #cmd button{border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:14px;
   padding:4px 11px;font-size:12.5px;cursor:pointer}
+ #mention{display:none}
+#mention:not([hidden]){display:flex;flex-direction:column;gap:2px;padding:4px 2px 6px;max-height:34vh;overflow:auto}
+ #mention button{display:flex;gap:8px;align-items:center;width:100%;text-align:left;border:0;
+   background:transparent;color:var(--fg);border-radius:8px;padding:8px 9px;font-size:13px;cursor:pointer}
+ #mention button .ic{color:var(--muted);width:14px;text-align:center}
+ #mention button .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ #mention button .pa{color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ #mention button[aria-selected="true"],#mention button:hover{background:var(--card)}
+ #mention .empty{color:var(--muted);font-size:12px;padding:6px 2px}
 #toast{position:fixed;left:50%;bottom:88px;transform:translateX(-50%);background:var(--fg);
   color:var(--bg);padding:9px 17px;border-radius:20px;font-size:13.5px;z-index:50;
   opacity:0;pointer-events:none;transition:opacity .2s;max-width:82vw;text-align:center}
@@ -301,6 +319,16 @@ pre:hover .copy{opacity:1}
   background:transparent;color:var(--muted);font-size:20px;cursor:pointer;
   display:grid;place-items:center;margin-bottom:1px}
 #attachBtn:active{background:var(--line)}
+/* 顶栏连接状态文字：对标原生 StatusLabel（实时事件已连接/已断开）。
+   平时隐藏（标题已经够清楚），只在连接变化时短暂浮现。 */
+#status{flex:0 0 auto;font-size:11px;color:var(--muted);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+#status.on{color:var(--ok)}
+#status.off{color:var(--warn)}
+/* AI 生成常驻标识条：对标原生 ai_generated_notice，常驻、低存在感、不挡内容。 */
+.aigen{flex:0 0 auto;padding:6px 14px;border-top:1px solid var(--line);
+  background:var(--card);color:var(--muted);font-size:11.5px;text-align:center;
+  letter-spacing:.01em}
 </style>
 </head>
 <body>
@@ -309,10 +337,14 @@ pre:hover .copy{opacity:1}
   <button class="iconbtn" id="back" title="返回">‹</button>
   <span id="dot"></span>
   <span id="title">载入中…</span>
+  <button class="iconbtn" id="files" title="本会话的文件">▤</button>
+  <button class="iconbtn" id="refresh" title="刷新">⟳</button>
   <button class="iconbtn" id="steer" title="插话" disabled>⇥</button>
   <button class="iconbtn" id="stop" title="停止运行" disabled>■</button>
   <button class="iconbtn" id="more" title="模型 / 智能体">⋯</button>
+  <span id="status" class="status" hidden></span>
 </div>
+
 
 <!-- 待办与文件都用 details：默认折叠。
      早先两个区块是常驻展开的，文件多的时候直接吃掉小半屏，
@@ -323,6 +355,10 @@ pre:hover .copy{opacity:1}
 </details>
 
 <div id="log"><div id="empty">正在读取会话…</div></div>
+
+<!-- AI 生成常驻标识条：对标原生 ChatComposer 里的 ai_generated_notice，
+     常驻在消息区下方、思考条上方，提醒「内容由 AI 生成，请甄别后使用」。 -->
+<div id="aigen" class="aigen">内容由 AI 生成，请甄别后使用</div>
 
 <!-- 思考条：占的就是原来诊断条那条位置（消息区下方、输入区上方）。
      流式期间「当前思考」在这里显示一行，没有思考时自动隐藏。
@@ -335,6 +371,7 @@ pre:hover .copy{opacity:1}
 <div id="comp">
   <div id="warn"></div>
   <div id="cmd" hidden></div>
+  <div id="mention" class="pop" hidden></div>
   <div id="atts" hidden></div>
   <div id="row">
     <button id="attachBtn" title="添加图片或文件">+</button>
