@@ -17,6 +17,7 @@ import io.github.westanke.dshcompanion.data.ChatWorkspace
 import io.github.westanke.dshcompanion.data.CommandDescriptor
 import io.github.westanke.dshcompanion.data.CustomProviderCreate
 import io.github.westanke.dshcompanion.data.localizedErrorRes
+import io.github.westanke.dshcompanion.debug.DiagLog
 import io.github.westanke.dshcompanion.data.DeviceView
 import io.github.westanke.dshcompanion.data.DirectoryPage
 import io.github.westanke.dshcompanion.data.DshApiException
@@ -57,6 +58,9 @@ import io.github.westanke.dshcompanion.data.SharedPreferencesKeyValueStore
 import io.github.westanke.dshcompanion.data.TrashEntry
 import io.github.westanke.dshcompanion.data.WorkspaceEvent
 import io.github.westanke.dshcompanion.data.chatDelta
+import io.github.westanke.dshcompanion.data.ChatDisplayItem
+import io.github.westanke.dshcompanion.data.ChatItemKind
+import io.github.westanke.dshcompanion.data.isTurnMaxTokens
 import io.github.westanke.dshcompanion.data.chatTurnFailure
 import io.github.westanke.dshcompanion.data.PreviewKind
 import io.github.westanke.dshcompanion.data.binaryPreviewByteLimit
@@ -210,6 +214,9 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         genUiDebug = preferences.genUiDebug,
         useWebChat = preferences.useWebChat,
         showContext = preferences.showContext,
+        // 诊断日志开关同样要在这里盖：漏了它，切一次连接就被打回默认值（关）——
+        // 而那时日志可能还在写，用户会以为「关了还在记」，比不记更难排查。
+        diagLog = preferences.diagLog,
         // 外观三项同样必须在这里盖 —— 漏了它们，用户切一次连接
         // 就会看到主题被打回「跟随系统」、字号被打回 1.0（与上面那段注释同一个坑）。
         interfaceStyle = preferences.interfaceStyle,
@@ -270,6 +277,10 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
     @Volatile internal var liveFinalizeTarget: LiveKey? = null
 
     init {
+        // 诊断日志开关：冷启动后到用户进设置页之前，会话页可能已被点开好几轮 ——
+        // 那几次正是要观察的对象。放在 init 里，开关是「开」的包从第一条日志起就记。
+        // 理由与 MainActivity.onCreate 那两行的分工见 HarnessDiagViewModel.kt 顶部。
+        syncDiagLogFromPreferences()
         restoreConnection()
     }
 
@@ -333,6 +344,13 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         preferences.genUiDebug = enabled
         update { copy(genUiDebug = enabled) }
     }
+
+    /**
+     * 开关诊断日志（窗口 / 会话操作 / 屏幕变化）。
+     *
+     * 实现在 `HarnessDiagViewModel.kt`（行数预算），这里只转发，调用点写法不变。
+     */
+    fun setDiagLog(enabled: Boolean) = setDiagLogImpl(enabled)
 
     /**
      * 改界面明暗风格；立刻生效（主题在 App 顶层读状态，改完下一帧就是新配色）。
@@ -513,6 +531,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
                             if (event.type == "chat.turn.end" && sessionId != null && !isSessionRunning(sessionId)) {
                                 refreshPendingQuestions()
                             }
+                            noteTurnBoundary(event, sessionId) // 截断提示，见同名文件
                         }
                         "chat.agent-preset.selected" -> {
                             chatSessionRefreshPending = true
@@ -527,14 +546,10 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
                         // 于是「模型早就失败了」与「还在跑」在界面上完全一样 ——
                         // 表现就是转圈等到天荒地老。
                         //
-                        // 做三件事：
-                        // 1) 立即把会话标记为不在运行（本地置位，不等下一次 GET）；
-                        // 2) 走全局错误通道让用户看见那句话；
-                        // 3) 拉一次历史，把失败行写进对话流（历史里有 turn/end 帧）。
+                        // 三件事：① 本地立即标记不在运行；② 全局错误通道；③ 拉历史收口。
                         //
-                        // 第 1 步为什么不能省：服务端把会话标成 not-running 与这帧到达
-                        // 之间有几百毫秒，而这段时间里「停止」按钮还是亮的、占位符还写
-                        // 「运行中…」—— 用户看着就以为还在跑。本地先置位，等 GET 回来再用
+                        // 第 1 步不能省：服务端标 not-running 与这帧到达之间有几百毫秒，
+                        // 那时「停止」还是亮的、占位符还写「运行中…」。本地先置位，等 GET 再盖
                         // 权威数据盖一次，两头都对。
                         "chat.turn.failed" -> {
                             val failure = event.chatTurnFailure()
@@ -763,36 +778,23 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
      * 异常 → 给人看的句子。分三层：
      *
      * 1. [DshApiException]（服务端错误码）→ 按码查 [localizedErrorRes] 本地化表；
-     * 2. 网络层 IOException 家族 → 按**异常类型**本地化。这层以前直接露
-     *    `error.message` 原文——`DshConnectionException` 的 "All N endpoint(s)
-     *    unreachable: ..."、OkHttp 的 "failed to connect to ..." 全是英文，
-     *    中文界面下启动报错就是一整句英文。子类必须在父类 [SocketException] /
-     *    [IOException] 之前判断（超时/拒绝/解析失败都是它们的子类）；
-     * 3. 其余未知异常 → 保留原文，能搜能贴给开发者（与错误码表「认不出不硬猜」
-     *    同一原则）。
-     */
-    internal fun messageOf(error: Throwable): String = when (error) {
-        is DshApiException -> localizedError(error.code, error.message)
-        is DshConnectionException -> appString(R.string.err_connect_all_unreachable)
-        is SocketTimeoutException -> appString(R.string.err_network_timeout)
-        is UnknownHostException -> appString(R.string.err_network_unreachable)
-        is ConnectException -> appString(R.string.err_network_refused)
-        is SSLException -> appString(R.string.err_network_reset)
-        is SocketException -> appString(R.string.err_network_reset)
-        is EOFException -> appString(R.string.err_network_reset)
-        is IOException -> appString(R.string.err_network_generic, error.message ?: error::class.java.simpleName)
-        else -> error.message ?: error::class.java.simpleName
-    }
-
-    /**
-     * 把服务端那句英文错误换成用户语言的句子（表在 `data/ErrorMessages.kt`）。
+     * 2. 网络层 IOException 家族 → 按**异常类型**本地化（以前直接露英文原文）。
+     *    **子类必须在父类 [SocketException] / [IOException] 之前判断**。
+     * 3. 其余未知异常 → 保留原文：能搜、能贴给开发者（认出不硬猜）。
      *
-     * 认不出的错误码**保留原文**：编一句像模像样的话只会把人带偏，而原文还能搜、能贴给开发者。
-     * 以前这里一律拼成 `CODE: English message.`，于是中文界面下也全是英文。
+     * 实现在 `HarnessErrorText.kt`（行数预算），这里只转发。
      */
-    internal fun localizedError(code: String?, raw: String): String {
-        val res = localizedErrorRes(code) ?: return raw
-        return if (res == R.string.err_request_generic) appString(res, code.orEmpty()) else appString(res)
-    }
+     internal fun messageOf(error: Throwable): String = messageOfImpl(this, error)
+
+     /**
+      * 把服务端那句英文错误换成用户语言的句子（表在 `data/ErrorMessages.kt`）。
+      *
+      * 认不出的错误码**保留原文**：编一句像模像样的话只会把人带偏，而原文还能搜、能贴给开发者。
+      * 以前这里一律拼成 `CODE: English message.`，于是中文界面下也全是英文。
+      *
+      * 实现同样搬去了 `HarnessErrorText.kt`（行数预算；调用点写法不变）。
+      */
+     internal fun localizedError(code: String?, raw: String): String =
+         localizedErrorImpl(this, code, raw)
 
 }

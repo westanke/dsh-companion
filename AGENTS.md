@@ -140,7 +140,7 @@ web/           ← WebView 容器（chat.html 兜底路径）
 
 | 层 | 命令 | 说明 |
 |---|---|---|
-| 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 48 类 / 436 用例（随代码变化，勿当常量） |
+| 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 53 类 / 478 用例（随代码变化，勿当常量） |
 | 文档 | `scripts/build.sh docsCheck` | 8 文档 / ROADMAP 任务 / STATUS 引用一致性 |
 | 真机 | 人工 | **单测绿 ≠ 行为对**。涉及手势、键盘、WebView、耗电、断流的一律要真机确认 |
 
@@ -184,6 +184,13 @@ web/           ← WebView 容器（chat.html 兜底路径）
 - `过期响应覆盖新上下文`
 - `SelectionContainer 把子节点当兄弟排布`
 - `delta 帧缺 turn/step 被静默丢弃`
+- `vivo 输入法拒绝外部文本注入`
+- `诊断日志：开关只该管「记不记」，不该管「通道建不建」`
+- `诊断日志的噪音：重复行必须按指数抑制`
+- `数字口径不可混用（诊断日志版）`
+- `history 重建冲掉滚动位置，贴底跟随被自己的守卫锁死`
+- `诊断浮层贴在 TopStart：连撞状态栏与顶栏两次`
+- `客户端自渲染 ≠ 内核会替你画：两处注释都以为对方在画`
 
 > 新坑位：名字加进上面清单 + 原文写进 `PITFALLS.md` 并补 `### 同名` 锚点。
 

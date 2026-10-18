@@ -44,3 +44,10 @@ __pycache__/
 /.apkcheck*/
 /.m3/
 /.mdlib/
+
+# 真机诊断与无人值守连接的本机残留。**必须整目录忽略**：`.diag/dsh-connection.txt`
+# 里含设备令牌（DSH1: 配置文本自带的 token），进了仓库等于把凭据推到三个远端 ——
+# 与上面 `/.secrets/` 同一类兜底漏洞，所以同样锚定在仓库根、整目录拦。
+# `.diag-shots/` 是 uiautomator/截图取证的临时图片，随用随删。
+/.diag/
+/.diag-shots/

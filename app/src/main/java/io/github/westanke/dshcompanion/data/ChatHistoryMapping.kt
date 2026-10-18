@@ -52,6 +52,18 @@ internal fun displayItems(
 private fun turnEndItem(event: SessionEvent): ChatDisplayItem? {
     val data = event.data as? JsonObject ?: return null
     val reason = data.objectValue("reason") ?: return null
+    // 输出 token 上限：内核给的是**独立的 `turn-max-tokens` 节点**，不是 turn-error。
+    // 此前这里落进下面那个 `else -> null`，于是这条提示在 App 里整条消失 ——
+    // 而 `chat.html` 的注释还写着「内核把它渲染成黄色警示」，
+    // 可客户端的架构里渲染全归客户端，内核并不会替你画（真机实测 2026-10-18）。
+    if (reason.stringValue("kind") == "max-tokens") {
+        return ChatDisplayItem(
+            id = "${event.seq}-turn-max-tokens",
+            seq = event.seq,
+            kind = ChatItemKind.TRUNCATED,
+            time = event.time,
+        )
+    }
     val failure = when (reason.stringValue("kind")) {
         "error" -> {
             // error 不是对象的兜底与插件 `turnFailureOf` 一致（`String(error)`）：

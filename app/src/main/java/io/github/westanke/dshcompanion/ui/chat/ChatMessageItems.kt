@@ -422,6 +422,9 @@ internal fun ChatItem(
             TurnFailureRow(failure, onRetry = if (failure.stopped) null else onRetry)
         }
 
+        // 输出 token 上限：截断不是失败，单独一条黄色警示（内核 turn-max-tokens 节点）。
+        ChatItemKind.TRUNCATED -> TruncatedNoticeRow()
+
         else -> ActivityRow(item)
 
     }

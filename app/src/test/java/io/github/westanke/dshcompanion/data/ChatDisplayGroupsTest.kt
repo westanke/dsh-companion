@@ -13,7 +13,7 @@ import org.junit.Test
  * 用户看到的是「耗时 0 秒」，看起来像功能坏了。
  *
  * 最要紧的一条是 [flatteningEveryGroupingReproducesTheInputExactly]：**分组不许丢项**。
- * 它是**穷举**断言（6 种 kind、长度 1..4 共 1554 条序列），因为分区函数的 bug
+ * 它是**穷举**断言（7 种 kind、长度 1..4 共 2800 条序列），因为分区函数的 bug
  * 恰恰只在某些相邻组合上露头，挑几个例子是挑不出来的。
  *
  * 数据层是纯函数：不读系统时间，时间只从入参（[groupChatDisplay] 的 `timeOf`）取，
@@ -260,7 +260,7 @@ class ChatDisplayGroupsTest {
     @Test
     fun flatteningEveryGroupingReproducesTheInputExactly() {
         val sequences = allKindSequences()
-        assertEquals(1554, sequences.size)
+        assertEquals(2800, sequences.size)
 
         var processGroups = 0
         var messageEntries = 0
@@ -338,7 +338,7 @@ class ChatDisplayGroupsTest {
         entries.filterIsInstance<ChatDisplayEntry.Message>().map { it.item }
 
     /**
-     * 所有长度 1..4 的 kind 序列：6 + 36 + 216 + 1296 = 1554 条。
+     * 所有长度 1..4 的 kind 序列：7 + 49 + 343 + 2401 = 2800 条。
      *
      * 穷举而不是挑例子：分区的 bug 只在这类**相邻组合**上露头，
      * 比如「过程-消息-过程-过程」和「消息-过程-过程-消息」的收尾差别。

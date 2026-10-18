@@ -124,12 +124,33 @@ class AppPreferences(context: Context) {
         get() = preferences.getBoolean(KEY_SHOW_CONTEXT, false)
         set(value) = preferences.edit { putBoolean(KEY_SHOW_CONTEXT, value) }
 
+    /**
+     * 诊断日志（窗口/会话操作/屏幕变化）总开关。
+     *
+     * 为什么是**运行时**开关而不只是 buildType：上一轮加在 `ChatDetail.kt` 的探针
+     * 只能在 debug 包里活着，而 vivo 真机上 logcat 抓不到自有 App 的日志（见
+     * `PITFALLS.md`），取证只能靠屏上探针 + `filesDir/diag.log`。把它提成设置项后，
+     * 后期任何一次「会话页是不是原生页在渲染」「落底 effect 跑没跑」的排查
+     * 都不用重新出包 —— 装上、开开关、复现、读日志，四步完事。
+     *
+     * 默认 **false**：诊断浮层是盖在界面上的噪音，正常使用不该看见它。
+     *
+     * 与 buildType 的关系是「相乘」而不是「替代」：`BuildConfig.DIAG_LOG` 决定
+     * 这个代码路径**是否存在**（release 包里整个 DiagLog 静默、浮层不渲染），
+     * 本项决定它**是否工作**。所以在 release 包里这个开关就算拨到开也没有任何效果，
+     * 这是刻意的 —— 诊断能力不随发布包出厂。
+     */
+    var diagLog: Boolean
+        get() = preferences.getBoolean(KEY_DIAG_LOG, false)
+        set(value) = preferences.edit { putBoolean(KEY_DIAG_LOG, value) }
+
     private companion object {
         const val PREFERENCES_NAME = "dsh_settings"
         const val KEY_BUSY_SEND_MODE = "busy_send_mode"
         const val KEY_GEN_UI_DEBUG = "gen_ui_debug"
         const val KEY_USE_WEB_CHAT = "use_web_chat"
         const val KEY_SHOW_CONTEXT = "show_context"
+        const val KEY_DIAG_LOG = "diag_log"
         const val KEY_INTERFACE_STYLE = "interface_style"
         const val KEY_FONT_SCALE = "font_scale"
         const val KEY_FONT_FOLLOWS_SYSTEM = "font_follows_system"

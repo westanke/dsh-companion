@@ -25,7 +25,20 @@ import io.github.westanke.dshcompanion.R
  * `internal`：拆分后同包的其他文件（历史映射、工具行）要继续用它们。
  */
 
-enum class ChatItemKind { USER, ASSISTANT, REASONING, CONTEXT, TOOL, FAILURE }
+enum class ChatItemKind {
+    USER, ASSISTANT, REASONING, CONTEXT, TOOL, FAILURE,
+
+    /**
+     * 模型撞到**输出 token 上限**、回答被截断时的那条提示。
+     *
+     * 与 [FAILURE] 分开是有意的，内核也是这么分的：它给的是**独立的
+     * `turn-max-tokens` 节点**，而不是 `turn-error`（见内核
+     * `TURN_PROCESS_INDEPENDENT_KINDS`，那里两者并列）。理由是语义：
+     * 截断**不是失败** —— 已有的输出是有效内容，报成红框会让用户以为整轮白跑。
+     * 渲染成黄色警示，文案对齐内核 `message.maxTokens` / `message.maxTokens.hint`。
+     */
+    TRUNCATED,
+}
 
 /**
  * 一轮模型运行的**终局失败**（限流 429、配额用尽、密钥无效、登出停止…）。
@@ -254,6 +267,30 @@ fun WorkspaceEvent.chatDelta(): ChatDelta? {
  * 这样做的好处是：插件没升级、老服务端只发普通 `chat.turn.end` 时，这里安静返回
  * null，客户端仍旧走原来的收尾路径，不会因为一个新字段抽风。
  */
+/**
+ * `chat.turn.end` 是否表示「输出撞上限、回答被截断」。
+ *
+ * 判据与内核 `turn-max-tokens` 节点的 `match` **逐字一致**：
+ * `type === 'turn/end' && data.reason.kind === 'max-tokens'`。
+ *
+ * ## 为什么只能从这一帧取
+ *
+ * 内核的 `sessions.history` **不返回 `turn/end`**（2026-10-18 真机实测：
+ * 一次性取 293 条历史事件，`turn/end` 零条）。所以这条提示**只有实时一路**，
+ * 重进会话看不到它 —— 这是上游的既定行为，不是本仓能补的。
+ *
+ * ## 为什么只认 `max-tokens`
+ *
+ * 未知 kind 一律返回 false。内核将来新增 kind 时，老客户端必须**安静忽略**，
+ * 不能把「不认识」当成「截断了」而误报一条警示。
+ */
+fun WorkspaceEvent.isTurnMaxTokens(): Boolean {
+    if (type != "chat.turn.end") return false
+    val value = data as? JsonObject ?: return false
+    val reason = value.objectValue("reason") ?: return false
+    return reason.stringValue("kind") == "max-tokens"
+}
+
 fun WorkspaceEvent.chatTurnFailure(): ChatTurnFailure? {
     if (type != "chat.turn.failed") return null
     val value = data as? JsonObject ?: return null

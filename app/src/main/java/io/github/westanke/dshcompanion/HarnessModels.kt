@@ -51,6 +51,7 @@ import io.github.westanke.dshcompanion.data.SharedPreferencesKeyValueStore
 import io.github.westanke.dshcompanion.data.TrashEntry
 import io.github.westanke.dshcompanion.data.WorkspaceEvent
 import io.github.westanke.dshcompanion.data.chatDelta
+import io.github.westanke.dshcompanion.data.ChatDisplayItem
 import io.github.westanke.dshcompanion.data.chatTurnFailure
 import io.github.westanke.dshcompanion.data.PreviewKind
 import io.github.westanke.dshcompanion.data.binaryPreviewByteLimit
@@ -203,6 +204,18 @@ data class HarnessState(
     val selectedSessionId: String? = null,
     val history: ChatHistory? = null,
     val liveChat: LiveChatState? = null,
+
+    /**
+     * 「回答被截断」提示**所属的会话**（null = 当前没有这条提示）。
+     *
+     * 为什么要单独存而不是从 history 里算：内核 `sessions.history` 不返回 `turn/end`，
+     * 历史里根本没有这条信息（真机实测 2026-10-18）。所以它只能由实时帧写入、
+     * 记在状态里跨撤销刷新存活；带上 sessionId 是为了切会话时自动失效，
+     * 不必在每个切换入口记得清一次。
+     */
+    val truncatedNoticeSession: String? = null,
+    /** 与 [truncatedNoticeSession] 成对：那条提示本身（`ChatItemKind.TRUNCATED`）。 */
+    val truncatedNotice: ChatDisplayItem? = null,
     val approvalState: ApprovalUiState = ApprovalUiState.None,
     /**
      * 当前会话待回答的问题（插件 `/questions`，只留 [QUESTION_STATE_CONTINUED] 的那些）。
@@ -277,6 +290,13 @@ data class HarnessState(
     val useWebChat: Boolean = false,
     /** 是否显示上下文注入块；见 [AppPreferences.showContext]。 */
     val showContext: Boolean = false,
+    /**
+     * 诊断日志（窗口 / 会话操作 / 屏幕变化）总开关；见 [AppPreferences.diagLog]。
+     *
+     * 同样必须进状态：UI 里那个开关要能**立刻**显示成已开/已关，
+     * 而屏上诊断浮层的显隐也由它驱动 —— 两者都得是 Compose 状态才会跟着变。
+     */
+    val diagLog: Boolean = false,
     /**
      * 界面明暗风格（跟随系统 / 浅色 / 深色）；见 [AppPreferences.interfaceStyle]。
      *

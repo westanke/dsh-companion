@@ -4,7 +4,10 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Configuration
 import android.os.Bundle
+import android.util.DisplayMetrics
+import android.view.View
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
@@ -15,6 +18,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.core.os.LocaleListCompat
+import io.github.westanke.dshcompanion.debug.DiagLog
 import io.github.westanke.dshcompanion.ui.DeepSeekHarnessApp
 import io.github.westanke.dshcompanion.web.ActiveChatBridge
 import io.github.westanke.dshcompanion.web.ChatWebBridge
@@ -39,10 +43,38 @@ class MainActivity : AppCompatActivity() {
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
-                Intent.ACTION_SCREEN_OFF -> viewModel.pauseEvents()
-                Intent.ACTION_SCREEN_ON -> viewModel.resumeEvents()
+                Intent.ACTION_SCREEN_OFF -> {
+                    DiagLog.i(DiagLog.Cat.SCREEN, "ACTION_SCREEN_OFF → pauseEvents()")
+                    viewModel.pauseEvents()
+                }
+                Intent.ACTION_SCREEN_ON -> {
+                    DiagLog.i(DiagLog.Cat.SCREEN, "ACTION_SCREEN_ON → resumeEvents()")
+                    viewModel.resumeEvents()
+                }
             }
         }
+    }
+
+    /** 上一次记录到的窗口尺寸（dp）：用来判断「窗口大小真的变了」而不是每次重建都报。 */
+    private var lastW = -1
+    private var lastH = -1
+
+    /** 一行把「此刻的窗口/屏幕状态」写成可读文本，亮灭屏与旋转都复用它。 */
+    private fun windowState(tag: String): String {
+        val cfg: Configuration = resources.configuration
+        val dm: DisplayMetrics = resources.displayMetrics
+        val w = dm.widthPixels
+        val h = dm.heightPixels
+        val rot = when (cfg.orientation) {
+            Configuration.ORIENTATION_LANDSCAPE -> "横屏"
+            Configuration.ORIENTATION_PORTRAIT -> "竖屏"
+            else -> "未定"
+        }
+        // dp 取 Configuration 的 screenWidthDp/screenHeightDp，不用 DisplayMetrics.widthDp ——
+        // 后者是 @UnsupportedAppUsage 的隐藏字段，SDK 桩里解析不到，编译直接失败。
+        // 抽屉「手机 vs 平板」的 840.dp 分界值比的也是 Configuration 这套 dp。
+        return "$tag px=${w}x${h} dp=${cfg.screenWidthDp}x${cfg.screenHeightDp} " +
+            "密度=${dm.densityDpi} 方向=$rot"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -55,6 +87,17 @@ class MainActivity : AppCompatActivity() {
             AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("zh-CN"))
         }
         super.onCreate(savedInstanceState)
+        // 诊断日志三通道的启动顺序：**先同步偏好，再绑定文件**。
+        //
+        // 反序会踩一个很安静的坑：`DiagLog.bind()` 里有 `if (!enabled) return`，
+        // 而 enabled 的初值只取了 BuildConfig（object 懒初始化时还没 Context 读偏好）。
+        // 若先 bind，偏好里明明是「开」也会被那个 return 跳过，之后 enabled 被同步成真
+        // 也再没人调 bind —— 一条日志都不写，而设置页显示开着。
+        //
+        // release 包里 BuildConfig.DIAG_LOG 为 false，这两行都是空操作。
+        DiagLog.syncFromPreference(viewModel.preferences.diagLog)
+        DiagLog.bind(applicationContext)
+        DiagLog.i(DiagLog.Cat.LIFE, "onCreate " + windowState("启动时"))
         ContextCompat.registerReceiver(
             this,
             screenReceiver,
@@ -65,6 +108,12 @@ class MainActivity : AppCompatActivity() {
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         enableEdgeToEdge()
+        // 窗口尺寸变化（分屏 / 折叠屏展开 / 旋转）**不走** onConfigurationChanged
+        // （未在清单里声明 configChanges 时系统会重建 Activity），所以要靠
+        // onStart/onResume 里比对尺寸来发现。抽屉「手机 vs 平板」的分界 840.dp
+        // 正是由 dm.widthDp 决定的 —— 尺寸一变，整页布局就换一套。
+        lastW = resources.displayMetrics.widthPixels
+        lastH = resources.displayMetrics.heightPixels
         setContent {
             // 主题的两项外观偏好放在**最外层**读：
             // 它们要同时作用于连接页、会话页与设置页，任何一处漏包都会出现
@@ -83,7 +132,54 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        DiagLog.d(DiagLog.Cat.LIFE, "onStart")
+    }
+
+    override fun onResume() {
+        super.onResume()
+        DiagLog.d(DiagLog.Cat.LIFE, "onResume " + windowState("恢复时"))
+    }
+
+    override fun onPause() {
+        DiagLog.d(DiagLog.Cat.LIFE, "onPause " + windowState("暂停时"))
+        super.onPause()
+    }
+
+    override fun onStop() {
+        DiagLog.d(DiagLog.Cat.LIFE, "onStop")
+        super.onStop()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        DiagLog.i(
+            DiagLog.Cat.SCREEN,
+            "onConfigurationChanged " + windowState("配置变化"),
+        )
+    }
+
+    /** 窗口尺寸真的变了（分屏拖动、折叠屏、旋转）时留一条证据。 */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus) return
+        val w = resources.displayMetrics.widthPixels
+        val h = resources.displayMetrics.heightPixels
+        if (w != lastW || h != lastH) {
+            val cfg = resources.configuration
+            DiagLog.i(
+                DiagLog.Cat.SCREEN,
+                "窗口尺寸变化 ${lastW}x${lastH} → ${w}x${h}" +
+                    "（dp=${cfg.screenWidthDp}x${cfg.screenHeightDp}，抽屉分界 840dp）",
+            )
+            lastW = w
+            lastH = h
+        }
+    }
+
     override fun onDestroy() {
+        DiagLog.i(DiagLog.Cat.LIFE, "onDestroy（累计写入 ${DiagLog.fileLines()} 行日志）")
         unregisterReceiver(screenReceiver)
         super.onDestroy()
     }

@@ -66,6 +66,8 @@ import androidx.compose.ui.unit.dp
 import io.github.westanke.dshcompanion.HarnessState
 import io.github.westanke.dshcompanion.HarnessViewModel
 import io.github.westanke.dshcompanion.R
+import io.github.westanke.dshcompanion.debug.DiagLog
+import io.github.westanke.dshcompanion.debug.DiagProbe
 import io.github.westanke.dshcompanion.refreshDashboard
 import kotlinx.coroutines.launch
 
@@ -88,6 +90,14 @@ fun DeepSeekHarnessApp(viewModel: HarnessViewModel) {
             viewModel.clearError()
         }
     }
+    // 诊断探针挂在**最外层、且在内容之后**渲染。
+    //
+    // 为什么是这个位置（真机踩过两次）：
+    //   · 放在每一页内部各挂一个 → 漏页、且要改多处；
+    //   · 放在内容**之前** → 被后面的 Scaffold/Surface 整个盖住，看不见。
+    //     Compose 的绘制顺序就是声明顺序，后声明的在上层。
+    // 所以：一个 Box 包住全部内容，探针作为**最后一个**子项。
+    Box(Modifier.fillMaxSize()) {
     when {
         // 连接页优先于一切：冷启动第一屏永远是它 —— 哪怕主机已经记住、哪怕后台已经自动连上。
         //
@@ -106,6 +116,8 @@ fun DeepSeekHarnessApp(viewModel: HarnessViewModel) {
             CircularProgressIndicator(strokeWidth = 2.dp)
         }
         else -> ConnectedApp(state, viewModel, snackbar)
+    }
+        DiagProbe("DSH伴侣", visible = state.diagLog)
     }
 }
 

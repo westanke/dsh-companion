@@ -164,6 +164,7 @@ import io.github.westanke.dshcompanion.ApprovalUiState
 import io.github.westanke.dshcompanion.PendingAttachment
 import io.github.westanke.dshcompanion.R
 import io.github.westanke.dshcompanion.SessionFileOpen
+import io.github.westanke.dshcompanion.debug.DiagLog
 import io.github.westanke.dshcompanion.data.ChatContentParts
 import io.github.westanke.dshcompanion.data.ChatAttachment
 import io.github.westanke.dshcompanion.data.ChatTurnFailure
@@ -245,6 +246,28 @@ fun ChatScreen(state: HarnessState, viewModel: HarnessViewModel, wide: Boolean) 
     //
     // 第二个参数 wide 只影响**原生**详情页（ConversationHeader 的标题行数等）；
     // WebView 版自己渲染，不消费它。
+    //
+    // ── 诊断插桩（debug 包独有，release 下 DiagLog 全静默）─────────────
+    // 本轮要观察的第一疑点：**「自动滚动 effect 没跑」到底是原生页的问题，
+    // 还是用户当时看的其实是 WebView 页**。上一轮加在 ChatDetail.kt 顶层与
+    // LaunchedEffect 入口的 Log.i 探针一条都没打出来（vivo 封了 logcat，见
+    // PITFALLS.md），于是既不能证明原生页在渲染、也不能证伪。
+    //
+    // 这里在路由判定的**唯一分叉点**上留证据：打出 useWebChat 的值与
+    // selectedSessionId —— 与 ChatDetail / ChatWebScreen 各自入口的那一条
+    // 配成一对，就能确认「声明走哪条」与「真的渲染了哪条」是否一致。
+    //
+    // 用 effect 而不是写在那个 `detail` lambda 里：lambda 每次重组都会被调用，
+    // 写在里面一次进会话能刷出上百条（真机实测 2026-10-18）；
+    // 路由只会在「换会话」或「拨 WebView 开关」时变，键就取这两个。
+    LaunchedEffect(state.useWebChat, state.selectedSessionId) {
+        val route = if (state.useWebChat) "WebView/ChatWebScreen" else "原生/ChatDetail"
+        DiagLog.i(
+            DiagLog.Cat.ROUTE,
+            "路由判定 useWebChat=${state.useWebChat} → $route；" +
+                "selectedSessionId=${state.selectedSessionId}",
+        )
+    }
     val detail: @Composable (() -> Unit, Boolean) -> Unit = { onBack, wideFlag ->
         if (state.useWebChat) {
             ChatWebScreen(state, viewModel, onBack, Modifier.fillMaxSize())

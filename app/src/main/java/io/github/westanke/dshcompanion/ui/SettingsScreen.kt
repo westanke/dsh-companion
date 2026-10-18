@@ -2,6 +2,7 @@ package io.github.westanke.dshcompanion.ui
 
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudDone
 import androidx.compose.material.icons.outlined.Code
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
@@ -40,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.westanke.dshcompanion.HarnessState
@@ -48,6 +51,9 @@ import io.github.westanke.dshcompanion.BuildConfig
 import io.github.westanke.dshcompanion.R
 import io.github.westanke.dshcompanion.data.BusySendMode
 import io.github.westanke.dshcompanion.data.InterfaceStyle
+import io.github.westanke.dshcompanion.debug.DiagLog
+import io.github.westanke.dshcompanion.ui.chat.copyText
+import io.github.westanke.dshcompanion.ui.chat.toast
 import io.github.westanke.dshcompanion.data.missingRequiredCapabilities
 import io.github.westanke.dshcompanion.disconnect
 import java.util.Locale
@@ -71,6 +77,7 @@ private fun formatFontScale(value: Float): String = String.format(Locale.US, "%.
 @Composable
 fun SettingsScreen(state: HarnessState, viewModel: HarnessViewModel) {
     val scopes = state.device?.scopes.orEmpty()
+    val context = LocalContext.current
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 28.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -345,6 +352,62 @@ fun SettingsScreen(state: HarnessState, viewModel: HarnessViewModel) {
                 modifier = Modifier.padding(top = 4.dp, bottom = 28.dp),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall,
+            )
+
+            // ── 诊断日志（窗口 / 会话操作 / 屏幕变化）──────────────────────
+            //
+            // 与上面那个 dsh-ui 诊断行是两件事：那个只管「卡片为什么没渲染」，
+            // 这个记的是**操作过程本身** —— 点哪个会话、走原生页还是网页页、
+            // 落底滚动推了多少拍、熄亮屏与窗口尺寸何时变化。
+            //
+            // 为什么值得单独一个开关：上一轮的教训是「探针只能在 debug 包里活着」，
+            // 每次要重新出包、重装、再让用户复现一遍。做成设置项之后，
+            // 装上 → 开开关 → 复现 → 读日志，四步完事，后期任何一次排查都不用再走一遍构建。
+            //
+            // 默认关：开着的时候右上角会有一块诊断浮层，正常使用不该看见它。
+            SettingsHeading(stringResource(R.string.diag_log_heading))
+            SwitchRow(
+                title = stringResource(R.string.diag_log_title),
+                description = stringResource(R.string.diag_log_desc),
+                // 读 state 而不是 viewModel —— 与上面两个开关同一个理由：
+                // SharedPreferences 不是 Compose 状态，直接读会「点了不动」。
+                checked = state.diagLog,
+                onCheckedChange = viewModel::setDiagLog,
+            )
+            Text(
+                stringResource(R.string.diag_log_footnote),
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            // 「读日志」入口：把已写入的日志整段复制到剪贴板。
+            //
+            // 为什么要这个按钮：日志的主通道是 `filesDir/diag.log`，而 vivo 真机上
+            // logcat 抓不到自有 App 的输出（PITFALLS.md 实测）。有了这个按钮，
+            // 用户不用连电脑、不用 adb，粘贴出来就是我们能读的完整现场。
+            //
+            // 用 `Modifier.clickable` 而不是给 SettingRow 加 onClick 参数：
+            // 那个组件是全项目共用的，为一个诊断入口改它的签名不划算；
+            // 包一层 clickable 就够了，而且语义上「这一行可点」也表达得清楚。
+            SettingRow(
+                Icons.Outlined.Description,
+                stringResource(R.string.diag_log_read),
+                stringResource(R.string.diag_log_read_desc),
+                modifier = Modifier
+                    .clickable {
+                        val text = DiagLog.exportText()
+                        if (text.isBlank()) {
+                            toast(context, context.getString(R.string.diag_log_empty))
+                        } else {
+                            copyText(
+                                context,
+                                context.getString(R.string.diag_log_read),
+                                text,
+                            )
+                            toast(context, context.getString(R.string.diag_log_copied))
+                        }
+                    }
+                    .padding(bottom = 28.dp),
             )
 
             SettingsHeading(stringResource(R.string.about))

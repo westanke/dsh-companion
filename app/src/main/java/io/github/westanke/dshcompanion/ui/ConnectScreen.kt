@@ -26,6 +26,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.Computer
 import androidx.compose.material.icons.outlined.Delete
@@ -36,6 +37,7 @@ import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.PhoneAndroid
+import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.material.icons.outlined.WifiFind
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -57,6 +59,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -68,12 +71,16 @@ import io.github.westanke.dshcompanion.data.Credential
 import io.github.westanke.dshcompanion.data.Endpoint
 import io.github.westanke.dshcompanion.data.EndpointProbe
 import io.github.westanke.dshcompanion.data.Host
+import io.github.westanke.dshcompanion.debug.DiagLog
 import io.github.westanke.dshcompanion.connectHost
 import io.github.westanke.dshcompanion.importConfiguration
 import io.github.westanke.dshcompanion.pair
 import io.github.westanke.dshcompanion.removeHost
 import io.github.westanke.dshcompanion.setEndpointDraft
 import io.github.westanke.dshcompanion.testConnection
+
+/** 外部专属目录下的连接配置文件名；由 `adb push` 写入，App 启动时自动读取。 */
+private const val CONFIG_FILE_NAME = "dsh-connection.txt"
 
 /**
  * 未连接时的首屏。
@@ -106,6 +113,26 @@ fun ConnectScreen(
     var code by remember { mutableStateOf("") }
     var deviceName by remember { mutableStateOf(Build.MODEL.ifBlank { "Android" }) }
     var configText by remember { mutableStateOf("") }
+
+    // ── 本地配置文件自动读取（adb 部署 / 无人值守连接）──────────────────
+    //
+    // 读 `getExternalFilesDir()/dsh-connection.txt`：那个目录**不需要任何权限**
+    // （App 自己的外部专属目录），adb 也能直接 push 进去。存在的意义是让
+    // 「连服务端」这一步在无人值守时也能完成 —— 真机验证、CI、以及用户
+    // 不在场时的远程排查，都不必有人在手机上点输入框。
+    //
+    // 为什么不是 SAF 的补充而是替代：vivo 的文件选择器（documentsui）对
+    // adb push 进 `/sdcard/Download/` 的 `.txt` / `.json` **不做 MediaStore 索引**，
+    // 「文档」视图里根本看不到（真机实测 2026-10-18）。而输入法又拒绝一切外部
+    // 文本注入（见 PITFALLS §vivo 输入法拒绝外部文本注入），两条路都堵死。
+    //
+    // 只在**输入框还空着**时填：用户已经手打过内容就不覆盖。
+    val autoConfigContext = LocalContext.current
+    LaunchedEffect(Unit) {
+        val file = java.io.File(autoConfigContext.getExternalFilesDir(null), CONFIG_FILE_NAME)
+        val text = runCatching { if (file.exists()) file.readText().trim() else null }.getOrNull()
+        if (!text.isNullOrBlank() && configText.isBlank()) configText = text
+    }
     // 两种连接方式默认都**收起**。用户的原话是「默认显示两个不同的连接方式，不要展开，
     // 我需要那个，我自己点击」。互斥：展开一个就把另一个收起来 —— 一次只开一个，
     // 屏幕上不会同时铺两份表单。
@@ -114,11 +141,34 @@ fun ConnectScreen(
     var hostPendingRemoval by remember { mutableStateOf<Host?>(null) }
     LaunchedEffect(state.endpointDraft) { endpoint = state.endpointDraft }
 
+    // 「从文件读取」：实现见文件末尾的 rememberConfigFilePicker（抽出去是为了
+    // 行数预算，理由与失败处理都写在那函数的注释里）。
+    val pickerContext = LocalContext.current
+    val configFileLauncher = rememberConfigFilePicker(pickerContext) { text -> configText = text }
+
     Box(Modifier.fillMaxSize()) {
-        IconButton(
-            onClick = ::toggleLanguage,
+        // 右上角两个按钮：语言切换 + 诊断日志。
+        //
+        // 诊断开关**必须**放在连接页，这是真机验证出来的结论：设置页在连接门闩
+        // （App.kt 的 `connectGatePassed && state.connected`）之后，连不上服务端时
+        // 根本进不去 —— 而那恰恰是最需要日志的时刻。诊断工具的可用性
+        // 不该依赖被测功能是否正常，否则就是「车坏了才需要千斤顶，而千斤顶在车里」。
+        Row(
             modifier = Modifier.align(Alignment.TopEnd).padding(12.dp),
-        ) { Icon(Icons.Outlined.Language, stringResource(R.string.language)) }
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = { viewModel.setDiagLog(!state.diagLog) }) {
+                Icon(
+                    // 开着的时候换个实心图标，关着用空心 —— 一眼看出状态，
+                    // 不用点进去确认（连接页上诊断浮层可能被键盘或滚动挡住）。
+                    if (state.diagLog) Icons.Outlined.Terminal else Icons.Outlined.BugReport,
+                    stringResource(R.string.diag_log_title),
+                )
+            }
+            IconButton(
+                onClick = ::toggleLanguage,
+            ) { Icon(Icons.Outlined.Language, stringResource(R.string.language)) }
+        }
 
         Column(
             modifier = Modifier
@@ -174,6 +224,7 @@ fun ConnectScreen(
                         onEnterApp()
                         viewModel.importConfiguration(configText)
                     },
+                    onPickFile = { configFileLauncher.launch(arrayOf("*/*")) },
                 )
 
                 ManualPairingPanel(
@@ -490,7 +541,7 @@ private fun DiagnosticPanel(probes: List<EndpointProbe>, endpoints: List<Endpoin
  * 展开区里不必再重复一遍。
  */
 @Composable
-private fun ConnectionEntryRow(
+internal fun ConnectionEntryRow(
     expanded: Boolean,
     icon: ImageVector,
     title: String,
@@ -533,69 +584,6 @@ private fun ConnectionEntryRow(
     }
 }
 
-/**
- * 配置导入面板 —— 取代扫码的主路径。
- *
- * 与手动配对同款：平时只显示一行入口，点开才铺表单（默认收起，用户要那个才点）。
- *
- * 展开区里的文案刻意把「为什么要有这个」说清楚：用户看到「粘贴一段文本」时第一反应是
- * 「为什么不扫码更简单」，必须当场回答这个疑问，否则他还是会觉得别扭。
- */
-@Composable
-private fun ImportConfigPanel(
-    expanded: Boolean,
-    onToggle: () -> Unit,
-    text: String,
-    onTextChange: (String) -> Unit,
-    enabled: Boolean,
-    onImport: () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        ConnectionEntryRow(
-            expanded = expanded,
-            icon = Icons.Outlined.CloudDownload,
-            title = stringResource(R.string.import_from_computer),
-            subtitle = stringResource(R.string.import_entry_hint),
-            onToggle = onToggle,
-        )
-        AnimatedVisibility(visible = expanded, enter = fadeIn() + slideInVertically { it / 3 }) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium),
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surface,
-            ) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text(
-                        stringResource(R.string.import_explanation),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    OutlinedTextField(
-                        value = text,
-                        onValueChange = onTextChange,
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.import_hint)) },
-                        minLines = 2,
-                        maxLines = 5,
-                        shape = MaterialTheme.shapes.medium,
-                    )
-                    WarningBanner(stringResource(R.string.import_security_note))
-                    Button(
-                        onClick = onImport,
-                        enabled = enabled && text.isNotBlank(),
-                        modifier = Modifier.fillMaxWidth().height(48.dp),
-                        shape = CircleShape,
-                    ) {
-                        Icon(Icons.Outlined.Link, null)
-                        Text(stringResource(R.string.import_and_connect), modifier = Modifier.padding(start = 8.dp))
-                    }
-                }
-            }
-        }
-    }
-}
 
 /**
  * 手动配对：保留旧能力，但降到折叠区并标注前置条件。
