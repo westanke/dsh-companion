@@ -586,8 +586,8 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 - Unit tests: 53 test classes / 478 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.44.apk`, **2,993,534 bytes**, SHA-256
-  `49fe602725ae4e80dcdf42aeea919e36d4cba354b11158017eb3ebb0ddaa0d2c` (kept in sync in
+- Current APK: `DSH伴侣-companion-v2.2.44.apk`, **3,007,524 bytes**, SHA-256
+  `72fdfa20aa38c09f59083e3b951c573610e58aa8525f8b2d995d0bb9b02e872f` (kept in sync in
   `artifacts/SHA256SUMS.txt`). **Unreleased** (no push, no tag) — Changes in this build: **specialized tool blocks** (read with a path
   header and line-numbered body / bash with a `$ command` line and dark output with ANSI stripped /
   edit·write with `-`/`+` diff coloring, matching the official Web blocks) and a **persistent

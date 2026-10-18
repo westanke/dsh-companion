@@ -534,8 +534,8 @@ keyPassword=...
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：53 个测试类 / 478 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.44.apk`，**2,993,534 字节**，
-  SHA-256 `49fe602725ae4e80dcdf42aeea919e36d4cba354b11158017eb3ebb0ddaa0d2c`（`artifacts/SHA256SUMS.txt` 同步）。
+- 当前 APK：`DSH伴侣-companion-v2.2.44.apk`，**3,007,524 字节**，
+  SHA-256 `72fdfa20aa38c09f59083e3b951c573610e58aa8525f8b2d995d0bb9b02e872f`（`artifacts/SHA256SUMS.txt` 同步）。
   **本版未发版**（未推送、未打 tag）——
   本版改动：**工具调用专用块**（read 路径头 + 行号正文 / bash `$ 命令` + 暗底输出（ANSI 已剥）/
   edit·write `-`/`+` 对照，对标官方 Web 专用块）与**发送区常驻权限档位 Pill**（与 ⋯ 菜单同源同动作）；

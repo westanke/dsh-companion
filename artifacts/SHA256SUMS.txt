@@ -1,4 +1,4 @@
 4df87f471ea7d89130104c21c63ebd7e19f885389ece577bd9586bc3c14c43c1  DeepSeek-Harness-compat02-release.apk
 80940602d79acb68d5805122fec4e6678f39adef02dedaee4dd7b4856cd7dbbe  DeepSeek-Harness-v1.0.0.apk
 5bad043b0d75c96ceb57572245bc25e1f7585cc4f64de867a4ce1d7c27380f9a  DSH伴侣-companion-v2.2.43.apk
-49fe602725ae4e80dcdf42aeea919e36d4cba354b11158017eb3ebb0ddaa0d2c  DSH伴侣-companion-v2.2.44.apk
+72fdfa20aa38c09f59083e3b951c573610e58aa8525f8b2d995d0bb9b02e872f  DSH伴侣-companion-v2.2.44.apk
