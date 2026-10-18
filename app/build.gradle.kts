@@ -773,16 +773,20 @@ android {
         //     .m3 / .mdlib 四个目录均命中，docs/ 与 app/ 未误伤）；漏洞回归（.secrets/__probe__/
         //     secret.txt 已不被 git 看见）；全量单测本轮重跑，数字见 TESTING.md。
         //   未做：真机验收 —— 无界面改动，不需要上机。
-        // v2.2.44（versionCode 10069）：工具专用块 + 权限档位 Pill（对标官方 Web 第一梯队）。
-        //   基于什么：《官方Web界面与APP功能对比 2026-10-18》第一梯队两项；
-        //     工具名分布按本机真实会话日志实测（3000 条：bash 71% / edit 9% / read 8% / write 2%）。
+        // v2.2.44（versionCode 10069）：工具专用块 + 权限档位 Pill + chat.html 对标补全 + 会话页存量修复。
+        //   基于什么：《官方Web界面与APP功能对比 2026-10-18》第一梯队两项
+        //     （工具名分布按本机真实会话日志实测：3000 条，bash 71% / edit 9% / read 8% / write 2%）；
+        //     以及用户逐项点名的 chat.html 与原生界面差距、「回答被截断」提示缺失（真机 2026-10-18 复现）。
         //   干了什么：data/ChatToolBlocks.kt（分发 + ANSI 剥离，失败回落 Generic）；
         //     ui/chat/ChatToolBlocks.kt（Read/Terminal/Diff 三种专用块，接入 ToolCallDetailBlock）；
         //     ui/chat/ChatPermissionPill.kt（发送区常驻权限档位，与 ⋯ 菜单同源同动作）；
-        //     chat.html toolEntry 同款四分支（2 517 → 2 575 行，先入 TECH-DEBT 台账）。
-        //   测了什么：新 ChatToolBlocksTest 16 例；全量 53 类 / 478 用例 / 0 失败；
-        //     docsCheck 8 文档一致；行数门禁绿（ChatDetail 压回 800 内）。
-        //   未做：真机验收 —— 专用块观感与 Pill 点击交互均未上机，等发话。
+        //     chat.html 拆分为 355 行壳 + 6 JS + 1 CSS（assets/chat/，逐字搬迁、拼接 diff 为零）；
+        //     chat.html 对标补全（模型按厂家树型、工具轨迹与统计面板、@ 文件补全、▤ 靠右、/ 面板落回）；
+        //     HarnessTruncationViewModel（turn/end 的 reason.kind=='max-tokens' 落截断提示，配套 bridge v2.4.1）；
+        //     debug/DiagLog + HarnessDiagViewModel（诊断日志开关）、ConnectImportPanel、ChatScrollFreeze 落底跟随。
+        //   测了什么：新 ChatToolBlocksTest 16 例；全量 55 类 / 478 用例 / 0 失败；
+        //     docsCheck 8 文档一致；lintDebug 0 error；行数门禁绿（ChatDetail 压回 800 内）。
+        //   未做：@ 补全与截断提示的真机端到端复核（截断提示需 bridge ≥ 2.4.1）。
         versionCode = 10069
         versionName = "2.2.44"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。

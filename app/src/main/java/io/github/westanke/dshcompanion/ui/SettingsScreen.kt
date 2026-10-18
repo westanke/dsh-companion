@@ -389,22 +389,24 @@ fun SettingsScreen(state: HarnessState, viewModel: HarnessViewModel) {
             // 用 `Modifier.clickable` 而不是给 SettingRow 加 onClick 参数：
             // 那个组件是全项目共用的，为一个诊断入口改它的签名不划算；
             // 包一层 clickable 就够了，而且语义上「这一行可点」也表达得清楚。
+            // 文案在组合期预取：点击回调里再调 `context.getString` 会触发
+            // `LocalContextGetResourceValueCall` lint error —— 它拿不到重组期的配置变化，
+            // 切语言/换主题时不会跟着刷新。预取成局部 val 既过门禁也语义正确。
+            val diagReadLabel = stringResource(R.string.diag_log_read)
+            val diagEmptyText = stringResource(R.string.diag_log_empty)
+            val diagCopiedText = stringResource(R.string.diag_log_copied)
             SettingRow(
                 Icons.Outlined.Description,
-                stringResource(R.string.diag_log_read),
+                diagReadLabel,
                 stringResource(R.string.diag_log_read_desc),
                 modifier = Modifier
                     .clickable {
                         val text = DiagLog.exportText()
                         if (text.isBlank()) {
-                            toast(context, context.getString(R.string.diag_log_empty))
+                            toast(context, diagEmptyText)
                         } else {
-                            copyText(
-                                context,
-                                context.getString(R.string.diag_log_read),
-                                text,
-                            )
-                            toast(context, context.getString(R.string.diag_log_copied))
+                            copyText(context, diagReadLabel, text)
+                            toast(context, diagCopiedText)
                         }
                     }
                     .padding(bottom = 28.dp),

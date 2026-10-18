@@ -3,7 +3,7 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
-## 未发版（versionCode 10069）· 工具专用块 + 权限档位 Pill：对标官方 Web 第一梯队（2026-10-18）
+## v2.2.44（versionCode 10069）· 工具专用块 + 权限档位 Pill：对标官方 Web 第一梯队（2026-10-18）
 
 ### 基于什么
 
@@ -41,7 +41,7 @@ read/read_image 8%、write 2%）—— 三种专用块覆盖 ~88% 的调用。
 - 全量 `testDebugUnitTest`：53 类 / 478 用例 / 0 失败；`docsCheck` 8 文档一致。
 - 行数门禁：ChatDetail 807 → 压回 800 内；`ArchitectureGuardTest` 绿。
 
-## 未发版（同 v2.2.44 批次追加）· chat.html 拆分：壳 + 6 JS + 1 CSS，逐字搬迁零行为变化（2026-10-18）
+## v2.2.44（同批次追加）· chat.html 拆分：壳 + 6 JS + 1 CSS，逐字搬迁零行为变化（2026-10-18）
 
 ### 基于什么
 
@@ -67,6 +67,41 @@ read/read_image 8%、write 2%）—— 三种专用块覆盖 ~88% 的调用。
 ### 未做
 
 - 真机回归（WebView 兜底路径全功能过一遍）—— 等发话。
+
+## v2.2.44（同批次追加）· chat.html 对标补全 + 会话页存量修复（2026-10-19）
+
+### 基于什么
+
+用户逐项点名 chat.html 与原生界面的差距：模型选择不分厂家、缺工具轨迹与统计、`@` 补全
+缺失、`/` 命令面板发送后不落回、▤ 文件不在右侧。另有前期会话留下的「回答被截断」提示
+缺失 —— 真机 2026-10-18 复现：电脑端 WebUI 有这条黄色提示，App 里整条消失。
+
+### 干了什么
+
+- chat.html ⋯ 菜单：模型选择改**按厂家分组的树型**（对齐原生 ModelSheet）；新增
+  **工具轨迹**与**统计**两个底部面板（纯前端从历史归算，不新增桥方法）。
+- chat.html 新增 **`@` 文件补全**：原生 init 多传 `rootId`/`cwd`/`cwdAbsolute`，进会话预拉
+  `roots/{rootId}/entries`；输入 `@`（前为行首/空白才触发，避开邮箱）弹补全窗，选中插
+  **绝对路径**（目录尾补 `/`、文件补空格），对齐原生 `MentionQuery`。
+- 顶栏把 `#status` 移到末尾，`▤文件 → ⟳刷新 → ⇥插话 → ■停止 → ⋯更多` 连续靠右。
+- **修 `#cmd`/`#mention` 发送后不落回**：二者 CSS 的 `display:flex` 优先级压过 `[hidden]`，
+  `hidden=true` 形同虚设；改为默认 `display:none`、`:not([hidden])` 才显示。
+- **「回答被截断」提示**：`HarnessTruncationViewModel` 从 `turn/end` 的
+  `reason.kind == 'max-tokens'` 落提示与清理（配套 bridge **v2.4.1** 透传该字段）。
+- 会话页存量：诊断日志开关（`debug/DiagLog` + `HarnessDiagViewModel`）、连接导入面板
+  `ConnectImportPanel`、进会话**落底跟随** `ChatScrollFreeze` + 探针 `ChatScrollDiag`。
+
+### 测了什么
+
+- 全量 `testDebugUnitTest`：**55 类 / 478 用例 / 0 失败**；
+- `docsCheck` 8 文档一致；
+- `lintDebug` 首跑 3 个 error（`SettingsScreen` 点击回调里 `context.getString` 触发
+  `LocalContextGetResourceValueCall`）—— 改为组合期 `stringResource` 预取后清零；
+- 真机（2026-10-18）：用户确认 `/` 落回、`@` 弹补全、▤ 靠右三处正常。
+
+### 未做
+
+- `@` 补全与截断提示的真机端到端复核（截断提示需 bridge ≥ 2.4.1）。
 
 ## v2.2.43（versionCode 10068）· 仓库卫生：清掉 40.9 MB 调试残留 + 堵住 `.secrets` 泄露口子（2026-10-17）
 

@@ -1,28 +1,30 @@
-# 当前状态
-
-- 日期：2026-10-18
-- **在途（chat.html 拆分，未升版本号）**：**壳 + 6 JS + 1 CSS 逐字拆分** ——
-  chat.html 2575 → **355 行壳**，样式与脚本搬进 `assets/chat/`（chat.css / core / render /
-  tools / interact / cards / bridge），加载顺序 core 最先；file:// 相对子资源天然可用，
-  **Kotlin 侧零改动**。搬迁等价性机检：拼接内容与原 `<script>` 区块 **diff 为零**，
-  node 语法全过；单测回归 0 失败；APK 内 7 资产齐全。interact.js 803 行超预算 3 行
-  （台账已登记，下批拆 renderHistory 收掉）。**真机回归未做**（WebView 兜底路径）—— 等发话。
-  约定升级：新功能直接落 `chat/` 对应域文件，不再回填 chat.html。- **在途（对标官方 Web 第一梯队，versionCode 10069 / 2.2.44，未发版）**：
-  **工具专用块 + 权限档位 Pill**（依据 `workspace/资料调研/官方Web界面与APP功能对比_2026-10-18.md`，
-  执行清单见 `PLAN-2026-10-18-对比落地.md`）：
-  ① 工具调用专用块：`data/ChatToolBlocks.kt` 按 name 分发 Read / Terminal / Diff / Generic
-  （bash 71% / edit 9% / read 8% / write 2%，本机 3000 条实测），ANSI 剥离、解析失败一律
-  回落 Generic；`ui/chat/ChatToolBlocks.kt` 三种专用块接入 `ToolCallDetailBlock`，
-  非 Generic 的失败输出仍以 error 块补显。
-  ② 权限档位 Pill：`ui/chat/ChatPermissionPill.kt` 发送区上方常驻当前档位，点击切换，
-  与 ⋯ 菜单同源同动作（完整访问仍二次确认）；无投影不渲染。
-  ③ chat.html `toolEntry` 同款四分支同步（2 517 → 2 575 行，**先入 TECH-DEBT 台账**，
-  并立约 chat.html 不再吸收新功能）。
-  ④ Goal 入口**本轮不做**：核实发现桥上无 goal API（对比文档「goal API 已在桥上」不实），
-  需先在 dsh-remote-bridge 补 BFF。
-  门验：**53 类 / 478 用例 / 0 失败**（新 `ChatToolBlocksTest` 16 例，首跑抓到实现 bug：
-  残缺 CSI 序列吞参数字节）；docsCheck 一致；行数门禁绿（ChatDetail 807 → 800）。
-  未做：真机验收（专用块观感、Pill 交互）—— 等发话。
+- 日期：2026-10-19
+- **已发版 v2.2.44（versionCode 10069，2026-10-19）**：**工具专用块 + 权限档位 Pill + chat.html 对标补全 + 会话页存量修复**。已双推 origin + gitee、打 tag `v2.2.44`、双站 Release 与 APK 已上传。
+  - **工具专用块 + 权限档位 Pill**（依据 `workspace/资料调研/官方Web界面与APP功能对比_2026-10-18.md`）：
+    ① `data/ChatToolBlocks.kt` 按 name 分发 Read / Terminal / Diff / Generic（bash 71% / edit 9% /
+    read 8% / write 2%，本机 3000 条实测）；ANSI 剥离、解析失败一律回落 Generic；
+    `ui/chat/ChatToolBlocks.kt` 三种专用块接入 `ToolCallDetailBlock`，非 Generic 的失败输出仍以
+    error 块补显。② `ui/chat/ChatPermissionPill.kt` 发送区上方常驻当前档位，与 ⋯ 菜单同源同动作，
+    完整访问仍二次确认。③ chat.html `toolEntry` 同款四分支同步。④ Goal 入口**本轮不做**：
+    核实发现桥上无 goal API（对比文档「goal API 已在桥上」不实），需先在 dsh-remote-bridge 补 BFF。
+  - **chat.html 拆分**：2575 → **355 行壳**，样式与脚本搬进 `assets/chat/`（chat.css / core / render /
+    tools / interact / cards / bridge），加载顺序 core 最先；file:// 相对子资源天然可用，Kotlin 侧零改动。
+    搬迁等价性机检：拼接内容与原 `<script>` 区块 **diff 为零**；APK 内 7 资产齐全。
+    约定升级：新功能直接落 `chat/` 对应域文件，不再回填 chat.html。
+  - **chat.html 对标补全**（用户逐项点名）：模型选择**按厂家树型分组**；新增**工具轨迹**与**统计**
+    面板；新增 **`@` 文件补全**（原生 init 多传 `rootId`/`cwd`/`cwdAbsolute`，进会话预拉
+    `roots/{rootId}/entries`，选中插绝对路径）；顶栏 `#status` 移末尾让
+    `▤文件 → ⟳刷新 → ⇥插话 → ■停止 → ⋯更多` 连续靠右；**修 `/` 命令面板发送后不落回**
+    （根因：`#cmd`/`#mention` 的 `display:flex` 优先级压过 `[hidden]`，改默认 `display:none`）。
+  - **「回答被截断」提示**：`HarnessTruncationViewModel` 读 `turn/end` 的 `reason.kind == 'max-tokens'`，
+    配套 bridge **v2.4.1** 透传该字段（见姊妹仓）；同批落地诊断日志开关（`debug/DiagLog` +
+    `HarnessDiagViewModel`）、连接导入面板 `ConnectImportPanel`、进会话**落底跟随** `ChatScrollFreeze`。
+  - 门验：**55 类 / 478 用例 / 0 失败** · `docsCheck` 8 文档一致 · 行数门禁绿（ChatDetail 807 → 800）·
+    `lintDebug` **0 error**（首跑 3 个 `LocalContextGetResourceValueCall`：`SettingsScreen` 点击回调里
+    `context.getString` 已改为组合期 `stringResource` 预取）。
+  - APK：`DSH伴侣-companion-v2.2.44.apk`，**3,012,936 字节**，SHA-256
+    `9d004d81d08e7e178008c83faaeb7c39008118b916d591191903028df4e13df0`。
+  - 未做：`@` 补全与截断提示的真机端到端复核（截断提示需 bridge ≥ 2.4.1）。
 - 日期：2026-10-17
 - **在途（真机反馈五修，未升版本号）**：**状态条合并**（用户要求：「把『内容由 AI 生成，请甄别后使用』
   与显示思考过程的重叠在一栏显示，有思考内容时显示思考，没有时再显示这个」）——
@@ -177,7 +179,11 @@
   - v2.2.30 修掉第二大头：`eventSubscription` 原先只在 `onCleared()` 与主动断开时关闭，熄屏后 WebSocket 一直连着（WiFi 射频 + TCP keepalive 全程在线，系统还会反复唤醒进程）。现在 **熄屏断流、亮屏接回**：`MainActivity` 注册 `ACTION_SCREEN_OFF`/`ACTION_SCREEN_ON`（**不用 `onStop`** —— 切 App/分屏时屏幕还亮着不该断），ViewModel 加 `pauseEvents()`/`resumeEvents()`，熄屏只关流、**保留 active 连接与令牌**。亮屏补三样：会话列表、当前会话历史、**审批与待答问题**（后两类不走 history，必须单独补，否则熄屏期间产生的卡片永远不出现）。
   - 策略由用户拍板（原话「能让 熄屏 就不在线了，如果不是熄屏状态 实时优先」）。**代价**：熄屏期间收不到推送通知，亮屏一次性补上、不丢内容。
 - 当前产物：**只保留「必须的」与「最新的」**（用户要求：已发布到 Release 的 APK 不在本地囤积）：
-  - `DSH伴侣-companion-v2.2.43.apk`，**2,965,986 字节**（**当前版本 · 纯仓库卫生，无功能改动 · 已发 Gitee**），
+  - `DSH伴侣-companion-v2.2.44.apk`，**3,012,936 字节**（**当前版本 · 工具专用块 + 权限档位 Pill + chat.html 对标补全 + 会话页存量修复 · 已发 Gitee + GitHub，tag `v2.2.44`**），
+    release 构建，R8 + 资源裁剪，SHA-256 `9d004d81d08e7e178008c83faaeb7c39008118b916d591191903028df4e13df0`
+    —— 已核验包内 `versionCode 10069` / `versionName 2.2.44`、**v2 签名**（证书 `CN=DSH Pocket Client`，
+    与 v2.2.42/2.2.43 同一张证书 ⇒ 可直接覆盖安装）
+  - `DSH伴侣-companion-v2.2.43.apk`，**2,965,986 字节**（上一版 · 纯仓库卫生，无功能改动 · **已发 Gitee**），
     release 构建，R8 + 资源裁剪，SHA-256 `5bad043b0d75c96ceb57572245bc25e1f7585cc4f64de867a4ce1d7c27380f9a`
     —— 已核验包内 `versionCode 10068` / `versionName 2.2.43`、**v2 签名**（证书 `CN=DSH Pocket Client`，
     证书 SHA-256 `8b2ba797589da844b779941fec213da3432633062744f64bc916e62df9dbf68a`，与 v2.2.42 同一张证书
