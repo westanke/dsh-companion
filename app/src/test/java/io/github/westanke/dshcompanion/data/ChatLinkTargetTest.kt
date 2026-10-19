@@ -23,6 +23,24 @@ class ChatLinkTargetTest {
     }
 
     @Test
+    fun markdownAutolinkAngleBracketsAreUnwrappedFirst() {
+        // 真实案例（2026-10-19 真机）：模型写的是合法 Markdown
+        //   [报告](</media/.../dsh-public-deployments-项目适配评估.md>)
+        // 目标用尖括号包裹（CommonMark 的 autolink 写法）。若先不剥尖括号，
+        // `<...>` 不以 `/` 开头也没有 scheme → 判成相对路径 → 又被拼一次 cwd，
+        // 得到 `/workspace/</media/...>` 的翻倍路径（实测 PATH_NOT_FOUND）。
+        val absolute = "/media/wangke/OFFICE/workspace/report/dsh-public-deployments-项目适配评估_2026-10-19.md"
+        assertEquals(ChatLinkTarget.ServerPath(absolute), ChatLinkTarget.classify("<$absolute>"))
+        // 前后空白也要容忍（Markdown 里常见）。
+        assertEquals(ChatLinkTarget.ServerPath(absolute), ChatLinkTarget.classify("  <$absolute>  "))
+    }
+
+    @Test
+    fun angleBracketedUrlStillGoesToTheBrowser() {
+        assertEquals(ChatLinkTarget.Web("https://example.com/a"), ChatLinkTarget.classify("<https://example.com/a>"))
+    }
+
+    @Test
     fun httpAndHttpsGoToTheBrowser() {
         assertEquals(ChatLinkTarget.Web("http://example.com/a"), ChatLinkTarget.classify("http://example.com/a"))
         assertEquals(ChatLinkTarget.Web("https://example.com/a"), ChatLinkTarget.classify("https://example.com/a"))

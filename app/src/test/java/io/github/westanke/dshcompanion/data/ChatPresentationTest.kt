@@ -111,7 +111,7 @@ class ChatPresentationTest {
 
         assertEquals(listOf("Inspect API", "Build UI"), history.todoItems().map(TodoItem::content))
         assertEquals(listOf("completed", "in_progress"), history.todoItems().map(TodoItem::status))
-        val permissions = history.permissionSelect()!!
+        val permissions = history.permissionSelect(null)!!
         assertEquals("workspace-write", permissions.currentValue)
         assertEquals(listOf("read-only", "workspace-write", "danger-full-access"), permissions.options.map(PermissionOption::value))
         assertEquals("Write inside the workspace", permissions.options[1].description)
