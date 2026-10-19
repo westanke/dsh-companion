@@ -70,6 +70,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Stop
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.AttachFile
@@ -238,6 +239,8 @@ internal fun Composer(
     onAttachFile: (name: String, sizeBytes: Long, openInput: () -> InputStream) -> Unit,
     onRemoveAttachment: (String) -> Unit,
     onSubmit: (steer: Boolean) -> Unit,
+    onRetryMention: () -> Unit,
+    onCancel: () -> Unit = {},
     physicalKeyboard: Boolean = false,
 ) {
     val canWrite = "chat.write" in state.device?.scopes.orEmpty()
@@ -312,6 +315,7 @@ internal fun Composer(
                 failed = state.mentionFailed,
                 cwd = mentionSession?.cwd,
                 cwdAbsolute = mentionSession?.cwdAbsolute,
+                onRetry = onRetryMention,
                 // 选中后**只替换「@…末尾」那一段**，不是整行替换：
                 // 用户很可能已经写了半句「帮我看看 @xxx」，整行替换会把前半句吃掉。
                 onSelect = { inserted -> onValueChange(MentionQuery.applySelection(value, inserted)) },
@@ -358,9 +362,11 @@ internal fun Composer(
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    // 底部对齐（网页版 #row 是 align-items:flex-end）：输入框长高时，
-                    // `+` 与发送键跟着落在底部，而不是垂直居中飘在半空。
-                    verticalAlignment = Alignment.Bottom,
+                    // **垂直居中**（用户 2026-10-19 反馈：+ 与发送键贴着底部「比较别扭」）。
+                    // 此前对照网页版写 Bottom —— 但网页版输入框是单行 textarea，
+                    // 高度不变谈不上对齐感；本 App 输入框 44dp 起、可长到 120dp，
+                    // 输入框越矮，Bottom 与 Center 的差异越刺眼。
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     // 附件总入口：点开两项（图片 / 文件），分别走既有的两个 launcher。
                     // launcher 仍在本 composable 作用域里创建（rememberLauncherForActivityResult
@@ -455,22 +461,41 @@ internal fun Composer(
                             ),
                         )
                     }
-                    // 发送键：34dp 圆形主色底白字；不可发送时改成**透明底 + 灰字**，
-                    // 而不是整体压透明度 —— 压透明度会连底色一起淡掉，看着像残废控件。
-                    // 提交模式仍按设置走（这里传 defaultIsSteer），插话另有 ⋯ 菜单里的固定入口。
+                    // 发送键的三态（用户 2026-10-19 定的规则）：
+                    //   ① 运行中 + 输入框**空** → 停止键（error 色底 + 方形 Stop 图标）。
+                    //      会话跑着而用户没在打字，「这一下」最可能的意图是停下它；
+                    //   ② 有内容（文字或附件）→ 永远是发送，即使运行中也是（插话/排队）。
+                    //      有内容时把键变成停止，用户会困惑「我打好的字怎么发不出去」；
+                    //   ③ 空闲 + 空 → 灰置（透明底 + 灰箭头），点了不该有反应。
+                    //
+                    // 形状跟着语义走：发送=圆（沿用），停止=方（Stop 图标本就是方的，
+                    // 圆底包方图标在 34dp 下只剩两个像素的角，看着像渲染错误）。
+                    val sendButton = composerSendButton(sessionRunning, canSubmit)
+                    val running = sendButton == ComposerSendButton.STOP
                     Surface(
-                        onClick = { onSubmit(defaultIsSteer) },
-                        enabled = canSubmit,
+                        onClick = { if (running) onCancel() else onSubmit(defaultIsSteer) },
+                        enabled = canSubmit || running,
                         modifier = Modifier.size(34.dp),
-                        shape = CircleShape,
-                        color = if (canSubmit) MaterialTheme.colorScheme.primary else Color.Transparent,
-                        contentColor = if (canSubmit) {
-                            MaterialTheme.colorScheme.onPrimary
+                        shape = if (running) MaterialTheme.shapes.small else CircleShape,
+                        color = when {
+                            running -> MaterialTheme.colorScheme.error
+                            canSubmit -> MaterialTheme.colorScheme.primary
+                            else -> Color.Transparent
+                        },
+                        contentColor = if (running) {
+                            MaterialTheme.colorScheme.onError
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         },
                     ) {
-                        Icon(Icons.AutoMirrored.Outlined.Send, stringResource(R.string.send), Modifier.padding(8.dp))
+                        // 箭头**向上**（用户 2026-10-19 要求）：聊天输入区的发送键
+                        // 语义是「把内容送出去」，纸飞机（Send）倾斜的轮廓在 20dp 尺寸下
+                        // 更像「斜向右下」；ArrowUpward 无歧义，也是主流 IM 的通行样式。
+                        Icon(
+                            if (running) Icons.Outlined.Stop else Icons.Outlined.ArrowUpward,
+                            stringResource(if (running) R.string.cancel_run else R.string.send),
+                            Modifier.padding(8.dp),
+                        )
                     }
                 }
             }
@@ -486,6 +511,38 @@ internal fun Composer(
  * 占位符成了唯一说明。所以把「选哪一段」抽成纯函数并单测（ComposerPillTest），
  * 免得这种「只差一行字」的取舍在界面里悄悄错掉：选错资源在屏幕上只是一行小字。
  */
+
+/**
+ * 发送键的**三态**（用户 2026-10-19 定的规则）。
+ *
+ * 抽成纯函数 + 单测，是因为这三条规则互相有优先级，写在内联 `if` 里很容易被后人
+ * 调换顺序 —— 而错一次的后果是**用户打好的字发不出去**（运行中误判成停止键）。
+ */
+internal enum class ComposerSendButton {
+    /** 有内容可发：主色圆底 + 向上箭头。 */
+    SEND,
+
+    /** 运行中且输入框空：error 色方底 + 停止图标。 */
+    STOP,
+
+    /** 空闲且空：透明底 + 灰箭头，点不动。 */
+    DISABLED,
+}
+
+/**
+ * 这一下点下去该干什么。
+ *
+ * 判据顺序**不可交换**（每条都有具体理由）：
+ * 1. **有内容 → 永远是发送**，哪怕会话正在跑。把「有内容」判成停止，
+ *    等于告诉用户「你打好的字发不出去」，而他本来是想插话/排队的。
+ * 2. 运行中且空 → 停止。这是用户唯一的「停下来」入口（顶栏那个已收进 ⋯ 菜单）。
+ * 3. 其余 → 禁用。
+ */
+internal fun composerSendButton(sessionRunning: Boolean, canSubmit: Boolean): ComposerSendButton = when {
+    canSubmit -> ComposerSendButton.SEND
+    sessionRunning -> ComposerSendButton.STOP
+    else -> ComposerSendButton.DISABLED
+}
 
 internal enum class ComposerHint { IDLE, IDLE_PHYSICAL, RUNNING_QUEUE, RUNNING_STEER }
 

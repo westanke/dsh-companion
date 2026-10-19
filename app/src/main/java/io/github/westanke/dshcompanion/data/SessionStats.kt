@@ -1,5 +1,7 @@
 package io.github.westanke.dshcompanion.data
 
+import kotlinx.serialization.json.JsonObject
+
 /**
  * 会话的**执行统计** —— 全部来自历史事件，不需要内核额外提供任何东西。
  *
@@ -52,7 +54,17 @@ internal fun sessionStatsOf(history: ChatHistory?): SessionStats {
     var tools = 0
     for (entry in events) {
         when (entry.event.type) {
-            "user/message" -> turns += 1
+            // 只数**真用户**发的消息。内核注入的上下文（runtime-context / time-context /
+            // skill-catalog / agent-instructions …）同样是 `user/message`，
+            // 直接数条数会把「用户轮次」抬高好几倍 ——
+            // 真机验收实测：界面显示轮次 9，用户实际只发过 2 条，其余 7 条全是注入。
+            //
+            // 判据与 [ChatHistoryMapping] 渲染成用户气泡那条**同源**（都认 `source.kind`），
+            // 所以「统计里的轮次」与「屏幕上那几条用户消息」永远对得上。
+            //
+            // 判不出 kind 的（老内核不产 `source`）按用户算：那才是旧口径的行为，
+            // 不能因为新字段缺失就让老数据全变成 0。
+            "user/message" -> if (entry.isUserAuthored()) turns += 1
             "assistant/message" -> assistants += 1
             "tool/call" -> tools += 1
         }
@@ -64,4 +76,16 @@ internal fun sessionStatsOf(history: ChatHistory?): SessionStats {
         events = events.size,
         lastSeq = events.maxOfOrNull { it.event.seq },
     )
+}
+
+/**
+ * 这条 `user/message` 是不是**用户本人**发的。
+ *
+ * `source.kind == "user"` 是明确判据；缺 `source` 时按「是」处理（见调用处注释）。
+ * [SessionEvent.data] 已经是解析好的 [JsonElement]，不需要再 parse 一次。
+ */
+private fun HistoryEntry.isUserAuthored(): Boolean {
+    val data = event.data as? JsonObject ?: return true
+    val source = data["source"] as? JsonObject ?: return true
+    return source.stringValue("kind") == "user"
 }

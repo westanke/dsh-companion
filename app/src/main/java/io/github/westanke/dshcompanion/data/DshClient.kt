@@ -1,5 +1,6 @@
 package io.github.westanke.dshcompanion.data
 
+import io.github.westanke.dshcompanion.debug.DiagLog
 import java.io.Closeable
 import java.io.InputStream
 import java.io.OutputStream
@@ -159,6 +160,19 @@ class DshClient(
 
     fun agentPresets(): List<AgentPreset> = get("chat/agent-presets", AgentPresetList.serializer()).items
 
+/**
+ * 权限档位**候选项**清单（`GET /chat/permission-presets`，bridge ≥ 2.4.2）。
+ *
+ * 为什么必须单独取、不能只读会话投影：内核把预设清单放在一个独立的远程服务
+ * （`permissionPresets.catalog()`）上，而投影里那条 `permissions` wire 视图**只给
+ * `currentValue`**（`wire.view: state => ({ currentValue })`）——
+ * 拿得到当前档位、列不出候选。v2.2.44 之前 App 读 `options[]`，于是整条恒为 null、
+ * 权限 Pill 与 ⋯ 菜单的权限项在真机上**从不渲染**（PARITY 上的 `done` 是假的）。
+ *
+ * 老 bridge 没有这条路由（404 `ROUTE_NOT_FOUND`），调用方必须容忍失败继续跑。
+ */
+fun permissionPresets(): PermissionCatalog = get("chat/permission-presets", PermissionCatalog.serializer())
+
     fun selectAgentPreset(sessionId: String, agentPreset: String): String = put(
         pathUrl("chat", "sessions", sessionId, "agent-preset"),
         AgentPresetSelection(agentPreset),
@@ -199,6 +213,9 @@ class DshClient(
             val raw = response.body?.string().orEmpty()
             val error = runCatching { json.decodeFromString(ErrorEnvelope.serializer(), raw).error }.getOrNull()
             val code = error?.code ?: "HTTP_ERROR"
+            // 留痕：这条路径为什么打不开，必须有据可查（真机上没有 logcat）。
+            // 交付物路径带中文时曾出现「服务端能解析、App 却说不在了」，就是靠它定位的。
+            DiagLog.w("PATH", "resolve 失败 code=$code path=$absolutePath")
             if (code in UNRESOLVABLE_CODES) return null
             throw DshApiException(response.code, code, error?.message ?: "HTTP ${response.code}")
         }
@@ -542,12 +559,16 @@ class DshClient(
          * 刻意**不含**其他 404：`ROUTE_NOT_FOUND` 表示服务端压根没有这个端点（通常是插件
          * 版本过旧）。把它一并当成「不在授权根内」会把用户引向错误的方向 ——
          * 他该做的是升级插件，而不是反复检查自己的路径。
+         *
+         * **2026-10-19 收紧**：原先这里连 `PATH_NOT_FOUND` / `PATH_NOT_FILE` 也算「打不开的
+         * 正常结果」，于是「文件不存在」会被显示成「不在授权根内」——
+         * 用户按那句话去检查授权根，而真正该做的是看看路径是不是变了。
+         * 现在只留真正属于「这个根管不了它」的码，其余一律抛异常，
+         * 让 `data/ErrorMessages.kt` 的错误码表给出**准确**文案
+         * （`PATH_NOT_FOUND` →「找不到这个路径，可能已经被删了」）。
          */
         private val UNRESOLVABLE_CODES = setOf(
             "PATH_OUTSIDE_ROOTS",
-            "PATH_NOT_ABSOLUTE",
-            "PATH_NOT_FILE",
-            "PATH_NOT_FOUND",
         )
 
         private val JSON_MEDIA = "application/json".toMediaType()

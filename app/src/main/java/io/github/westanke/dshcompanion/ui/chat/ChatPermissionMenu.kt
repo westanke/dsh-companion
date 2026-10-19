@@ -234,8 +234,11 @@ internal fun PermissionMenuItems(
 
 ) {
 
-    if (value.options.isEmpty()) return
-
+    // 候选项为空时**仍然**渲染「访问权限 · 当前档位」那一行 ——
+    // 那是用户在菜单里唯一能看到「我现在是什么权限档位」的地方。
+    // 只有这一行、下面没有可选项时，菜单是只读的（点了什么都不会发生），
+    // 但「看不见」比「看得见却切不了」更让人怀疑 App 坏了。
+    // （v2.2.44 真机验收里，这一行连同整个权限入口一起消失了。）
     val current = value.options.find { it.value == value.currentValue }
 
     Text(
@@ -260,7 +263,8 @@ internal fun PermissionMenuItems(
 
                     Text(permissionLabel(option.value, option.name))
 
-                    option.description?.takeIf(String::isNotBlank)?.let { description ->
+                    // 描述走**本地化**，不用服务端原文（否则中文界面下中英混显，用户 2026-10-19 要求全中文）。
+                    permissionDescription(option.value, option.description)?.takeIf(String::isNotBlank)?.let { description ->
 
                         Text(
 
@@ -399,6 +403,31 @@ internal fun permissionLabel(value: String?, fallback: String?): String = when (
 }
 
 
+
+/**
+ * 档位**描述**的本地化。
+ *
+ * 为什么需要它：描述原先直接来自服务端（内核 `Config.presets[].description` 是英文），
+ * 于是中文界面下会出现「完整访问 · Full file access without approval prompts.」这种
+ * **中英混显**（用户 2026-10-19 明确要求：中文就全中文，英文就全英文）。
+ *
+ * 已知档位一律用 App 自己的资源（标题与描述同一套语言）；
+ * **未知档位**才退回服务端原文 —— 那是我们自己没见过的档位，翻不了就不假装翻。
+ */
+@Composable
+internal fun permissionDescription(value: String?, fallback: String?): String? = when (value) {
+
+    "read-only" -> stringResource(R.string.permission_read_only_desc)
+
+    "workspace-write" -> stringResource(R.string.permission_workspace_write_desc)
+
+    "danger-full-access" -> stringResource(R.string.permission_full_access_desc)
+
+    "custom" -> stringResource(R.string.permission_custom_desc)
+
+    else -> fallback
+
+}
 
 internal fun permissionIcon(value: String?): ImageVector = when (value) {
 

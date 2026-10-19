@@ -17,6 +17,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.mikepenz.markdown.m3.Markdown
+import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 
 /**
  * Markdown 表格渲染：**真表格**（表头行 + 边框 + 数据行）。
@@ -107,6 +109,22 @@ private fun isSeparatorRow(cells: List<String>): Boolean =
 private val LABEL_MAX_WIDTH = 104.dp
 
 /**
+ * 这个单元格能不能安全地走行内 Markdown 渲染。
+ *
+ * 只认**纯行内**内容：含换行、表格行、列表标记、围栏代码块、标题的单元格一律判否，
+ * 回落 `Text` 直出。理由是自绘的两列布局里嵌块级结构必然错位（渲染库给的块间距、
+ * 缩进、代码块底色都在这个布局里没有对应的容器），而错位比「反引号原样显示」更糟。
+ */
+internal fun isInlineOnly(cell: String): Boolean =
+    '\n' !in cell && '\r' !in cell &&
+        !cell.trimStart().startsWith("#") &&
+        !cell.trimStart().startsWith(">") &&
+        !cell.trimStart().startsWith("- ") &&
+        !cell.trimStart().startsWith("* ") &&
+        !cell.contains("|") &&
+        !cell.contains("```")
+
+/**
  * 表格本体：**表头行 + 数据行**，行与列都有分隔线。
  *
  * 值这一侧**刻意不设 `maxLines`**：Compose 的 `Text` 默认就是自动折行的，
@@ -175,10 +193,25 @@ private fun TableRow(cells: List<String>, isHeader: Boolean, showBottomDivider: 
                 } else {
                     // 其余列是值：吃掉剩余宽度、自然折行。
                     Box(Modifier.weight(1f).padding(end = 10.dp)) {
-                        Text(
-                            cell.ifBlank { "—" },
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
+                        // 单元格接一次行内 Markdown 渲染：`2026-10-13-07-39-52/` 这种
+                        // 带反引号的路径原先**原样显示反引号**（v2.2.44 真机验收 W2）——
+                        // 表格是自绘的，单元格用 `Text(cell)` 直出，不做行内解析，
+                        // 于是正文里那套 GFM 规则在这里整条失效。
+                        //
+                        // 只走「不含块级构造」的行内判定：含换行、表格、列表、围栏代码块的
+                        // 单元格仍走纯文本那条 —— 自绘的两列布局里嵌一个块级结构只会错位。
+                        val text = cell.ifBlank { "—" }
+                        if (isInlineOnly(text)) {
+                            Markdown(
+                                content = text,
+                                typography = compactMarkdownTypography(),
+                                flavour = GFMFlavourDescriptor(),
+                                components = chatMarkdownComponents,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        } else {
+                            Text(text, style = MaterialTheme.typography.bodyMedium)
+                        }
                     }
                 }
             }

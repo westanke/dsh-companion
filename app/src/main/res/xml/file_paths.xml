@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  「用其他应用打开」的 FileProvider 路径声明。
+
+  只暴露 cache 目录：会话文件面板把服务端文件下载到这里，再交给系统选择器里
+  的目标应用读（Intent.FLAG_GRANT_READ_URI_PERMISSION）。cache 由系统按需清理，
+  不需要用户手动管理，也不该进云备份（cache 本来就被排除在 backup 之外）。
+-->
+<cache-path
+    name="session_files"
+    path="." />

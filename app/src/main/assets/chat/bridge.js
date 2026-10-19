@@ -273,12 +273,12 @@ window.showQuestion = function (j) { addQuestion(typeof j === "string" ? JSON.pa
 window.setTodos = setTodos;
 window.setRunning = setRunning;
 window.setConnectionStatus = function (on) { setConn(on); };
-/* 顶栏状态文字：对标原生的 StatusLabel（实时事件已连接 / 已断开）。
+/* 顶栏状态文字：对标原生的 StatusLabel（已连接 / 已断开）。
    点随连接变化变色，并短暂浮现一行中文说明再淡出，平时隐藏不抢标题位置。 */
 function setConn(on) {
   var dot = $("dot"); if (dot) dot.className = on ? "on" : "off";
   var st = $("status"); if (!st) return;
-  st.textContent = on ? "实时事件已连接" : "实时事件已断开";
+  st.textContent = on ? "已连接" : "已断开";
   st.className = "status " + (on ? "on" : "off");
   st.hidden = false;
   clearTimeout(st._t);

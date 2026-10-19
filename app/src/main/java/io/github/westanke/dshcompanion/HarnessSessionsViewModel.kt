@@ -2,6 +2,7 @@ package io.github.westanke.dshcompanion
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.westanke.dshcompanion.debug.DiagLog
 import io.github.westanke.dshcompanion.data.QUESTION_STATE_CONTINUED
 import io.github.westanke.dshcompanion.data.ChatContentParts
 import io.github.westanke.dshcompanion.data.ChatHistory
@@ -307,7 +308,7 @@ internal fun HarnessViewModel.sessionFileEntry(api: DshClient, resolved: Resolve
     )
 }
 
-internal fun HarnessViewModel.createSession(workspaceId: String, preset: String?) = withClient { api ->
+internal fun HarnessViewModel.createSession(workspaceId: String, preset: String?, permission: String = "") = withClient { api ->
     val created = api.createSession(workspaceId, preset?.takeIf(String::isNotBlank))
     val sessions = api.sessions()
     val history = api.history(created.id)
@@ -322,6 +323,53 @@ internal fun HarnessViewModel.createSession(workspaceId: String, preset: String?
             commands = commands,
             approvalState = ApprovalUiState.None,
         )
+    }
+    // 这里**不走** selectSession（那是「换到已有会话」的完整语义，含代际作废），
+    // 所以 selectSession 里那句 loadMentionEntries() 不会跟着跑 —— 漏掉它的症状是
+    // 「新建会话后打 @ 永久显示正在读取」，退出会话再进入反而正常（那次走 selectSession）。
+    // 新会话第一条消息用 @ 的概率很高，所以创建完就地拉一次。
+    loadMentionEntries()
+    // 创建时定的权限档位：会话建好后立刻用 `/permission` 切过去。
+    //
+    // 为什么是**建完再切**而不是创建接口带参数：bridge 的 `POST /chat/sessions`
+    // 只接受 `workspaceId` / `agentPreset`，没有权限字段 —— 加它要动 wire schema
+    // 与内核的创建流程，而内核本来就把权限做成**会话级命令**（`/permission`）。
+    // 走命令这条路的额外好处：**与用户在会话中手动切档位是同一套机制**，
+    // 不会出现「创建时定的」与「切出来的」两套语义。
+    applyPermissionPreset(created.id, permission)
+}
+
+/**
+ * 把会话切到指定权限档位。
+ *
+ * 空串 = 不动（跟随服务端当前档位）。
+ * 失败**不抛**：创建会话是主流程，为一个附加设定失败而让整个创建失败不划算 ——
+ * 但要留痕，并且把失败说给用户听（否则就是「选了没生效」）。
+ */
+internal fun HarnessViewModel.applyPermissionPreset(sessionId: String, permission: String) {
+    if (permission.isBlank()) return
+    val api = client ?: return
+    viewModelScope.launch {
+        val outcome = runCatching {
+            withContext(Dispatchers.IO) { api.executeCommand(sessionId, "/permission $permission") }
+        }
+        if (mutableState.value.selectedSessionId != sessionId) return@launch
+        outcome
+            .onSuccess { execution ->
+                if (execution.result.kind == "error") {
+                    // 内核回报「命令执行失败」：说清楚是权限没切成功，而不是静默。
+                    DiagLog.w("PERM", "权限档位切换失败：${execution.result.text}")
+                    update { copy(error = execution.result.text ?: "PERMISSION_CHANGE_FAILED") }
+                } else {
+                    DiagLog.i("PERM", "权限档位已切到 $permission")
+                    // 重拉历史：权限档位在**投影**里，不重拉的话界面上还是旧的那一档。
+                    refreshHistory()
+                }
+            }
+            .onFailure { failure ->
+                DiagLog.w("PERM", "权限档位切换异常：${failure::class.java.simpleName}: ${failure.message}")
+                update { copy(error = messageOf(failure)) }
+            }
     }
 }
 
@@ -346,7 +394,7 @@ internal fun HarnessViewModel.loadWorkspacePickerDirectory(path: String) = withC
     update { copy(workspacePickerPath = normalized, workspacePickerDirectory = page) }
 }
 
-internal fun HarnessViewModel.createWorkspaceAndSession(rootId: String, path: String, preset: String?) = withClient { api ->
+internal fun HarnessViewModel.createWorkspaceAndSession(rootId: String, path: String, preset: String?, permission: String = "") = withClient { api ->
     val workspace = api.createChatWorkspace(rootId, path.trim('/'))
     val created = api.createSession(workspace.id, preset?.takeIf(String::isNotBlank))
     val sessions = api.sessions()
@@ -362,6 +410,10 @@ internal fun HarnessViewModel.createWorkspaceAndSession(rootId: String, path: St
             approvalState = ApprovalUiState.None,
         )
     }
+    // 与 createSession 同一个理由：创建路径不经过 selectSession，`@` 补全得自己拉。
+    loadMentionEntries()
+    // 权限档位：与 createSession 同一套机制（建完再切）。
+    applyPermissionPreset(created.id, permission)
 }
 
 internal fun HarnessViewModel.renameWorkspace(workspaceId: String, title: String) = withClient { api ->

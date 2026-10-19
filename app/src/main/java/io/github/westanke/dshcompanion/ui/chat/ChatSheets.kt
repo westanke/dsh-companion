@@ -58,6 +58,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Archive
@@ -535,10 +536,19 @@ internal fun NewSessionSheet(state: HarnessState, viewModel: HarnessViewModel, o
     var workspaceMenu by remember { mutableStateOf(false) }
     var rootMenu by remember { mutableStateOf(false) }
     var presetMenu by remember { mutableStateOf(false) }
+    // 权限档位：创建会话时就能定（用户 2026-10-19 要求「创建会话时可以更改权限」）。
+    // 默认「跟随服务端」= 不选（空串），创建完不额外发命令。
+    var permissionPreset by remember(state.permissionCatalog) {
+        mutableStateOf(state.permissionCatalog?.defaultPreset.orEmpty())
+    }
+    var permissionMenu by remember { mutableStateOf(false) }
     LaunchedEffect(createWorkspace) {
         if (createWorkspace && state.workspacePickerDirectory == null) viewModel.prepareWorkspacePicker()
     }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // 候选项来自 bridge 的目录接口；老 bridge 没有那条路由时是空列表 →
+    // 这一段不渲染（不显示一个点了没反应的按钮）。
+    val permissionOptions = state.permissionCatalog?.options.orEmpty()
     ModalBottomSheet(
         onDismissRequest = onClose,
         sheetState = sheetState,
@@ -728,6 +738,13 @@ internal fun NewSessionSheet(state: HarnessState, viewModel: HarnessViewModel, o
                 }
             }
             Spacer(Modifier.weight(1f))
+            // 权限档位（创建会话时就能定，用户 2026-10-19 要求）：
+            // 紧跟 Agent 模式 —— 两者都是「这次会话的开局设定」。
+            if (permissionOptions.isNotEmpty()) {
+                PickerHeading(stringResource(R.string.access_mode))
+                PermissionPresetPicker(permissionPreset, permissionOptions) { permissionPreset = it }
+            }
+
             Button(
                 onClick = {
                     if (createWorkspace) {
@@ -735,9 +752,10 @@ internal fun NewSessionSheet(state: HarnessState, viewModel: HarnessViewModel, o
                             requireNotNull(state.workspacePickerRootId),
                             state.workspacePickerPath,
                             presetId,
+                            permissionPreset,
                         )
                     } else {
-                        viewModel.createSession(workspaceId, presetId)
+                        viewModel.createSession(workspaceId, presetId, permissionPreset)
                     }
                     onClose()
                 },
@@ -750,48 +768,5 @@ internal fun NewSessionSheet(state: HarnessState, viewModel: HarnessViewModel, o
                 Text(stringResource(if (createWorkspace) R.string.create_workspace_and_session else R.string.create_session))
             }
         }
-    }
-}
-
-@Composable
-internal fun PickerHeading(text: String) {
-    Text(
-        text,
-        modifier = Modifier.padding(top = 14.dp, bottom = 5.dp),
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        style = MaterialTheme.typography.labelLarge,
-    )
-}
-
-@Composable
-internal fun SelectionRow(
-    title: String,
-    supporting: String,
-    selected: Boolean,
-    enabled: Boolean = true,
-    onClick: () -> Unit,
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .clickable(enabled = enabled, onClick = onClick)
-            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
-            .padding(horizontal = 12.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
-            if (supporting.isNotBlank()) {
-                Text(
-                    supporting,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-        }
-        if (selected) Icon(Icons.Outlined.Check, null, tint = MaterialTheme.colorScheme.secondary)
     }
 }

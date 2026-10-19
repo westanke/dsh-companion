@@ -50,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -108,8 +109,30 @@ fun WarningBanner(message: String, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * 连接状态的**语义色**：绿=已连接、红=已断开。
+ *
+ * 刻意不用主题色：这两个是「通/断」的语义色，不该随主题变（深色主题下也要一眼可辨）。
+ */
+val ConnectionOnlineColor = Color(0xFF2E7D32)
+val ConnectionOfflineColor = Color(0xFFC62828)
+
+/**
+ * 一行状态：**状态点 + 文字**。
+ *
+ * @param activeColor / @param inactiveColor 状态点（连带文字）的颜色。
+ *   默认走主题色，保持「会话运行状态」那类中性语义不变；
+ *   **连接状态**（已连接/已断开）由调用方传**绿/红**——用户要求这两态一眼可辨
+ *   （2026-10-19 真机反馈），而主题色在深色主题下与普通文字区分度不够。
+ */
 @Composable
-fun StatusLabel(label: String, active: Boolean, modifier: Modifier = Modifier) {
+fun StatusLabel(
+    label: String,
+    active: Boolean,
+    modifier: Modifier = Modifier,
+    activeColor: Color = MaterialTheme.colorScheme.primary,
+    inactiveColor: Color = MaterialTheme.colorScheme.outline,
+) {
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
@@ -118,14 +141,11 @@ fun StatusLabel(label: String, active: Boolean, modifier: Modifier = Modifier) {
         Box(
             Modifier
                 .size(7.dp)
-                .background(
-                    if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
-                    CircleShape,
-                ),
+                .background(if (active) activeColor else inactiveColor, CircleShape),
         )
         Text(
             label,
-            color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (active) activeColor else MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelMedium,
         )
     }

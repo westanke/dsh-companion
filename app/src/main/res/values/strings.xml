@@ -38,8 +38,10 @@
     <string name="tool_call">工具调用</string>
     <string name="send">发送</string>
     <string name="steer">追加引导</string>
+    <string name="steer_requires_input">先在输入框写好内容，再从这里送进正在运行的那一轮</string>
     <!-- 消息里的链接点了之后 -->
     <string name="link_open_failed">没有能打开这个链接的应用</string>
+    <string name="open_with_other_app">用其他应用打开</string>
     <string name="link_relative_path">这是相对路径，无法定位文件。可以到「本会话的文件」列表里打开</string>
     <string name="link_anchor_unsupported">页内跳转暂不支持</string>
     <string name="link_scheme_unsupported">这类链接暂不支持打开</string>
@@ -71,6 +73,9 @@
     <string name="close">关闭</string>
     <string name="refresh">刷新</string>
     <string name="save">保存</string>
+    <string name="unsaved_changes_title">有未保存的改动</string>
+    <string name="unsaved_changes_message">这个文件改过但还没保存，直接返回会丢掉这些改动。</string>
+    <string name="discard_changes">丢弃改动</string>
     <string name="new_file">新建文件</string>
     <string name="new_folder">新建文件夹</string>
     <string name="rename_move">重命名或移动</string>
@@ -161,8 +166,8 @@
     <string name="replace_file">替换文件</string>
     <string name="back">返回</string>
     <string name="go_up">上一级</string>
-    <string name="online">实时事件已连接</string>
-    <string name="offline">实时事件已断开</string>
+    <string name="online">已连接</string>
+    <string name="offline">已断开</string>
     <string name="no_roots">当前设备没有授权根目录</string>
     <string name="session_path">会话工作目录</string>
     <string name="agent_preset">Agent 模式（可选）</string>
@@ -244,6 +249,10 @@
     <string name="permission_workspace_write">工作区写入</string>
     <string name="permission_full_access">完整访问</string>
     <string name="permission_custom">自定义</string>
+    <string name="permission_read_only_desc">只能读取文件，不能做任何修改</string>
+    <string name="permission_workspace_write_desc">可写工作区与允许的临时目录，越界操作需审批</string>
+    <string name="permission_full_access_desc">完整的文件访问权限，不再弹出审批提示</string>
+    <string name="permission_custom_desc">当前的沙箱与审批设置不匹配任何预设档位</string>
     <string name="permission_full_access_title">启用完整访问？</string>
     <string name="permission_full_access_warning">完整访问将关闭 DSH 沙箱和逐次审批，Agent 可访问服务器上的文件、网络和进程。只应在你信任当前任务时启用。</string>
     <string name="permission_full_access_ack">我了解完整访问会绕过工作区限制和审批</string>
@@ -487,6 +496,7 @@
     <string name="err_path_exists">同名文件已经存在了</string>
     <string name="err_path_invalid">这个路径不合法</string>
     <string name="err_file_changed">文件在别处被改过，重新加载再试</string>
+    <string name="err_no_root_selected">请先选择一个授权根目录</string>
     <string name="err_session_missing">找不到这个会话</string>
     <string name="err_workspace_missing">找不到这个工作区</string>
     <string name="err_workspace_outside_root">这个工作区不在已授权的目录里</string>

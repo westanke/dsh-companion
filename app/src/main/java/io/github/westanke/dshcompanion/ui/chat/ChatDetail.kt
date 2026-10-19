@@ -218,6 +218,7 @@ import io.github.westanke.dshcompanion.data.SessionFileRef
 import io.github.westanke.dshcompanion.data.ChatHistory
 import io.github.westanke.dshcompanion.data.SessionFileRefs
 import io.github.westanke.dshcompanion.data.deliverables
+import io.github.westanke.dshcompanion.data.linkifyKnownFiles
 import io.github.westanke.dshcompanion.data.TodoItem
 import io.github.westanke.dshcompanion.data.displayItems
 import io.github.westanke.dshcompanion.data.visibleHistoryItems
@@ -234,6 +235,7 @@ import io.github.westanke.dshcompanion.closeSessionFile
 import io.github.westanke.dshcompanion.decideApproval
 import io.github.westanke.dshcompanion.loadAttachmentImage
 import io.github.westanke.dshcompanion.loadOlderHistory
+import io.github.westanke.dshcompanion.retryMentionEntries
 import io.github.westanke.dshcompanion.openSessionFile
 import io.github.westanke.dshcompanion.refreshHistory
 import io.github.westanke.dshcompanion.removePendingAttachment
@@ -344,51 +346,12 @@ internal fun ChatDetail(
     var trajectorySheet by remember(selected.id) { mutableStateOf(false) }
     var tasksExpanded by rememberSaveable(selected.id) { mutableStateOf(true) }
 
-    // Markdown 里的链接会被注解成 `LinkAnnotation.Url`，由 Compose 的 Text 通过
-    // `LocalUriHandler` 打开。没有这个 provider 时用的是系统默认 handler，它只会把
-    // uri 丢给 Intent —— 而我们消息里的链接大量是**服务端绝对路径**（以及我一度写过的
-    // 相对路径），Intent 处理不了就静默失败，用户看到的现象是「点了没反应」。
-    //
-    // 所以这里换成分流处理：服务端路径交给 roots/resolve（复用已测过的链路），
-    // http(s) 交系统浏览器，其余明确告知不支持，绝不猜。
-    val context = LocalContext.current
-    // 提示文案在组合期取（跟随界面语言重组），handler 依赖这些字符串而非 context：
-    // 切语言时字符串变化 → handler 重建，回调里不会用到旧 Configuration 的语言。
-    val linkOpenFailed = stringResource(R.string.link_open_failed)
-    val linkRelativePath = stringResource(R.string.link_relative_path)
-    val linkAnchorUnsupported = stringResource(R.string.link_anchor_unsupported)
-    val linkSchemeUnsupported = stringResource(R.string.link_scheme_unsupported)
-    val linkHandler = remember(
-        linkOpenFailed, linkRelativePath, linkAnchorUnsupported, linkSchemeUnsupported
-    ) {
-        object : UriHandler {
-            override fun openUri(uri: String) {
-                when (val target = ChatLinkTarget.classify(uri)) {
-                    is ChatLinkTarget.ServerPath -> viewModel.openSessionFile(target.path)
-
-                    is ChatLinkTarget.Web -> {
-                        val opened = runCatching {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(target.url)))
-                        }.isSuccess
-                        if (!opened) toast(context, linkOpenFailed)
-                    }
-
-                    is ChatLinkTarget.Unsupported -> toast(
-                        context,
-                        when (target.reason) {
-                            // 相对路径无法定位是有意为之：服务端只接受绝对路径，
-                            // 猜一个基准目录可能打开**另一个**文件。
-                            ChatLinkTarget.Reason.RELATIVE_PATH, ChatLinkTarget.Reason.EMPTY ->
-                                linkRelativePath
-                            ChatLinkTarget.Reason.ANCHOR ->
-                                linkAnchorUnsupported
-                            ChatLinkTarget.Reason.UNKNOWN_SCHEME ->
-                                linkSchemeUnsupported
-                        },
-                    )
-                }
-            }
-        }
+    // 链接分发器已拆到 ChatLinkHandlers.kt（含相对路径按会话 cwd 解析，2026-10-19）。
+    // 点链接打开文件时**必须同时把面板打开**：`openSessionFile` 只加载数据，
+    // 面板由 filesSheet 控制 —— 只加载不开面板，用户看到的就是「点了没反应」。
+    val linkHandler = rememberSessionLinkHandler(viewModel, selected.cwdAbsolute) { path ->
+        viewModel.openSessionFile(path)
+        filesSheet = true
     }
     // 流式这一段也按同一个口径拆开：思考不进消息流，交给底部那条固定的思考条
     // （[ChatThinkBar]）—— 它是「运行状态」而不是「会话内容」。
@@ -419,7 +382,21 @@ internal fun ChatDetail(
     val historyItems = remember(state.history, showContext) {
         visibleHistoryItems(state.history, showContext)
     }
-    val displayItems = historyItems + liveItems + state.truncationItems(selected.id)
+    // 正文里出现的**已知会话文件**（模型常直接写文件名而不做成 Markdown 链接）
+    // 在这里就地变成可点链接：用户点一句「已落盘：xxx.md」就能打开，
+    // 而不是像 2026-10-19 真机反馈的那样「点了完全没反应」。
+    // 只认唯一文件名、只替换第一次出现，同名多路径一律跳过（宁可不点，也不打开错的文件）。
+    val knownFilePaths = remember(state.history) {
+        sessionFileList(state.history).map { it.path }
+    }
+    val displayItems = (historyItems + liveItems + state.truncationItems(selected.id)).map { item ->
+        if (item.kind == ChatItemKind.USER || item.kind == ChatItemKind.ASSISTANT) {
+            val linked = linkifyKnownFiles(item.body, knownFilePaths)
+            if (linked == item.body) item else item.copy(body = linked)
+        } else {
+            item
+        }
+    }
 
     val todos = remember(state.history) { state.history?.todoItems().orEmpty() }
     // 滚动状态**跟着会话走**：换会话就换一个新的 listState。
@@ -599,6 +576,8 @@ internal fun ChatDetail(
     // 外接物理键盘检测（Configuration.keyboard）：平板上接蓝牙/USB 键盘、或跑桌面模式时为真。
     // 手机端恒为 false —— 所以下面给 Composer 传的这个参数在手机上永远是默认值，零行为变化。
     val physicalKeyboard = hasPhysicalKeyboard(LocalConfiguration.current)
+    // 顶栏 ⋯ 菜单与 Pill 同源：两处各算一次会出现「菜单里有、Pill 没有」的自相矛盾。
+    val permission = state.history?.permissionSelect(state.permissionCatalog)
 
     onBack?.let { BackHandler(enabled = true, onBack = it) }
     CompositionLocalProvider(LocalUriHandler provides linkHandler) {
@@ -612,7 +591,7 @@ internal fun ChatDetail(
                 onModelClick = { modelSheet = true },
                 onOpenStats = { statsSheet = true },
                 onOpenTrajectory = { trajectorySheet = true },
-                permission = state.history?.permissionSelect(),
+                permission = permission,
                 permissionEnabled = canWrite && !state.busy,
                 onPermissionSelect = viewModel::selectPermissionPreset,
                 canSteer = canSteer,
@@ -743,12 +722,8 @@ internal fun ChatDetail(
         // 状态条：思考与「内容由 AI 生成」合并同一条（用户要求，2026-10-17）——
         // 有思考时显示思考（可展开），没有时显示标识；位置固定在消息区下方、输入区上方。
         ChatStatusBar(liveThinking)
-        // 权限档位 Pill（官方 Web 对标；与 ⋯ 菜单同源同动作）。
-        PermissionPill(
-            permission = state.history?.permissionSelect(),
-            enabled = canWrite && !state.busy,
-            onSelect = viewModel::selectPermissionPreset,
-        )
+        // 权限档位 Pill **已挪到会话顶栏**（与「已连接」同一行，用户 2026-10-19 要求）：
+        // 它原先在这里独占一条，挤占消息可视区。
         when (val approvals = state.approvalState) {
             ApprovalUiState.None -> Composer(
                 value = message,
@@ -763,6 +738,8 @@ internal fun ChatDetail(
                 onAttachFile = viewModel::attachFile,
                 onRemoveAttachment = viewModel::removePendingAttachment,
                 onSubmit = { steer -> viewModel.sendMessage(message, steer); message = "" },
+                onRetryMention = { viewModel.retryMentionEntries() },
+                onCancel = viewModel::cancelRun,
                 physicalKeyboard = physicalKeyboard,
             )
             ApprovalUiState.Loading -> ApprovalLoading()

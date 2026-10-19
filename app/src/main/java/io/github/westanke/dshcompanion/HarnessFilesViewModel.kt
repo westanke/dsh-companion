@@ -14,6 +14,7 @@ import io.github.westanke.dshcompanion.data.DeviceView
 import io.github.westanke.dshcompanion.data.DirectoryPage
 import io.github.westanke.dshcompanion.data.DshApiException
 import io.github.westanke.dshcompanion.data.DshClient
+import io.github.westanke.dshcompanion.debug.DiagLog
 import io.github.westanke.dshcompanion.data.DshConnectionException
 import io.github.westanke.dshcompanion.data.FileEntry
 import io.github.westanke.dshcompanion.data.handoffPathOf
@@ -143,7 +144,17 @@ internal fun HarnessViewModel.loadNextDirectoryPage() = withClient { api ->
  */
 internal fun HarnessViewModel.loadMentionEntries() = withClient { api ->
     val sessionId = mutableState.value.selectedSessionId ?: return@withClient
-    val session = mutableState.value.sessions.firstOrNull { it.id == sessionId } ?: return@withClient
+    // 会话不在列表里**不能静默 return**：那会让 `mentionEntries` 永远停在 null，
+    // 而 null 在 [io.github.westanke.dshcompanion.ui.chat.MentionSuggestions] 里的含义是
+    // 「还在读」—— 用户看到的就是一个永远转圈的「正在读取会话工作目录…」，且没有任何重试入口。
+    // 真机验收撞到过这个：新建会话后立刻打 `@`，面板永久卡住；退出会话再进入反而正常
+    // （因为那次走的是 `selectSession`，它会调本函数）。
+    // 说「读不到」比谎称「还在读」好：至少用户知道面板不会自己好了。
+    val session = mutableState.value.sessions.firstOrNull { it.id == sessionId }
+    if (session == null) {
+        update { copy(mentionEntries = null, mentionFailed = true) }
+        return@withClient
+    }
     val page = runCatching {
         // 空 cwd（= 授权根本身）照常列举；trim('/') 只把结尾多余的斜杠收干净。
         withContext(Dispatchers.IO) { api.entries(session.rootId, session.cwd.trim('/')) }
@@ -154,6 +165,18 @@ internal fun HarnessViewModel.loadMentionEntries() = withClient { api ->
         if (page == null) copy(mentionEntries = null, mentionFailed = true)
         else copy(mentionEntries = page.entries, mentionFailed = false)
     }
+}
+
+/**
+ * `@` 面板上的「重试」：把状态退回「正在读」再重新拉一次。
+ *
+ * 复位那一步不能省：不复位的话面板会**立刻**又显示同一条「读不到」，
+ * 用户点了重试却看不到任何变化，以为那颗按钮没生效。复位后先显示「正在读取…」，
+ * 结果出来再翻成成功或失败。
+ */
+internal fun HarnessViewModel.retryMentionEntries() {
+    update { copy(mentionEntries = null, mentionFailed = false) }
+    loadMentionEntries()
 }
 
 /**
@@ -215,6 +238,9 @@ internal fun HarnessViewModel.openEntry(entry: FileEntry) {
                 document = OpenDocument(
                     entry = entry,
                     text = decoded?.text,
+                    // 存一份「打开时的样子」：编辑器改完不保存就返回时，靠它判断要不要拦一下。
+                    // v2.2.44 真机验收 W3 —— 此前改完直接退回去，改动静默丢失。
+                    originalText = decoded?.text,
                     etag = content.etag,
                     hasBom = decoded?.hasBom == true,
                     lineEnding = decoded?.lineEnding ?: "\n",
@@ -247,15 +273,25 @@ internal fun HarnessViewModel.saveDocument() = withClient { api ->
         .toByteArray(Charsets.UTF_8)
     val bytes = if (document.hasBom) UTF8_BOM + encoded else encoded
     val etag = api.writeFile(root, document.entry.path, bytes, document.etag)
-    update { copy(document = document.copy(etag = etag)) }
+    // 保存成功 = 脏状态清零：originalText 要跟着换成**刚写进去的内容**，
+    // 否则保存完再点返回，守卫还会拦一次（拦的是「有未保存改动」，而此时并没有）。
+    update { copy(document = document.copy(etag = etag, originalText = document.text)) }
     val page = api.entries(root, mutableState.value.currentPath)
     update { copy(directory = page) }
 }
 
 internal fun HarnessViewModel.createEntry(name: String, directory: Boolean) = withClient { api ->
-    val root = mutableState.value.selectedRootId ?: return@withClient
+    // 三个早退点都**必须**报错，不能静默 return —— v2.2.44 真机验收里「新建文件/文件夹
+    // 点了没反应、也没有任何提示」就是这么来的：用户点完，对话框关掉，然后什么也没发生，
+    // 界面上没有任何一处说得出失败原因。静默早退在用户眼里与「点了就是没生效」完全同形。
+    val root = mutableState.value.selectedRootId
     val path = childPath(mutableState.value.currentPath, name)
+    // 入口先记一条：真机排查 F2 时卡在最基本的一问 —— 「这函数到底被调用了没有、
+    // 参数是什么」。没有它，只能在「界面没反应」与「请求没发出」之间猜。
+    DiagLog.i("FILE", "创建条目 root=$root path=$path directory=$directory")
+    if (root == null) throw DshApiException(400, "NO_ROOT_SELECTED", "Select an authorized root first.")
     api.createEntry(root, path, directory)
+    DiagLog.i("FILE", "创建条目返回：$path")
     update { copy(directory = api.entries(root, mutableState.value.currentPath)) }
 }
 

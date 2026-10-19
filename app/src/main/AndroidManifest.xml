@@ -25,5 +25,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- 「用其他应用打开」（会话文件面板）：下载到 cache 后把 URI 授权给用户选的
+             应用读。没有这个 provider，ACTION_VIEW 只能读 file:// 路径，而 targetSdk 24+
+             禁止向其他应用暴露 file:// URI —— 下载了也打不开。 -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

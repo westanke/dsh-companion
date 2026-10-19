@@ -242,6 +242,16 @@ internal suspend fun HarnessViewModel.connectHostInternal(host: Host, device: De
             endpointProbes = connection.probes,
         )
     }
+    // 权限档位清单是**进程级**的（内核 `permissionPresets.catalog()`），连上时取一次就够。
+    //
+    // 取不到不算连接失败：老 bridge（< 2.4.2）没有这条路由，返回 404。
+    // 那时权限入口退化成「只显示当前档位、不能切换」，而这远好过整个入口消失。
+    // 所以这里**不**走 launchOperation（它会把异常写进全局 error → 弹 snackbar，
+    // 等于每次连接老 bridge 都弹一句看不懂的错），而是自己吞掉。
+    val catalog = withContext(Dispatchers.IO) {
+        runCatching { connection.client.permissionPresets() }.getOrNull()
+    }
+    update { copy(permissionCatalog = catalog ?: permissionCatalog) }
     connectEvents(connection.client)
 }
 

@@ -46,7 +46,20 @@ sealed interface ChatLinkTarget {
          * 「本地文件」这个概念在远程场景下没有意义）。
          */
         fun classify(raw: String): ChatLinkTarget {
-            val target = raw.trim()
+            // **先剥 Markdown autolink 的尖括号**：`[text](</abs/path>)` 是 CommonMark
+            // 允许的写法（路径含空格/特殊字符时常用），模型也真的这么写。
+            // 不剥的话 `<...>` 既不以 `/` 开头、也没有 scheme，会被一路判成**相对路径** ——
+            // 于是绝对路径又被拼了一次 cwd，得到
+            // `/media/wangke/OFFICE/workspace/</media/wangke/.../x.md>` 这种翻倍路径
+            // （2026-10-19 真机实测 `PATH resolve 失败 code=PATH_NOT_FOUND` 就是它）。
+            val unwrapped = raw.trim().let { text ->
+                if (text.length >= 2 && text.startsWith("<") && text.endsWith(">")) {
+                    text.substring(1, text.length - 1).trim()
+                } else {
+                    text
+                }
+            }
+            val target = unwrapped
             if (target.isEmpty()) return Unsupported(raw, Reason.EMPTY)
 
             // 协议相对 URL（//host/path）是网页，不是服务端路径。必须先排掉。

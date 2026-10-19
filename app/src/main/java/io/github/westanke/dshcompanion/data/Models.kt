@@ -214,9 +214,23 @@ data class CommandExecution(val commandId: String, val result: CommandResult)
 
 data class TodoItem(val content: String, val status: String)
 
+@Serializable
 data class PermissionOption(val value: String, val name: String, val description: String? = null)
 
 data class PermissionSelect(val options: List<PermissionOption>, val currentValue: String)
+
+/**
+ * 权限档位清单（`GET /chat/permission-presets`）。
+ *
+ * [defaultPreset] 是服务端给的默认档位；客户端**不用**它当当前值 ——
+ * 当前值只认会话投影里的 `permissions`，否则会话刚建出来时会把默认档显示成
+ * 「已切到 X」，而实际还没切过。
+ */
+@Serializable
+data class PermissionCatalog(
+    val options: List<PermissionOption> = emptyList(),
+    val defaultPreset: String = "",
+)
 
 @Serializable
 data class CreatedSession(val id: String, val agentPreset: String? = null)

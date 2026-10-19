@@ -38,8 +38,10 @@
     <string name="tool_call">Tool call</string>
     <string name="send">Send</string>
     <string name="steer">Steer</string>
+    <string name="steer_requires_input">Type in the composer first, then send it into the running turn from here</string>
     <!-- Links inside messages -->
     <string name="link_open_failed">No app can open this link</string>
+    <string name="open_with_other_app">Open with another app</string>
     <string name="link_relative_path">This is a relative path, so the file cannot be located. Open it from the session files list instead</string>
     <string name="link_anchor_unsupported">In-page anchors are not supported yet</string>
     <string name="link_scheme_unsupported">This kind of link cannot be opened yet</string>
@@ -71,6 +73,9 @@
     <string name="close">Close</string>
     <string name="refresh">Refresh</string>
     <string name="save">Save</string>
+    <string name="unsaved_changes_title">Unsaved changes</string>
+    <string name="unsaved_changes_message">This file has changes that were not saved. Going back now discards them.</string>
+    <string name="discard_changes">Discard</string>
     <string name="new_file">New file</string>
     <string name="new_folder">New folder</string>
     <string name="rename_move">Rename or move</string>
@@ -238,6 +243,10 @@
     <string name="permission_workspace_write">Workspace Write</string>
     <string name="permission_full_access">Full access</string>
     <string name="permission_custom">Custom</string>
+    <string name="permission_read_only_desc">Read files only — no modifications</string>
+    <string name="permission_workspace_write_desc">Write inside the workspace and permitted temp dirs; wider retries need approval</string>
+    <string name="permission_full_access_desc">Full file access without approval prompts</string>
+    <string name="permission_custom_desc">Current sandbox and approval settings match no preset</string>
     <string name="permission_full_access_title">Enable full access?</string>
     <string name="permission_full_access_warning">Full access disables the DSH sandbox and per-action approvals. The Agent can access files, network, and processes on the server. Enable it only for a task you trust.</string>
     <string name="permission_full_access_ack">I understand that full access bypasses workspace limits and approvals</string>
@@ -484,6 +493,7 @@
     <string name="err_path_exists">Something with that name already exists</string>
     <string name="err_path_invalid">That path is not valid</string>
     <string name="err_file_changed">The file changed elsewhere — reload and try again</string>
+    <string name="err_no_root_selected">Select an authorized root folder first</string>
     <string name="err_session_missing">That conversation no longer exists</string>
     <string name="err_workspace_missing">That workspace no longer exists</string>
     <string name="err_workspace_outside_root">That workspace is outside the authorized folders</string>

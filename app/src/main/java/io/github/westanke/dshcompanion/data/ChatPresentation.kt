@@ -51,16 +51,51 @@ fun ChatHistory.todoItems(): List<TodoItem> {
     }
 }
 
-fun ChatHistory.permissionSelect(): PermissionSelect? {
+/**
+ * 会话当前的权限档位。
+ *
+ * ## 两个来源，一个结果
+ *
+ * **当前值**来自会话投影的 `permissions`；**候选项**来自 `GET /chat/permission-presets`
+ * （内核 `permissionPresets.catalog()` 的 BFF）。两者必须分开取，这不是本仓的选择而是
+ * 内核的形状：那条 wire 视图是 `wire.view: state => ({ currentValue })` —— 只产当前值，
+ * 候选项在**另一个远程服务**上，两边没有任何交叉引用。
+ *
+ * @param catalog 候选项清单。老 bridge 没有那条路由时传 null，此时**仍然返回**
+ *   一个可用的 [PermissionSelect]（候选项为空）—— 因为「显示当前档位」这件事
+ *   不依赖候选项，把它一起判成不可用，就是 v2.2.44 那个「Pill 永远不渲染」的病。
+ *   候选项为空时 UI 只渲染当前档位那一个只读标签，点击不弹菜单。
+ *
+ * 返回 null 只发生在「投影里连一个可用的档位名都读不出」时 —— 那时调用方应当隐藏整条，
+ * 而不是显示一个编出来的档位。
+ */
+fun ChatHistory.permissionSelect(catalog: PermissionCatalog?): PermissionSelect? {
     val values = (projections as? JsonObject)?.objectValue("values") ?: return null
     val raw = values.objectValue("permissions") ?: return null
-    val currentValue = raw.stringValue("currentValue") ?: return null
-    val options = (raw["options"] as? JsonArray).orEmpty().mapNotNull { entry ->
+    // @patch
+    // id: permission-projection-shape-drift
+    // for: 内核 `permissions` 投影的形状随版本变：旧版给 currentValue/options，
+    //      新版给 { preset, sandbox, approval, seeded }，currentValue 消失。
+    // why: wire schema 由内核定义，本仓不能要求上游保持某个字段；只能按「读到什么算什么」
+    //      的顺序依次降级，并把降级路径都测住。
+    // until: 内核稳定提供 currentValue，且 bridge 的 BFF 覆盖全部形态。
+    // test: PermissionProjectionTest.kt
+    val currentValue = raw.stringValue("currentValue")
+        ?: raw.stringValue("preset")
+        ?: raw.stringValue("sandbox")
+        ?: return null
+    // options 优先取同一条投影里的内联清单（bridge 老版本也可能是这么给的），
+    // 都没有才用 BFF 的目录。
+    val inline = (raw["options"] as? JsonArray).orEmpty().mapNotNull { entry ->
         val option = entry as? JsonObject ?: return@mapNotNull null
         val value = option.stringValue("value") ?: return@mapNotNull null
-        val name = option.stringValue("name") ?: return@mapNotNull null
-        PermissionOption(value, name, option.stringValue("description"))
+        PermissionOption(
+            value,
+            option.stringValue("name") ?: value,
+            option.stringValue("description"),
+        )
     }
+    val options = inline.ifEmpty { catalog?.options.orEmpty() }
     return PermissionSelect(options, currentValue)
 }
 /**

@@ -51,6 +51,10 @@ fun localizedErrorRes(code: String?): Int? = when (normalizeErrorCode(code)) {
     -> R.string.err_path_invalid
     "ETAG_MISMATCH", "ETAG_REQUIRED", "COPY_VERIFY_FAILED", "TRASH_VERIFY_FAILED", "RESTORE_CONFLICT",
     -> R.string.err_file_changed
+    // 客户端自己抛的码（App 侧早退点从「静默 return」改成报错之后才有它们）。
+    // 不登记的话 localizedError 返回 null、界面显示英文原文 —— 而「先选一个授权根」
+    // 这句话值得给用户看中文。
+    "NO_ROOT_SELECTED" -> R.string.err_no_root_selected
 
     // ———— 会话 · 聊天 ————
     "SESSION_NOT_FOUND" -> R.string.err_session_missing

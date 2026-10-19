@@ -3,6 +3,7 @@ package io.github.westanke.dshcompanion.ui
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -118,6 +119,7 @@ fun FilesScreen(state: HarnessState, viewModel: HarnessViewModel, wide: Boolean)
     var createDirectory by remember { mutableStateOf<Boolean?>(null) }
     var moveDialog by remember { mutableStateOf(false) }
     var trashDialog by remember { mutableStateOf(false) }
+    var confirmUnsaved by remember { mutableStateOf(false) }
     val uploadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
             val size = displaySize(context, it)
@@ -161,6 +163,7 @@ fun FilesScreen(state: HarnessState, viewModel: HarnessViewModel, wide: Boolean)
                 state,
                 viewModel,
                 null,
+                { },
                 download,
                 onReplace = { replaceLauncher.launch(arrayOf("*/*")) },
                 onMove = { moveDialog = true },
@@ -182,6 +185,9 @@ fun FilesScreen(state: HarnessState, viewModel: HarnessViewModel, wide: Boolean)
             state,
             viewModel,
             { viewModel.loadDirectory() },
+            // 顶栏返回箭头也是一条离开路径：同样要过未保存确认，
+            // 否则「不按系统返回键、点那个箭头就能绕过」等于这道确认没做。
+            { if (state.document?.hasUnsavedChanges == true) confirmUnsaved = true else viewModel.loadDirectory() },
             download,
             onReplace = { replaceLauncher.launch(arrayOf("*/*")) },
             onMove = { moveDialog = true },
@@ -197,6 +203,19 @@ fun FilesScreen(state: HarnessState, viewModel: HarnessViewModel, wide: Boolean)
     }
     if (moveDialog) MoveDialog(state.document, viewModel) { moveDialog = false }
     if (trashDialog) TrashDialog(state, viewModel) { trashDialog = false }
+    if (confirmUnsaved) {
+        val canSave = state.document?.text != null && state.document?.entry?.writable == true &&
+            "files.write" in state.device?.scopes.orEmpty()
+        UnsavedChangesDialog(
+            onStay = { confirmUnsaved = false },
+            onDiscard = { confirmUnsaved = false; viewModel.loadDirectory() },
+            onSave = { confirmUnsaved = false; viewModel.saveDocument() },
+            canSave = canSave,
+        )
+    }
+    // 系统返回手势 / 返回键也要拦：手机端顶栏那个返回箭头只是**其中一条**离开路径，
+    // 漏了它等于「不用点那个按钮就能绕过未保存确认」。
+    BackHandler(enabled = state.document?.hasUnsavedChanges == true) { confirmUnsaved = true }
 }
 
 @Composable
@@ -402,6 +421,7 @@ private fun EditorPane(
     state: HarnessState,
     viewModel: HarnessViewModel,
     onBack: (() -> Unit)?,
+    onRequestLeave: () -> Unit,
     onDownload: () -> Unit,
     onReplace: () -> Unit,
     onMove: () -> Unit,
@@ -433,13 +453,16 @@ private fun EditorPane(
     val applyZoom: (Float) -> Unit = { factor ->
         textScale = (textScale * factor).coerceIn(MIN_TEXT_SCALE, MAX_TEXT_SCALE)
     }
+    // 「保存」键能不能用 —— 与 FilesScreen 层那个对话框的 canSave 必须是同一个判据。
+    val canSave = document.text != null && document.entry.writable &&
+        "files.write" in state.device?.scopes.orEmpty()
     Column(modifier) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             if (onBack != null) {
-                IconButton(onClick = onBack) {
+                IconButton(onClick = onRequestLeave) {
                     Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back))
                 }
             }
@@ -467,12 +490,21 @@ private fun EditorPane(
             if (markdown && document.text != null) {
                 PreviewToggleButtons(markdownPreview, { markdownPreview = false }, { markdownPreview = true })
             }
+            // 脏状态直接画在保存键上：没改动时它是普通图标，一改动立刻变成强调色。
+            // 这是「用户怎么知道我改了还没存」的第一现场提示 —— 顶栏再加一个字反而占地方。
             IconButton(
                 onClick = viewModel::saveDocument,
-                enabled = document.text != null && document.entry.writable &&
-                    "files.write" in state.device?.scopes.orEmpty(),
+                enabled = canSave,
             ) {
-                Icon(Icons.Outlined.Save, stringResource(R.string.save))
+                Icon(
+                    Icons.Outlined.Save,
+                    stringResource(R.string.save),
+                    tint = if (document.hasUnsavedChanges) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
             }
             Box {
                 IconButton(onClick = { actionsExpanded = true }) {
@@ -681,91 +713,6 @@ private const val TEXT_SCALE_STEP = 0.25f
 
 private fun isMarkdown(name: String): Boolean = name.substringAfterLast('.', "").lowercase() in
     setOf("md", "markdown", "mdown", "mkd")
-
-@Composable
-private fun NewEntryDialog(directory: Boolean, onClose: () -> Unit, onCreate: (String) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text(stringResource(if (directory) R.string.new_folder else R.string.new_file)) },
-        text = {
-            OutlinedTextField(
-                name,
-                { name = it },
-                label = { Text(stringResource(R.string.file_name)) },
-                singleLine = true,
-            )
-        },
-        confirmButton = {
-            Button(
-                onClick = { onCreate(name) },
-                enabled = name.isNotBlank(),
-                shape = MaterialTheme.shapes.medium,
-            ) {
-                Text(stringResource(R.string.create))
-            }
-        },
-        dismissButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.close)) } },
-    )
-}
-
-@Composable
-private fun MoveDialog(document: OpenDocument?, viewModel: HarnessViewModel, onClose: () -> Unit) {
-    var destination by remember(document?.entry?.path) { mutableStateOf(document?.entry?.path.orEmpty()) }
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text(stringResource(R.string.rename_move)) },
-        text = {
-            OutlinedTextField(
-                destination,
-                { destination = it },
-                label = { Text(stringResource(R.string.destination_path)) },
-                modifier = Modifier.fillMaxWidth(),
-            )
-        },
-        confirmButton = {
-            Button(
-                onClick = { viewModel.moveSelected(destination); onClose() },
-                enabled = destination.isNotBlank(),
-                shape = MaterialTheme.shapes.medium,
-            ) { Text(stringResource(R.string.confirm)) }
-        },
-        dismissButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.close)) } },
-    )
-}
-
-@Composable
-private fun TrashDialog(state: HarnessState, viewModel: HarnessViewModel, onClose: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text(stringResource(R.string.trash)) },
-        text = {
-            if (state.trash.isEmpty()) {
-                Text(stringResource(R.string.no_trash))
-            } else {
-                LazyColumn(Modifier.fillMaxWidth().height(360.dp)) {
-                    items(state.trash, key = { it.id }) { item ->
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                item.path,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            IconButton(
-                                onClick = { viewModel.restoreTrash(item.id) },
-                                enabled = "files.delete" in state.device?.scopes.orEmpty(),
-                            ) {
-                                Icon(Icons.Outlined.RestoreFromTrash, stringResource(R.string.restore))
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.close)) } },
-    )
-}
 
 private fun displayName(context: Context, uri: Uri): String {
     context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->

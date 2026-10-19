@@ -232,6 +232,7 @@ internal fun MentionSuggestions(
     failed: Boolean,
     cwd: String?,
     cwdAbsolute: String?,
+    onRetry: () -> Unit,
     onSelect: (String) -> Unit,
 ) {
     val query = MentionQuery.query(value) ?: return
@@ -262,15 +263,27 @@ internal fun MentionSuggestions(
                 // 三态，别把「读不到」谎报成「空的」：
                 //   null + 未失败 → 还在读；null + 失败 → 读不到。
                 // 真正的空目录走下面 `matches.isEmpty()` 那条分支（那才是空列表）。
-                Text(
-                    stringResource(
-                        if (failed) R.string.workspace_files_unavailable
-                        else R.string.workspace_files_loading,
-                    ),
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                Row(
+                    modifier = Modifier.padding(start = 12.dp, end = 6.dp, top = 2.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        stringResource(
+                            if (failed) R.string.workspace_files_unavailable
+                            else R.string.workspace_files_loading,
+                        ),
+                        modifier = Modifier.weight(1f).padding(vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    // 「读不到」必须留一条自救路径：只显示一句话的话，用户只能干等
+                    // —— 而面板不会再自己加载一次（请求已经失败了）。
+                    if (failed) {
+                        TextButton(onClick = onRetry, modifier = Modifier.padding(start = 4.dp)) {
+                            Text(stringResource(R.string.retry), style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
             } else if (matches.isEmpty()) {
                 Text(
                     stringResource(R.string.workspace_files_empty),

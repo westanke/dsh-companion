@@ -212,6 +212,8 @@ import io.github.westanke.dshcompanion.data.permissionSelect
 import io.github.westanke.dshcompanion.data.todoItems
 import java.io.InputStream
 import io.github.westanke.dshcompanion.ui.EmptyState
+import io.github.westanke.dshcompanion.ui.ConnectionOfflineColor
+import io.github.westanke.dshcompanion.ui.ConnectionOnlineColor
 import io.github.westanke.dshcompanion.ui.StatusLabel
 import io.github.westanke.dshcompanion.archiveSession
 import io.github.westanke.dshcompanion.forkSession
@@ -373,6 +375,9 @@ internal fun SessionOverviewPane(
             StatusLabel(
                 if (state.eventsConnected) stringResource(R.string.online) else stringResource(R.string.offline),
                 state.eventsConnected,
+                // 与会话页顶栏同一套语义色：绿=已连接、红=已断开。
+                activeColor = ConnectionOnlineColor,
+                inactiveColor = ConnectionOfflineColor,
             )
             state.device?.name?.let {
                 Text(

@@ -5,6 +5,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -42,6 +43,8 @@ import io.github.westanke.dshcompanion.cancelRun
 import io.github.westanke.dshcompanion.refreshHistory
 import io.github.westanke.dshcompanion.data.ChatSession
 import io.github.westanke.dshcompanion.data.PermissionSelect
+import io.github.westanke.dshcompanion.ui.ConnectionOfflineColor
+import io.github.westanke.dshcompanion.ui.ConnectionOnlineColor
 import io.github.westanke.dshcompanion.ui.StatusLabel
 
 /**
@@ -84,26 +87,32 @@ internal fun ConversationHeader(
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.titleMedium,
             )
-            StatusLabel(
-                if (state.eventsConnected) stringResource(R.string.online) else stringResource(R.string.offline),
-                state.eventsConnected,
-            )
+            // 状态行：连接状态（绿/红点）+ 权限档位 Pill 同一行。
+            //
+            // 权限 Pill 原先贴在**输入区上方**、还 `.fillMaxWidth()` 独占一整条，
+            // 用户 2026-10-19 反馈「影响页面可视区域」。挪到这里既省掉那一行，
+            // 语义也更顺：它和「已连接」一样，都是**当前会话的处境**。
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                StatusLabel(
+                    if (state.eventsConnected) stringResource(R.string.online) else stringResource(R.string.offline),
+                    state.eventsConnected,
+                    // 绿=已连接、红=已断开（用户要求：这两态要一眼可辨）。
+                    activeColor = ConnectionOnlineColor,
+                    inactiveColor = ConnectionOfflineColor,
+                )
+                PermissionPill(permission, permissionEnabled, onPermissionSelect)
+            }
             if (session.pendingInteraction == "approval") ApprovalStatusLabel(Modifier.padding(top = 2.dp))
         }
         IconButton(onClick = onOpenFiles) {
             Icon(Icons.Outlined.FolderOpen, stringResource(R.string.session_files))
         }
-        IconButton(onClick = viewModel::refreshHistory, enabled = !state.busy) {
-            Icon(Icons.Outlined.Refresh, stringResource(R.string.refresh))
-        }
-        AnimatedVisibility(session.running, enter = fadeIn(), exit = fadeOut()) {
-            IconButton(
-                onClick = viewModel::cancelRun,
-                enabled = "chat.write" in state.device?.scopes.orEmpty(),
-            ) {
-                Icon(Icons.Outlined.Cancel, stringResource(R.string.cancel_run), tint = MaterialTheme.colorScheme.error)
-            }
-        }
+        // 「刷新」与「停止运行」**已收进 ⋯ 菜单**（用户 2026-10-19 要求：顶栏太挤，
+        // 这两个按钮的功能挪到三个点里面去）。
+        // 顶栏只留「本会话的文件」（它是这个页面的主入口，值得占一格）。
         // ⋯ 菜单（网页版 chat.html:283 的 #more，位置一样：标题右边、停止键旁边）。
         //
         // 输入区压成**一行药丸**后，模型 / 权限 / 插话这些入口在输入区里没有位置了，
@@ -122,6 +131,31 @@ internal fun ConversationHeader(
                 Icon(Icons.Outlined.MoreVert, stringResource(R.string.more_actions))
             }
             DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
+                // 从顶栏收进来的两个**动作**（用户 2026-10-19）：刷新与停止运行。
+                // 放最前面，与「查看类」（轨迹/统计）分开 —— 前者是立刻生效的动作，
+                // 后者是打开一个面板。
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.refresh)) },
+                    onClick = {
+                        moreOpen = false
+                        viewModel.refreshHistory()
+                    },
+                    enabled = !state.busy,
+                    leadingIcon = { Icon(Icons.Outlined.Refresh, null) },
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.cancel_run)) },
+                    onClick = {
+                        moreOpen = false
+                        viewModel.cancelRun()
+                    },
+                    // 只在真的跑着的时候可点：没事可停时点它只会让人以为坏了。
+                    enabled = session.running && "chat.write" in state.device?.scopes.orEmpty(),
+                    leadingIcon = {
+                        Icon(Icons.Outlined.Cancel, null, tint = MaterialTheme.colorScheme.error)
+                    },
+                )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 // 会话统计（执行维度）。放在菜单最前：它是**查看**类操作，
                 // 与下面的「模型 / 权限 / 插话」这些**改变**类操作分开。
                 DropdownMenuItem(
@@ -162,7 +196,11 @@ internal fun ConversationHeader(
                     enabled = state.sessionModels != null && state.sessionModels.routable,
                     leadingIcon = { Icon(Icons.Outlined.ModelTraining, null) },
                 )
-                permission?.takeIf { it.options.isNotEmpty() }?.let { permissionValue ->
+                // 判据从「有候选项」改成「有权限投影」：候选项拿不到时（老 bridge 没有
+                // /chat/permission-presets 路由）仍要显示当前档位那一行。
+                // 此前这个 `takeIf { it.options.isNotEmpty() }` 与 Pill 里的 early-return
+                // 是同一个病根的两处表现 —— v2.2.44 真机上权限入口整块消失就是它俩干的。
+                permission?.let { permissionValue ->
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     PermissionMenuItems(
                         value = permissionValue,
@@ -182,10 +220,14 @@ internal fun ConversationHeader(
                     text = {
                         Column {
                             Text(stringResource(R.string.steer))
+                            // 灰置时的副标题换成「怎么才能用」，而不是继续描述它是干什么的 ——
+                            // 用户 2026-10-19 问「追加引导是干啥的？一直是灰色」：
+                            // 灰着的原因（输入框没内容 / 会话没在跑）写在按钮上，就不用猜了。
                             Text(
-                                stringResource(R.string.busy_send_mode_steer_desc),
+                                if (canSteer) stringResource(R.string.busy_send_mode_steer_desc)
+                                else stringResource(R.string.steer_requires_input),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                                 style = MaterialTheme.typography.labelSmall,
                             )

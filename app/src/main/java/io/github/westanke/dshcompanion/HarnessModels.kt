@@ -24,6 +24,7 @@ import io.github.westanke.dshcompanion.data.AgentPreset
 import io.github.westanke.dshcompanion.data.ModelSelection
 import io.github.westanke.dshcompanion.data.PendingApproval
 import io.github.westanke.dshcompanion.data.PendingQuestionSet
+import io.github.westanke.dshcompanion.data.PermissionCatalog
 import io.github.westanke.dshcompanion.data.PluginInventory
 import io.github.westanke.dshcompanion.data.ProviderModel
 import io.github.westanke.dshcompanion.data.ProviderPatch
@@ -114,7 +115,21 @@ data class OpenDocument(
      * 两者在界面上完全不同：前者要给「文件过大 + 下载」的出路，后者只是还没读。
      */
     val skippedForSize: Boolean = false,
-)
+    /**
+     * 打开时的原始文本 —— 「有没有未保存改动」就靠和它逐字比。
+     *
+     * 为什么不在 UI 里拿 `remember { text }` 存一份：编辑器的值会随输入法、
+     * 重组、进程重建变化，而**返回键**那条路径不一定经过同一个 Composable 的
+     * 生命周期（预览 ↔ 编辑 ↔ 返回都可能重建）。判定放进数据层才有一份权威值。
+     *
+     * 为 null 表示这不是文本文件（图片 / PDF / 超大文件），谈不上改动。
+     */
+    val originalText: String? = null,
+) {
+    /** 编辑器里的内容与打开时不一致，且这是能编辑的文本文件。 */
+    val hasUnsavedChanges: Boolean
+        get() = originalText != null && text != originalText
+}
 
 /**
  * 「本会话的文件」面板里正在查看的那一条。
@@ -252,6 +267,18 @@ data class HarnessState(
      * 和上轮插件页那句「package.json 可能损坏」是同一类毛病。
      */
     val mentionFailed: Boolean = false,
+    /**
+     * 权限档位**候选项**清单（`GET /chat/permission-presets`，bridge ≥ 2.4.2）。
+     *
+     * 与会话投影里的当前档位刻意分开存：内核把清单放在独立远程服务上，
+     * 投影只给 `currentValue`（见 `ChatPresentation.permissionSelect`）。
+     * 清单是**进程级**的、一进连接取一次就够，不随会话变化，所以刷新时不必重取。
+     *
+     * 为 null 表示**还没取到或取不到**：老 bridge 没有这条路由（404），或请求失败。
+     * 这时 UI 仍应显示当前档位，只是不给切换菜单 —— 把「读不到清单」升级成
+     * 「整个权限入口消失」，就是 v2.2.44 那个缺陷本身。
+     */
+    val permissionCatalog: PermissionCatalog? = null,
     /**
      * 输入框上方是否**开着补全面板**（`@` 文件补全，或 `/` 命令补全）。
      *

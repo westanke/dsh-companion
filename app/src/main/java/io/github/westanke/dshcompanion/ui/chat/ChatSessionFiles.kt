@@ -141,6 +141,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
+import androidx.core.content.FileProvider
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -209,6 +210,7 @@ import io.github.westanke.dshcompanion.data.TodoItem
 import io.github.westanke.dshcompanion.data.displayItems
 import io.github.westanke.dshcompanion.data.permissionSelect
 import io.github.westanke.dshcompanion.data.todoItems
+import java.io.File
 import java.io.InputStream
 import io.github.westanke.dshcompanion.ui.BinaryFilePreview
 import io.github.westanke.dshcompanion.ui.EmptyState
@@ -247,6 +249,28 @@ internal fun SessionFilesSheet(state: HarnessState, viewModel: HarnessViewModel,
     ) { uri ->
         uri?.let { viewModel.downloadSelected { requireNotNull(context.contentResolver.openOutputStream(it)) } }
     }
+    // 「用其他应用打开」：下载到 App 的 cache 目录，经 FileProvider 转成 content:// URI，
+    // 再发带 MIME 的 ACTION_VIEW（用户 2026-10-19 要求：本 App 支持不了的类型，
+    // 调手机的关联应用打开）。
+    //
+    // 为什么走 cache + FileProvider 而不是 SAF 另存为：用户要的是**立刻看**，不是挑位置存；
+    // 而 targetSdk 24+ 禁止向其他应用暴露 file:// 路径 —— 没有 provider 下载了也打不开。
+    val openFailedHint = stringResource(R.string.link_open_failed)
+    fun openExternally(mime: String?) {
+        val name = opened?.requestedPath?.substringAfterLast('/')?.ifBlank { null } ?: return
+        val launched = runCatching {
+            val target = File(context.cacheDir, name)
+            target.outputStream().use { out -> viewModel.downloadSelected { out } }
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", target)
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(uri, mime ?: "application/octet-stream")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                },
+            )
+        }.isSuccess
+        if (!launched) toast(context, openFailedHint)
+    }
     ModalBottomSheet(
         onDismissRequest = onClose,
         sheetState = sheetState,
@@ -258,6 +282,9 @@ internal fun SessionFilesSheet(state: HarnessState, viewModel: HarnessViewModel,
             SessionFileDetail(
                 open = opened,
                 onBack = viewModel::closeSessionFile,
+                // 「用其他应用打开」：本 App 预览不了的类型（docx/xlsx/zip…）交给系统选。
+                // mime 从服务端响应来（拿不到就 octet-stream，系统会列出能处理它的应用）。
+                onOpenExternally = { openExternally(opened?.resolved?.contentType) },
                 // 落到系统选择器的默认文件名：面板里显示的就是路径，取末段才像「另存为」。
                 onDownload = {
                     downloadLauncher.launch(
@@ -395,7 +422,12 @@ internal fun SessionFileRow(ref: SessionFileRef, onClick: () -> Unit) {
 }
 
 @Composable
-internal fun SessionFileDetail(open: SessionFileOpen, onBack: () -> Unit, onDownload: () -> Unit) {
+internal fun SessionFileDetail(
+    open: SessionFileOpen,
+    onBack: () -> Unit,
+    onOpenExternally: () -> Unit,
+    onDownload: () -> Unit,
+) {
     val resolved = open.resolved
     val preview = open.preview
     val failure = open.failure
@@ -475,15 +507,21 @@ internal fun SessionFileDetail(open: SessionFileOpen, onBack: () -> Unit, onDown
                 }
             }
 
-            open.tooLarge -> SessionFileNotice(
-                Icons.Outlined.WarningAmber,
-                stringResource(R.string.session_file_too_large),
-            )
+            open.tooLarge -> Column(Modifier.fillMaxWidth()) {
+                SessionFileNotice(Icons.Outlined.WarningAmber, stringResource(R.string.session_file_too_large))
+                // 超过预览上限 ≠ 看不了：交给手机上装了对应应用来打开（用户 2026-10-19 要求）。
+                OutlinedButton(onClick = onOpenExternally, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    Text(stringResource(R.string.open_with_other_app))
+                }
+            }
 
-            preview == null -> SessionFileNotice(
-                Icons.Outlined.Description,
-                stringResource(R.string.session_file_binary),
-            )
+            preview == null -> Column(Modifier.fillMaxWidth()) {
+                SessionFileNotice(Icons.Outlined.Description, stringResource(R.string.session_file_binary))
+                // 本 App 不支持预览的类型（docx / xlsx / zip / 音视频…）：调系统的关联应用打开。
+                OutlinedButton(onClick = onOpenExternally, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    Text(stringResource(R.string.open_with_other_app))
+                }
+            }
 
             preview.isEmpty() -> SessionFileNotice(
                 Icons.Outlined.Description,
