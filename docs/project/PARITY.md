@@ -13,13 +13,13 @@
 | 历史、发送、steer、取消 | 已有 | 历史投影与 Markdown 已完成，真实消息发送/回复已通过；steer 与取消仍待真实运行验收（v2.2.17 起 steer 入口在顶栏 `⋯` 菜单，仍为固定插话） | in-progress |
 | 聊天实时事件 | 已有稳定文本/思考 delta；**`seq` 语义单一化**（只表示持久事件序号，流式 delta 不再输出它，ADR-0008）；**订阅基线** `chat.session.snapshot`（带 `cursor`） | 真实 Oracle listener 已验证按 token 连续增长并在完成后用 REST 历史收口；**断档检测**：跳号或本地落后于基线时自动重取历史（`ChatSeqMonitor`）；网络切换待验收 | in-progress |
 | 文件列表、读写和 ETag | 已有 | 已实现行号文本编辑、Markdown 源码/预览与 ETag 保存；冲突仍待端到端验收 | in-progress |
-| 新建、移动、上传、下载、软删除、恢复 | 已有 | 已实现并有 MockWebServer/服务端回归，移动 UI 动作待验收 | in-progress |
+| 新建、移动、上传、下载、软删除、恢复 | 已有 | 已实现并有 MockWebServer/服务端回归，移动 UI 动作待验收。**v2.2.44 真机验收报的「新建文件静默失败」已现场结案：不是 App 缺陷，是验收时点击落空** —— 输入文件名后软键盘弹起让对话框上移 426px，用弹起前的坐标点「创建」落在对话框外，触发 dismiss，于是一个请求都没发（详见 `PITFALLS.md` §键盘弹起让对话框上移）。**加固已落地**：早退点不再静默 `return` 而是抛错走全局 snackbar（真机复验：同名冲突会显示「同名文件已经存在了」）；`createEntry` 与「请求失败 / 连接缺失 / 代际丢弃」四处补了诊断日志 | done |
 | 会话搜索、重命名与分叉 | 重命名与分叉已有（`POST …/fork` 支持 `atSeq`）；搜索未进入 v1 | 会话子项菜单可重命名并分叉；**另可从某条用户消息分叉**（`atSeq`，入口在时间戳行，刻意不占长按 —— 长按归选词） | in-progress |
 | 模型与推理等级 | 已有 | 已读取真实模型组、切换模型与服务端支持的思考强度 | done |
 | Agent Preset / 模式选择 | 已有列表、创建参数及空白会话切换 | 新建和现有空白会话可切换；首条消息后按 DSH 规则显示锁定 | done |
 | 当前 TODO / 任务模块 | 历史 `projections.values.todos` | 聊天页显示完成进度和可折叠任务列表，随历史刷新 | done |
 | 斜杠命令 | 已有当前会话 host 命令列举/执行 BFF | 输入 `/` 即筛选、补全并受控执行，不作为模型消息发送 | done |
-| 会话权限预设 | 已有 `permissions` 投影及 `/permission` 命令 | 顶栏 `⋯` 菜单可切换只读、工作区写入和完整访问；完整访问二次确认（`PermissionMenuItems()` + `FullAccessConfirmDialog()`；v2.2.17 起入口从输入区迁入，能力未减；**v2.2.44** 发送区上方新增常驻权限档位 Pill，与菜单同源同动作，无投影不渲染） | done |
+| 会话权限预设 | 当前值取会话投影 `permissions.currentValue`（**需 bridge 下发 `projections`**）；候选项取 `GET /chat/permission-presets`（内核 `permissionPresets.catalog()` 的 BFF，**尚未发版**，本地 2.4.1 产物已含） | 顶栏 `⋯` 菜单可切换档位、完整访问二次确认（`PermissionMenuItems()` + `FullAccessConfirmDialog()`；v2.2.17 起入口从输入区迁入；**v2.2.44** 发送区上方新增常驻权限档位 Pill，与菜单同源同动作）。**v2.2.44 真机验收时这条的 `done` 是假的**：候选读的是投影里的 `options[]`，而内核那条 wire 视图只产 `currentValue` → `permissionSelect()` 恒为 null，Pill 与菜单权限项**从不渲染**。已改为「当前值取投影、候选项取目录接口」两路合成；候选项为空时仍显示当前档位（降级为只读标签，不再整块消失）。**2026-10-19 真机复验通过**：Pill 显示「完整访问」、⋯ 菜单显示「权限模式 · 完整访问」 | done |
 | 附件与消息队列 | 已有：附件上传/读取接口；排队与插话由客户端按设置决定 | 可发送图片（≤8 MiB，内联 base64）与文件（≤24 MiB，先换 receiptId 再引用）；会话图片按 attachmentId 取回并缓存，401/403/404 分开提示且授权类失败可重试；智能体运行时 Enter/发送键按设置排队或插话，`Ctrl/Cmd+Enter` 走相反的一种 | done |
 | 工具详情、审批与问题回答 | 审批与提问 BFF 已有；**连接即重放**（`interaction-replay-v1`：新连接会补推仍待处理的审批/提问）；**能力位** `approvals-v1` / `questions-v1` | 显示待审批状态、脱敏命令、"允许一次/拒绝"及完整访问二次确认；连接与亮屏时主动刷新；**缺关键能力位时明说"插件过旧、卡片不会出现"**（不再静默）；**单胜方**：身份比对与迟到响应 `not-pending` 已有，并行下发待拍板（ADR-0009）；**v2.2.44**：工具详情按 name 分发专用块（read 路径头+行号正文 / bash `$ cmd`+暗底输出（ANSI 已剥）/ edit·write `-`/`+` 对照），解析失败回落通用渲染，chat.html 同步 | in-progress |
 | DSH 工作区发现与会话归属 | 已有，按授权根过滤 | 已实现选择和会话标题/工作区标题显示 | done |

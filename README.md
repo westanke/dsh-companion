@@ -283,7 +283,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.44.apk
+DSH伴侣-companion-v2.2.45.apk
 ```
 
 安装要求：
@@ -529,18 +529,18 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.44`（`versionCode` 10069）
+- 当前版本：`v2.2.45`（`versionCode` 10070）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
-- 单元测试：55 个测试类 / 478 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
+- 单元测试：57 个测试类 / 505 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.44.apk`，**3,012,936 字节**，
-  SHA-256 `9d004d81d08e7e178008c83faaeb7c39008118b916d591191903028df4e13df0`（`artifacts/SHA256SUMS.txt` 同步）。
-  **已发 Gitee + GitHub**（tag `v2.2.44`）——
+- 当前 APK：`DSH伴侣-companion-v2.2.45.apk`，**3,034,832 字节**，
+  SHA-256 `6bd2634d08648f71ec5d0d32875a0228cf93f3ddaed7e013543e08c8bf9e713f`（`artifacts/SHA256SUMS.txt` 同步）。
+  **已发 Gitee + AtomGit**（tag `v2.2.45`）——
   本版改动：**工具调用专用块**（read 路径头 + 行号正文 / bash `$ 命令` + 暗底输出（ANSI 已剥）/
   edit·write `-`/`+` 对照，对标官方 Web 专用块）与**发送区常驻权限档位 Pill**（与 ⋯ 菜单同源同动作）；
   chat.html 对标补全（模型按厂家树型分组、工具轨迹与统计面板、`@` 文件补全、▤ 文件靠右、
-  `/` 命令面板发送后落回）；**「回答被截断」提示**（需 bridge **≥ 2.4.1**）；
+  `/` 命令面板发送后落回）；**「回答被截断」提示**（需 bridge **≥ 2.4.2**）；
   诊断日志开关、连接导入面板、进会话落底跟随
 - 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用。证书没变，但 **v2.2.41 起包名变了**，
   `v2.2.40` 及更早仍需先卸载）

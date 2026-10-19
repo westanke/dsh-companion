@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>dsh-companion + dsh-remote-bridge Cloudflare 隧道接入方案</title>
+<style>
+  :root{--bg:#0f1117;--panel:#171a23;--panel2:#1e222e;--ink:#e6e9f0;--dim:#9aa3b2;--accent:#38bdf8;--ok:#34d399;--warn:#fbbf24;--danger:#f87171;--line:#2a3040}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;line-height:1.7;font-size:15px}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 28px 80px}
+  h1{font-size:26px;margin:0 0 6px;display:flex;align-items:center;gap:10px}
+  .sub{color:var(--dim);margin:0 0 26px;font-size:14px}
+  h2{font-size:20px;margin:38px 0 14px;padding-left:12px;border-left:4px solid var(--accent)}
+  h3{font-size:16px;margin:22px 0 8px;color:#cfd6e4}
+  p{margin:8px 0}
+  code{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-family:"SFMono-Regular",Consolas,monospace;font-size:13px;color:#7dd3fc}
+  pre{background:#0b0d12;border:1px solid var(--line);border-radius:8px;padding:14px 18px;overflow-x:auto;font-size:13px;line-height:1.6}
+  pre code{background:none;border:none;padding:0;color:#a5f3fc}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top}
+  th{background:var(--panel2);color:#d8dee9;white-space:nowrap}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px 24px;margin:16px 0}
+  .tag{display:inline-block;padding:1px 9px;border-radius:20px;font-size:12px;font-weight:600;margin-right:6px}
+  .tag-ok{background:#0b2b20;color:var(--ok);border:1px solid #1e4a39}
+  .tag-warn{background:#2b240b;color:var(--warn);border:1px solid #4a3d1e}
+  .tag-danger{background:#2b1214;color:var(--danger);border:1px solid #4a1e24}
+  .tag-grey{background:#232833;color:var(--dim);border:1px solid #333a4a}
+  .ok{color:var(--ok)} .warn{color:var(--warn)} .danger{color:var(--danger)} .dim{color:var(--dim)}
+  ul,ol{margin:8px 0;padding-left:24px}
+  li{margin:5px 0}
+  .flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0}
+  .step{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 14px;font-size:13px}
+  .arrow{color:var(--accent);font-weight:700}
+  .divider{height:1px;background:var(--line);margin:28px 0}
+  blockquote{border-left:4px solid var(--accent);background:var(--panel2);margin:12px 0;padding:10px 18px;border-radius:0 8px 8px 0;color:#c7d0e0}
+  .file{background:var(--panel2);border-radius:6px;padding:2px 8px;font-family:monospace;font-size:12.5px;color:#f0abfc}
+  .col-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.col-2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>🛰️ Cloudflare 隧道接入方案</h1>
+<p class="sub">dsh-companion（Kotlin） + dsh-remote-bridge（TS） · 适配 UOS 20 · 2026-10-17</p>
+
+<div class="card">
+<p style="margin-top:0"><b>一句话结论：</b>bridge 本身用 Node 原生 <code>http</code> 监听 + <code>ws</code> 升级，<b>不做 TLS 终止</b>；客户端 OkHttp 原生支持 <code>https/wss</code>。所以 Cloudflare 隧道 = <b>cloudflared 进程在你电脑上把主机的 <code>HTTP/3090</code> 反向代理到 Cloudflare 边缘，由 Cloudflare 提供 <code>wss://</code> 与固定域名</b>，两端代码几乎零改动，核心工作量集中在「设置面板自动创建隧道 + 国内源下载 cloudflared + 生成 wss 配置文本」。</p>
+</div>
+
+<h2>1. 现状与能力盘点（已核对源码）</h2>
+
+<table>
+<tr><th>层</th><th>现状（代码实证）</th><th>对 Cloudflare 隧道的影响</th></tr>
+<tr><td><span class="file">server.ts</span> 监听</td><td><code>node:http createServer</code>，<code>upgrade</code> 交给 <code>WebSocketServer</code>；默认绑 <code>0.0.0.0:3090</code>，仅存 loopback 时也处理</td><td><span class="tag tag-ok">无需改</span> bcloudflared 回连 <code>localhost:3090</code> 即可，隧道不用开「绑定外网 IP」</td></tr>
+<tr><td>TLS 终止</td><td>bridge <b>不做 HTTPS</b>，<code>wss://</code> 的「s」由反向代理承担</td><td><span class="tag tag-ok">符合</span> Cloudflare 边缘统一终止 TLS，回源走本地 http</td></tr>
+<tr><td>REST/WS 基址</td><td>REST <code>/api/v1</code>，WS <code>/events</code>（<span class="file">DshClient.kt</span> <code>eventsUrl()</code> = <code>base.newBuilder().addPathSegment("events")</code>）</td><td><span class="tag tag-ok">透明</span> 隧道只换主机头，路径原样穿透</td></tr>
+<tr><td>客户端认证</td><td><code>Authorization: Bearer</code> 设备 token；回环已设备换</td><td><span class="tag tag-warn">warn</span> 隧道暴露公网，App 端 token 放头部透传 <b>不受 CF 校验</b>，仍由 bridge 鉴权，可接受</td></tr>
+<tr><td>断线重连</td><td><span class="file">ReconnectingEvents</span> 指数退避 1→30s，<code>closed</code> 才停</td><td><span class="tag tag-warn">warn</span> Quick Channel 地址漂移后仍死连旧地址，需处理（见 §5）</td></tr>
+<tr><td>配置文本</td><td><span class="file">config-text.ts</span> 生成 <code>DSH1:</code> 多端点（LAN/VIRTUAL_NET/WAN），<span class="file">ConnectionShare.kt</span> 解析</td><td><span class="tag tag-ok">复用</span> 加一个 <code>WAN</code> 类端点 <code>wss://xxx.trycloudflare.com</code> 即可，两端数据模型已支持</td></tr>
+<tr><td>App 下载二维码</td><td><span class="file">app-qr.ts</span> <code>APP_QR_CODES</code> 内联 SVG，指向 GitHub/Gitee Releases 列表页</td><td><span class="tag tag-ok">复用</span> Gitee 即国网较快入口</td></tr>
+</table>
+
+<div class="divider"></div>
+
+<h2>2. 两种 Channel 对比与选型</h2>
+
+<table>
+<tr><th></th><th>✦ Cloudflare Channel（命名 Tunnel）</th><th>⚡ Quick Channel（Quick Tunnel）</th></tr>
+<tr><td>是否需要账户/域名</td><td><span class="danger">需要</span> Cloudflare 账户 + 自己域名 + DNS（CNAME→<code>&lt;tunnel-id&gt;.cfargotunnel.com</code>）</td><td><span class="ok">无需</span></td></tr>
+<tr><td>对外地址</td><td>固定：<code>wss://your.domain.com</code></td><td>临时：<code>wss://&lt;random&gt;.trycloudflare.com</code>（每次重建变）</td></tr>
+<tr><td>稳定性</td><td>⭐ 好，域名固定，适合长期使用</td><td>隧道进程重启地址变，连接需刷新</td></tr>
+<tr><td>国内直连</td><td>Cloudflare 边缘，国内<b>时好时坏</b>（受运营商影响）</td><td>同左</td></tr>
+<tr><td>适用场景</td><td>有域名的人长期远程回家</td><td>临时演示、测试、无常人域名兜底</td></tr>
+<tr><td><b>UOS 20 落地</b></td><td colspan="2">都用同一个 <code>cloudflared</code> CLI，只是参数不同；架构完全共享</td></tr>
+</table>
+
+<blockquote><b>推荐策略</b>：设置页两个按钮——「创建命名隧道（稳定）」「创建快速隧道（临时）」。无账户时先 Quick 体验，有域名再切 Named，两种模式共用一套「隧道状态 → wss 地址 → 配置文本」管线。</blockquote>
+
+<div class="divider"></div>
+
+<h2>3. 整体架构</h2>
+
+<div class="col-2">
+<div>
+<h3>✦ 命名隧道（固定域名）</h3>
+<div class="flow">
+<span class="step">📱 App</span><span class="arrow">wss://</span>
+<span class="step">Cloudflare 边缘</span><span class="arrow">TLS 终止</span>
+<span class="step">🏠 电脑 cloudflared</span><span class="arrow">localhost:3090</span>
+<span class="step">dsh-remote-bridge</span>
+</div>
+<p class="dim">DNS: <code>domain → cfargotunnel.com</code>；隧道凭证 <code>tunnel.json</code> + <code>cert.pem</code></p>
+</div>
+<div>
+<h3>⚡ 快速隧道（临时）</h3>
+<div class="flow">
+<span class="step">📱 App</span><span class="arrow">wss://xxx.trycloudflare.com</span>
+<span class="step">Cloudflare 边缘</span><span class="arrow">TLS 终止</span>
+<span class="step">🏠 电脑 cloudflared</span><span class="arrow">localhost:3090</span>
+<span class="step">dsh-remote-bridge</span>
+</div>
+<p class="dim">无需凭证，一条命令即起；地址每次不同</p>
+</div>
+</div>
+
+<h3>回源为何走 localhost 而非 0.0.0.0</h3>
+<p>bridge 默认绑 <code>0.0.0.0:3090</code> 会对外网暴露监听口。走隧道时<b>不必</b>那样——cloudflared 与 bridge 同机，回源指 <code>127.0.0.1:3090</code> 即可，局域网仍走原本的 LAN 端点。安全上隧道只暴露一个「CF 到本机」的链路，比裸开 0.0.0.0 干净。</p>
+
+<div class="divider"></div>
+
+<h2>4. 改造点拆解（两端落地）</h2>
+
+<h3>4.1 服务端 bridge（TypeScript）</h3>
+<ul>
+<li><span class="file">settings-adapter.ts</span> / <span class="file">src/client/workspace.tsx</span>：在「远程访问」卡片下新增<b>「Cloudflare 隧道」分区</b>，两个按钮（命名/快速）+ 状态区 + 生成的 <code>wss://</code> 配置文本一键复制。</li>
+<li><span class="file">config-text.ts</span>：新增 <code>endpoints</code> 组装——把隧道 <code>wss://…</code> 归一为 <code>https://…</code> 作为 <code>WAN</code> 类端点插入（<b>关键</b>：客户端端点必须 <code>http(s)://</code> 前缀，不能直接给 <code>wss://</code>，见 §5），并自动排序在 LAN 之后。Kotlin 侧 <code>EndpointKind</code> 自动推断为 <code>WAN</code>。</li>
+<li>新增 <span class="file">src/host/cloudflared.ts</span>：封装 <code>spawn</code> cloudflared 子进程（Quick 解析 stdout 的 <code>trycloudflare.com</code> URL；Named 指定 <code>--name</code> + 凭证），管理生命周期与「隧道健康探活」。健康探活可复用现有 <code>GET /healthz</code>。</li>
+</ul>
+
+<h3>4.2 客户端 companion（Kotlin，改动最小）</h3>
+<ul>
+<li><span class="file">DshClient.kt</span>：现有 <code>normalizeEndpoint</code> 已接受 <code>https://</code>，<code>HttpUrl</code> 自动把 <code>https</code>→<code>wss</code> 拼 <code>/events</code>。<b>无需改 WS 层</b>，wss 直接可用。</li>
+<li><span class="file">ConnectionShare.kt</span>：解码侧无改动，天然吃 wss 地址字符串。</li>
+<li><span class="file">ConnectScreen.kt</span>：展示时把 WAN 端点标“☁️ Cloudflare（公网）”标签，已是 WAN 分类可复用。</li>
+</ul>
+<blockquote>唯一实质新增在<b>服务端</b>：生成 wss 端点要归一成 <code>https://</code> base，正是 §5 的坑。</blockquote>
+
+<h2>5. 关键坑位（务必读 PITFALLS 再动手）</h2>
+
+<table>
+<tr><th>坑</th><th>触发</th><th>规避</th></tr>
+<tr><td><b>端点前缀必须 <code>http(s)://</code>，不是 <code>wss://</code></b></td><td><span class="file">DshClient.kt:normalizeEndpoint</span> <code>require(input.startsWith("http://")||"https://")</code> 会直接 <b>throw</b></td><td>config-text 收云隧道地址时写作 <code>https://</code>（App 内部拼 <code>/events</code> 自动升级为 wss）</td></tr>
+<tr><td>Quick Tunnel 地址漂移后客户端死连旧地址</td><td><code>ReconnectingEvents</code> 只对同一 <code>base</code> 退避重连，<code>closed</code> 才停</td><td>浏览器/面板显示新地址；App 端下次打开吃新配置文本；或 App 加「换端点重连」手动刷新（读 <code>HostStore</code> 切端点）</td></tr>
+<tr><td>路由/前缀穿透</td><td>自定义域名若托管在 CF，需开「代理」<code>Proxied</code>（橙云），确认路径透传</td><td>命名隧道建 DNS 记录时选 <code>Proxied</code>；请求路径原样命中 <code>/api/v1</code>、<code>/events</code></td></tr>
+<tr><td>国内访问 CF 不稳定</td><td>公网 wss 时好时坏，非代码问题</td><td>保留原 LAN 端点做「同网快连」首选；隧道作 WAN 兜底</td></tr>
+</table>
+
+<div class="divider"></div>
+
+<h2>6. 设置页自动逻辑 + 国内源下载（核心卖点）</h2>
+
+<h3>UOS 20 / x86_64 的 cloudflared 适配</h3>
+<table>
+<tr><th>项</th><th>值 / 做法</th></tr>
+<tr><td>校验安装环境</td><td>先装 <code>cloudflared</code>。安装前 <code>getconf LONG_BIT</code> 确认 x86_64 → 下载 amd64 归档（UOS arm64 设备别拿错）。首次 <code>spawn</code> 用 <code>500ms</code> 探活 <code>--version</code> 兜底</td></tr>
+<tr><td>国内优先源</td><td>探测顺序：先测 <code>install.appfoster.com / registry.npmmirror.com</code> 类国内可达性（或读已有 `注册表` 镜像），失败回退 GitHub 官方 <code>github.com/cloudflare/cloudflared/releases</code></td></tr>
+<tr><td>UOS 9 生态位</td><td>UOS 20 (Eagle) <code>apt</code> 源省内不一定有 cloudflared 包，故走「官方二进制 + 解压到 <span class="file">~/.local/share/dsh-cloudflared/</span>」最稳，不碰 <code>/usr</code> 权限</td></tr>
+</table>
+
+<div class="flow">
+<span class="step">① 检测系统的架构/网络</span><span class="arrow">→</span>
+<span class="step">② 择国内源下载 cloudflared</span><span class="arrow">→</span>
+<span class="step">③ 失败↓回退 GitHub / 手动路径</span><span class="arrow">→</span>
+<span class="step">④ 创建 Quick/Named 隧道</span><span class="arrow">→</span>
+<span class="step">⑤ 生成 wss 配置文本 + 复制</span>
+</div>
+
+<pre><code>// 设置页「Cloudflare 隧道」自动创建流程（伪码）
+async createTunnel(mode) {
+  const exe = ensureCloudflared()            // 国内源优先下载，ams&镜像回退
+  if (mode === 'named')
+    await loginAndCreate(showAbort)          // 需账户；可让用户填 token 或走交互
+  const url = await spawnTunnel(exe, mode)   // Quick 解析 trycloudflare.com，Named 读 ssl
+  const cfg = await buildDsh1Config(url, scheme='https')  // 归一化
+  copyToClipboard(cfg); renderStatus(url)     // 展示 wss:// 并一键复制
+}</code></pre>
+
+<div class="divider"></div>
+
+<h2>7. 边界与后续建议</h2>
+
+<ul>
+<li><b>安全</b>：隧道只在「远程访问」已启用时才会生成；App 令牌仍由 bridge 鉴权。建议面板给「生成后立即吊销/关闭」入口。</li>
+<li><b>国内源</b>：cloudflared 下载与 App APK 都走 Gitee / npmmirror 镜像，标注「国内网络优先」。</li>
+<li><b>后续增强</b>：Quick 地址漂移时，App 可加「切换 WAN 端点并重连」让体验接近“自动更新”而非手动贴新码；Named 通道可在 cloudflared 守护自拉起（systemd 或单例 double-fork）。</li>
+<li><b>真机验收</b>：涉及内核交互与公网链路，务必像既往 DSH 调试链路一样：先本地起 Quick 隧道、手机用 wss 地址连一次真机，再谈发布。</li>
+</ul>
+
+<div class="divider"></div>
+
+<p class="dim">生成环境：UOS 20 Professional / x86_64（内核 4.19）· 依据两仓真实源码（server.ts、config-text.ts、settings-adapter.ts、DshClient.kt、ConnectionShare.kt、HostStore.kt）核对。</p>
+
+</div>
+</body>
+</html>

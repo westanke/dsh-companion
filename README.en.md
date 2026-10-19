@@ -290,7 +290,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.44.apk
+DSH伴侣-companion-v2.2.45.apk
 ```
 
 Requirements:
@@ -580,21 +580,21 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.44` (`versionCode` 10069)
+- Version: `v2.2.45` (`versionCode` 10070)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
-- Unit tests: 55 test classes / 478 cases at the last run (0 failures). The counts move with the code, so
+- Unit tests: 57 test classes / 505 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.44.apk`, **3,012,936 bytes**, SHA-256
-  `9d004d81d08e7e178008c83faaeb7c39008118b916d591191903028df4e13df0` (kept in sync in
-  `artifacts/SHA256SUMS.txt`). **Released to Gitee + GitHub** (tag `v2.2.44`) — Changes in this build:
+- Current APK: `DSH伴侣-companion-v2.2.45.apk`, **3,034,832 bytes**, SHA-256
+  `6bd2634d08648f71ec5d0d32875a0228cf93f3ddaed7e013543e08c8bf9e713f` (kept in sync in
+  `artifacts/SHA256SUMS.txt`). **Released to Gitee + AtomGit** (tag `v2.2.45`) — Changes in this build:
   **specialized tool blocks** (read with a path header and line-numbered body / bash with a `$ command`
   line and dark output with ANSI stripped / edit·write with `-`/`+` diff coloring, matching the
   official Web blocks) and a **persistent permission-level pill above the composer** (same source and
   action as the ⋯ menu); chat.html parity (models grouped by vendor, tool-trajectory and statistics
   panels, `@` file completion, ▤ files aligned right, `/` command panel collapsing after send);
-  **"response truncated" notice** (needs bridge **≥ 2.4.1**); diagnostic-log switch, connection-import
+  **"response truncated" notice** (needs bridge **≥ 2.4.2**); diagnostic-log switch, connection-import
   panel, keep-at-bottom follow on opening a session
 - Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25). The key did not change, but the
   **package name did in v2.2.41**, so `v2.2.40` and earlier still require an uninstall first

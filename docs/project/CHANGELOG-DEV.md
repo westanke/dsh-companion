@@ -3,6 +3,188 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## v2.2.45 · 真机交互九条 + 交付物链接打不开（用户逐条点名，2026-10-19 晚）
+
+### 基于什么
+
+用户在真机验收后逐条提出的八项交互反馈（原话见下），全部围绕**会话页的可用性**：
+顶栏太挤、状态不直观、文件打不开、权限改不了、发送/停止混在一起。
+
+### 干了什么
+
+1. **权限 Pill 从输入区上方挪到顶栏状态行**（与「已连接」同一行）。
+   原来它 `.fillMaxWidth()` 独占一条，用户原话「影响页面可视区域」。
+   `PermissionPill` 同时改成紧凑胶囊（去掉 fillMaxWidth，可在行内使用）。
+2. **状态文案改「已连接 / 已断开」+ 绿/红圆点**。`StatusLabel` 新增
+   `activeColor` / `inactiveColor`（默认仍走主题色，零回归），连接状态传
+   `ConnectionOnlineColor`（绿）/ `ConnectionOfflineColor`（红）。
+   会话列表栏同一套；WebView（`chat/bridge.js`、`chat.html`）文案同步。
+3. **会话里的相对路径能打开了**：新增 `ui/chat/ChatLinkHandlers.kt` 承接原在
+   `ChatDetail.kt` 的链接分发；相对路径用**会话 `cwdAbsolute`** 拼成绝对路径再走
+   `roots/resolve` 正路（此前一律提示「相对路径无法定位」—— 那时没有基准，现在有）。
+   拼完仍由服务端校验，不会打开「别的文件」。
+   **不支持的类型调系统关联应用**：会话文件面板新增「用其他应用打开」——
+   下载到 `cacheDir` → `FileProvider` → `ACTION_VIEW`（新增 `res/xml/file_paths.xml`
+   与 manifest 的 provider）。覆盖「超过预览上限」与「本 App 不认的二进制」两个分支。
+4. **「追加引导」为什么一直是灰的**：它是「把输入框的内容插进**正在运行**的那一轮」，
+   判据是 `会话运行中 + 输入框有内容`。空输入时灰置是**正确行为**，但缺说明 ——
+   现在灰置时副标题改成「先在输入框写好内容，再从这里送进正在运行的那一轮」。
+5. **创建会话时可选权限档位 + 会话中可切换**：新建会话抽屉新增
+   `PermissionPresetPicker`（新文件），选好后 `createSession` 建完立刻用
+   `/permission <preset>` 切过去（与手动切**同一套机制**，不做两套语义）。
+   会话中切换沿用既有 Pill / ⋯ 菜单。
+6. **顶栏的刷新与停止收进 ⋯ 菜单**（用户要求）：顶栏只留「本会话的文件」。
+   菜单最前面新增两项（刷新 / 停止运行），停止仅在运行中可点。
+7. **输入区控件垂直居中 + 发送箭头朝上**：`Alignment.Bottom` → `CenterVertically`
+   （此前照抄网页版 flex-end，但网页输入框单行不变高，本 App 输入框 44–120dp 会变高，
+   越矮差异越刺眼）；发送图标 `Send` → `ArrowUpward`。
+8. **发送键三态**（用户规则）：有内容 → 永远发送（哪怕运行中，那是插话/排队）；
+   运行中且空 → **红色方形停止键**；空闲且空 → 灰置。抽成纯函数
+   `composerSendButton()` + 单测 `ComposerSendButtonTest` 钉住优先级。
+
+9. **权限档位文案全本地化**（用户要求：中文就全中文、英文就全英文，不要混着显示）：
+   原因是「标题走 App 本地化（中文），而描述直接来自服务端（内核英文原文）」。
+   新增 `permissionDescription(value, fallback)`，已知档位（read-only / workspace-write /
+   danger-full-access / custom）一律用 App 自己的资源；**未知档位才退回服务端原文** ——
+   自己没见过的档位，翻不了就不假装翻。`PermissionMenuItems`（Pill 与 ⋯ 菜单共用）
+   与 `PermissionPresetPicker`（创建会话）两个消费点都切过去。
+
+10. **会话里的文件链接点不开**（用户报：「我手动点都没反应」）—— 三段式根因，缺一不可：
+    ① `ChatLinkTarget.classify` 不剥 Markdown autolink 的尖括号（模型写的是
+    `[文字](</abs/path>)`），于是 `<...>` 被判成**相对路径**，绝对路径又被拼一次 cwd，
+    得到翻倍路径（实测 `PATH_NOT_FOUND path=/workspace/</media/…>`）；
+    ② `openSessionFile` **只加载数据、不开面板**（面板是 ChatDetail 的局部 `filesSheet`），
+    所以即使 resolve 成功，屏幕也一动不动；
+    ③ `UNRESOLVABLE_CODES` 把 `PATH_NOT_FOUND` 也算「打不开的正常结果」，
+    「文件没找到」被显示成「不在授权根内」，排查方向被带偏。
+    修法：`classify` 先剥尖括号；把「打开什么」交给调用方（`onOpenSessionFile` 回调，
+    ChatDetail 一并 `filesSheet = true`）；`UNRESOLVABLE_CODES` 收紧到只剩 `PATH_OUTSIDE_ROOTS`。
+    另加 `LINK openUri=…` / `PATH resolve 失败 code=…` 两条诊断日志用于二分。
+    真机实测：点击 → 面板打开并渲染 Markdown（`text/markdown · 12.2 KiB`）。
+    顺带新增 `linkifyKnownFiles`：模型只在正文写纯文件名（不是链接）时也能点开，
+    规则是「唯一文件名才替换、只换第一次、不碰已有链接」。
+
+### 顺带（bridge，姊妹仓）
+
+`chat-adapter.executeCommand` 调内核 `commands.execute` 时**少传了
+`submittedAttachments`**（内核签名四个参数），导致 signal 位错、所有斜杠命令报
+`Cannot read properties of undefined (reading 'aborted')`。这就是「会话中改不了权限」的根因。
+已修 + 桩断言补上（`tests/chat-adapter.spec.ts` 现在断言第三、四参）。
+
+### 测了什么
+
+- 新 `ComposerSendButtonTest` 3 例（有内容优先发送 / 运行中空才停止 / 空闲空则禁用）。
+- 门验：**56 类 / 496 用例 / 0 失败**、`docsCheck` 8 文档、`lintDebug` 0 error。
+- 真机（V2080A）：**需求 1/2/6/7/8 逐条截图核对通过**（顶栏「● 已连接 🔒 完整访问」、
+  输入区空且运行中显示红色方形停止键）。
+- **第二轮真机（22:21，重启 DSH 后）**：需求 5「会话中切换」✅（REST 实测
+  `{"kind":"success","text":"preset workspace-write"}`，App 侧 Pill 由「完整访问」变
+  「工作区写入」）、需求 9 ✅（菜单描述全中文，英文残留 0 处）、需求 4 ✅
+  （灰置时副标题说明「先在输入框写好内容…」）。
+- **仍未验**：需求 3 的两条路（相对路径解析 / 用其他应用打开）—— 需要一条含相对路径
+  链接的消息或一个本 App 不认的二进制文件，尚未构造。
+
+## v2.2.45 · v2.2.44 真机验收三缺陷收口（2026-10-19）
+
+### 基于什么
+
+《验收报告-v2.2.44.md》（`.verify-v2244/`，vivo V2080A 真机 5.5 小时）报 3 失败 + 4 有缺陷。
+动手前先在源码与**正在运行的 bridge** 上复核了一遍根因，发现报告里三条结论要修正。
+
+### 复核改了什么结论（重要，别照抄报告）
+
+1. **F1 比报告说的更深一层**：报告说「投影里 permissions 形状对不上」。实测
+   `GET /api/v1/chat/sessions/{id}/messages` 返回体**根本没有 `projections` 字段**
+   （top keys 只有 `events / hasMore / historyFormatVersion`），所以
+   `permissionSelect()` 的第一行就已经是 null。**候选项根本不在投影里** ——
+   内核把它放在独立远程服务 `permissionPresets.catalog()` 上（wire 视图只产 `currentValue`）。
+   推论：App 侧单改读 `preset/sandbox` **仍然拿不到 options**，必须 bridge 先补 BFF。
+2. **F3 的根因不成立**：`createSession` 其实已经把 `sessions` 写回并置了 `selectedSessionId`。
+   真正的洞是**创建路径不经过 `selectSession`**，而 `loadMentionEntries()` 只挂在
+   `selectSession` 上 —— 于是新会话后 `@` 面板永远停在「正在读取」，且**没有任何重试入口**。
+3. **F2 已结案：不是 App 缺陷，是验收时点击落空**（2026-10-19 真机现场查清）。
+   报告称「请求没到 bridge」；实测该端点 POST 正常 201、制造冲突时 409，
+   而审计 `file.create` 记在 `createEntry` **之后**（`router.ts:973`）——「无审计记录」
+   本来就推不出「请求没到」。真因是：**往对话框输入文件名后软键盘弹起，对话框上移 426px**
+   （`(834,1442)` → `(834,1016)`），用**弹起前** dump 的坐标点「创建」落在对话框之外，
+   触发 `onDismissRequest` 把它关掉 —— 全程一个请求都没发，于是「文件没建、
+   没有提示、审计无记录」三件事同时成立，完美伪装成功能坏了。
+   一锤定音的是本轮补的诊断日志（`FILE 创建条目 …` / `SEND 请求失败： …`）：
+   用正确坐标点击后日志出现、bridge 审计出现 `actor_type=device` 的 `file.create`、文件真的生成。
+   已写入 `PITFALLS.md` §键盘弹起让对话框上移。
+
+### 真机复验（2026-10-19 晚，vivo V2080A）
+
+- **F3 `@` 补全卡死：已修复**（新建会话内打 `@` → 正常列出 `.diag-shots/` 等条目，无「正在读取」）。
+- **F1 权限档位：两个断点已修复，真机确认渲染**（重启后复验）。
+  ① bridge 的 `messages` 端点原先**完全不下发 `projections`** → 新增 `readSessionProjections()`
+  并进 history（`@patch history-projections-passthrough`，新 6 例测试）。
+  ② 目录端点原报 `cannot get property "permissionPresets" without inject` ——
+  **真因不是「包没装」**（包就在核身体内，且 `/permission` 命令与投影都在正常工作），
+  而是该服务**不在插件的可注入面**；按本仓 `attachments`/`fileUploads` 那条既有结论
+  （此异常 = 「压根没有」，正确做法是**容错读取**）改用 `optionalService` + 内核默认档位降级。
+  真机实测：**Pill 显示「完整访问」、⋯ 菜单显示「权限模式 · 完整访问」**；
+  候选项来自降级清单（`workspace-write` / `danger-full-access`），档位因此可切换。
+  ③ **意外收获**：投影 `values` 里还带着 `tokenUsage` / `contextPressure` / `contextBreakdown`
+  —— App 会话统计面板至今写着「需要内核提供 usage 数据，本插件暂拿不到」，现在拿得到了，
+  留作下一轮功能点（本轮不扩范围）。
+- **W3 未保存保护：已修复**（未改动 → 点返回直接回目录；改动后 → 弹出
+  「有未保存的改动 / 关闭 / 丢弃改动 / 保存」，选「丢弃改动」后文件未被写入）。
+- **诊断浮层遮挡：已根治**（见下）。
+
+### 干了什么
+
+- **F1 权限档位（bridge + App 两侧）**：
+  - bridge：新增 `GET /api/v1/chat/permission-presets`（scope `chat.read`，与 agent-presets 同档），
+    走新 `permissionPresets` 命名空间 → 内核 `catalog()`；出网前过 `normalizePermissionCatalog()`
+    收敛形状（丢无 value 的行、缺 name 退回 value、**空串 description 不透传**）。
+    接入 `inject` 并登记 `@patch permission-presets-catalog-bff`。
+  - App：`permissionSelect(catalog)` 改为**两路合成** —— 当前值依次读
+    `currentValue` → `preset` → `sandbox`，候选项优先取投影内联、否则取目录接口；
+    候选项为空**不再整块不渲染**（Pill 与 ⋯ 菜单都改成「无选项时显示只读档位标签」）。
+    连接时取一次目录，取不到不报错（老 bridge 404 不该每次连接都弹 snackbar）。
+- **F3 `@` 补全**：两个创建会话的入口都补 `loadMentionEntries()`；`loadMentionEntries`
+  早退时置 `mentionFailed = true`（说「读不到」而不是谎称「还在读」）；面板加**重试**按钮。
+- **F2 文件创建**：静默早退改成抛错（走全局 snackbar），新错误码 `NO_ROOT_SELECTED`
+  进本地化表（中英）。真机复验：**同名冲突会显示「同名文件已经存在了」**（报告里
+  「409 也不显示」那一项由此修好）。结案结论见上文（点击落空，非 App 缺陷）。
+- **诊断日志补点（用户要求「没有记录就把记录补上」）**：在四处原本**一声不吭**的地方留痕 ——
+  ① `withClient` 无活动连接被丢弃；② `launchOperation` 代际失效连错误一起丢；
+  ③ 任何请求失败（记异常类型 + 原文）；④ `createEntry` 的入口与返回。
+  这几条直接让 F2 当场结案 —— 在此之前真机上**没有任何判据**能回答「请求到底发了没有」。
+  为使 `HarnessViewModel.kt` 回到 800 行预算内，`withClient`/`launchOperation` 一并搬到
+  新文件 `HarnessOperations.kt`（成员函数改扩展函数，调用点写法不变）。
+- **W3 未保存保护**：`OpenDocument` 加 `originalText` 与 `hasUnsavedChanges`；保存键染主色；
+  返回箭头与系统返回手势都拦（新 `UnsavedChangesDialog`，存不了时「保存」键不亮）。
+- **诊断浮层改为可拖动（第四次复发的根治）**：`DiagProbe` 加 `dragX/dragY` +
+  `detectDragGestures`，边界取自父容器实测尺寸。前三次都靠「调死坐标」让开，
+  第四次撞上**会话详情页的返回箭头**（与主页汉堡不在同一 y）—— 结论是
+  **没有一个固定坐标能对所有页面都对**，故改拖动。详见 `PITFALLS.md` 同名条目。
+- **W1 统计口径**：`sessionStatsOf` 的「轮次」只数 `source.kind == "user"`
+  （真机实测 9 条里只有 2 条是真用户），缺 `source` 的老格式按「是」处理。
+- **W2 表格行内代码**：单元格接一次行内 Markdown 渲染；`isInlineOnly()` 把含换行/管道/
+  列表/标题/围栏的单元格挡回纯文本（自绘两列布局嵌块级结构必错位）。
+- **W3 未保存保护**：`OpenDocument` 加 `originalText` 与 `hasUnsavedChanges`；保存键染主色；
+  返回箭头与系统返回手势都拦（新 `UnsavedChangesDialog`，存不了时「保存」键不亮）。
+- **拆文件（行数门禁）**：`ui/FilesScreen.kt` 858 → 735（对话框搬到 `ui/FileEntryDialogs.kt`
+  与 `ui/UnsavedChangesDialog.kt`）、`ui/chat/ChatDetail.kt` 805 → 800（权限值提为局部变量；
+  两处各算一次会出现「菜单里有、Pill 没有」）、`HarnessViewModel.kt` 817 → 774
+  （`withClient`/`launchOperation` 搬到 `HarnessOperations.kt`）。
+- W4（构建水印双值）**未动**：那需要改 Agent 侧产出的 watermark 取值口径，
+  属另一个仓的约定，本轮不动，等确认后再议。
+
+### 测了什么
+
+- 新 `PermissionProjectionTest` 7 例（新旧两种投影形状、目录兜底、内联优先、sandbox 兜底、
+  空档位名退回 value、「什么都没有」才返回 null）；
+  新 `SessionStatsAndEditorGuardTest` 8 例（注入不算轮次、老格式按用户算、行内/块级判定、
+  脏状态与非文本文件）；bridge 新 `tests/permission-presets.spec.ts` 6 例。
+- 门验：**55 类 / 493 用例 / 0 失败**；bridge `pnpm check` 全绿（39 文件 / 297 用例）。
+- bridge 那条用例**首跑就抓到实现的真 bug**：空串 `description` 被原样透传，
+  客户端会渲染出一行空白副标题 —— 已修（判据与 name 一样按非空串算）。
+- **未做**：真机复验（本轮无设备）。F2 的请求链路、W1–W3 的界面观感都**只过了单测**，
+  按本仓铁律「单测绿 ≠ 行为对」，出包后必须再上机。
+
 ## v2.2.44（versionCode 10069）· 工具专用块 + 权限档位 Pill：对标官方 Web 第一梯队（2026-10-18）
 
 ### 基于什么

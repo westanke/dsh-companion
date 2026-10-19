@@ -1,4 +1,24 @@
 - 日期：2026-10-19
+- **已发版 v2.2.45（versionCode 10070，2026-10-19）**：真机验收三缺陷收口 + 用户逐条点名的九项交互整改
+  + 交付物链接打不开。产物 `DSH伴侣-companion-v2.2.45.apk`，**3,034,832 字节**，
+  SHA-256 `6bd2634d08648f71ec5d0d32875a0228cf93f3ddaed7e013543e08c8bf9e713f`；
+  门验 **57 类 / 505 用例 / 0 失败** + docsCheck 8 文档 + lintDebug 0 error；
+  需 bridge **≥ 2.4.2**（投影透传 + 权限档位 BFF + 斜杠命令执行修复）。
+- **上一版收口记录（v2.2.44 真机验收三缺陷）**：验收报告报 3 失败 + 4 有缺陷，
+  动手前先在源码与**正在运行的 bridge** 上复核根因，修正了报告里三条结论（详见 `CHANGELOG-DEV.md` 顶部条目）：
+  ① **F1 权限档位**：实测 `messages` 端点返回体**没有 `projections` 字段**，候选项在独立远程服务
+  `permissionPresets.catalog()` 上 —— 故 App 侧单改读 `preset/sandbox` 并不够，
+  **bridge 已补 `GET /api/v1/chat/permission-presets` BFF**，App 改为「当前值取投影 + 候选项取目录」两路合成，
+  且候选项为空时仍显示当前档位（老 bridge 降级为只读标签，不再整块消失 —— 这正是 v2.2.44 真机的症状）。
+  ② **F3 `@` 补全卡死**：真实原因不是报告说的「会话没进列表」，而是**创建路径不经过 `selectSession`**，
+  而 `loadMentionEntries()` 只挂在它上面；两个创建入口都已补调用，并给面板加了重试按钮。
+  ③ **F2 文件创建静默失败**：端点实测正常（201 / 409 均有），报告推不出「请求没发出」；
+  已修的是**错误不可见**（静默早退改抛错走 snackbar）。**请求未达 bridge 那一层仍未定位，待真机复测。**
+  另修 W1（统计轮次只数 `source.kind == "user"`）、W2（表格单元格走行内渲染）、W3（未保存保护 + 返回拦截）。
+  **W4（构建水印双值）未动**，属 Agent 侧 watermark 口径，需先确认再议。
+  门验：**55 类 / 493 用例 / 0 失败**；bridge `pnpm check` 全绿（39 文件 / 297 用例）。
+  **真机复验未做**（本轮无设备）—— 单测绿 ≠ 行为对，出包后必须再上机。
+- 日期：2026-10-19
 - **已发版 v2.2.44（versionCode 10069，2026-10-19）**：**工具专用块 + 权限档位 Pill + chat.html 对标补全 + 会话页存量修复**。已双推 origin + gitee、打 tag `v2.2.44`、双站 Release 与 APK 已上传。
   - **工具专用块 + 权限档位 Pill**（依据 `workspace/资料调研/官方Web界面与APP功能对比_2026-10-18.md`）：
     ① `data/ChatToolBlocks.kt` 按 name 分发 Read / Terminal / Diff / Generic（bash 71% / edit 9% /
