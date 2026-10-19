@@ -45,11 +45,21 @@
 ## 2. 命令（本地唯一可信口径）
 
 ```sh
+bash scripts/release.sh             # 发版·阶段 A：检查 → 门禁 → 打包 → 回填真实数据
+bash scripts/release.sh --publish   # 发版·阶段 B：tag → 双推 → 两站 Release → 全渠道回读
 scripts/build.sh                    # 默认 assembleDebug
 scripts/build.sh assembleRelease    # 发布包
 scripts/build.sh :app:testDebugUnitTest   # 单元测试
 scripts/build.sh docsCheck          # 文档一致性（8 文档 / ROADMAP 任务状态 / STATUS 引用）
 ```
+
+> **发版走 `scripts/release.sh`，不要手敲清单**。它按 `RELEASE.md` 的顺序铁律**分成两阶段**：
+> 回填真实数据发生在提交**之前**（⑤→⑥→⑦），一口气跑到底会让 tag 指向一份
+> 「文档还是旧数字」的提交。回填由 `scripts/backfill-release.py` 做锚点式精确替换 ——
+> **不许改回全局正则**：那会把 README 里 v2.2.41 / v2.2.40 这些历史版本记录一并改成当前版本。
+> 本仓最高频的失分点是 README 双站漂移（`docsCheck` 不覆盖 README，v2.2.33–v2.2.35 连续三版漂过），
+> 这个脚本就是为它兜底的。姊妹仓 `dsh-remote-bridge` 的同名脚本是**一次跑完**（没有回填环节），
+> 两边的阶段数不同是**刻意**的，别互相对齐。
 
 **为什么必须用 `scripts/build.sh` 而不是 `./gradlew`**（三条理由都在 `scripts/build.sh` 头注释里）：
 1. `gradle-wrapper.properties` 指向 `services.gradle.org`，国内不可达，且 wrapper 失败**不报错、只挂起**；
