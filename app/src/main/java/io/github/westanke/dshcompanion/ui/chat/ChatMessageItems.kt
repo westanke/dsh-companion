@@ -479,7 +479,11 @@ internal fun AssistantBody(
 
 ) {
 
-    val segments = remember(body) { splitMessageBody(body) }
+    // 先规范化表格再切段：模型常把表格紧贴在标题行下面（中间没空行），
+    // intellij-markdown 会把整坨吃成普通段落（竖线原样显示）。见 ChatMarkdownNormalize.kt。
+    // 注意 plain 分支渲染的也是这份文本，而不是原始 body。
+    val normalizedBody = remember(body) { normalizeMarkdownTables(body) }
+    val segments = remember(normalizedBody) { splitMessageBody(normalizedBody) }
 
     // 诊断必须独立于渲染分支算：只有这样才能暴露「解析器说成功、屏幕上却没有卡片」这类不一致。
 
@@ -493,7 +497,7 @@ internal fun AssistantBody(
 
             Markdown(
 
-                content = body,
+                content = normalizedBody,
 
                 typography = compactMarkdownTypography(),
                 flavour = GFMFlavourDescriptor(),

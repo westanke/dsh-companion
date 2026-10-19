@@ -150,7 +150,7 @@ web/           ← WebView 容器（chat.html 兜底路径）
 
 | 层 | 命令 | 说明 |
 |---|---|---|
-| 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 57 类 / 505 用例（随代码变化，勿当常量） |
+| 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 58 类 / 516 用例（随代码变化，勿当常量） |
 | 文档 | `scripts/build.sh docsCheck` | 8 文档 / ROADMAP 任务 / STATUS 引用一致性 |
 | 真机 | 人工 | **单测绿 ≠ 行为对**。涉及手势、键盘、WebView、耗电、断流的一律要真机确认 |
 
@@ -203,6 +203,7 @@ web/           ← WebView 容器（chat.html 兜底路径）
 - `诊断浮层贴在 TopStart：连撞四个导航入口（已改为可拖动）`
 - `Markdown autolink 的尖括号目标被当成相对路径`
 - `客户端自渲染 ≠ 内核会替你画：两处注释都以为对方在画`
+- `表格贴上一行：intellij-markdown 不认无空行 GFM 表格`
 
 > 新坑位：名字加进上面清单 + 原文写进 `PITFALLS.md` 并补 `### 同名` 锚点。
 

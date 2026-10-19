@@ -161,4 +161,28 @@ class ChatMarkdownTableTest {
         assertNull(parseMarkdownTable("就是一段普通文字，没有表格。"))
         assertNull(parseMarkdownTable("| 只有一个竖线行"))
     }
+
+    /**
+     * 三列数据表的第一列是**有完整内容的实体名**（如「内核 `@deepseek-ai/dsh` 0.2.0-rc.2」），
+     * 不是字段名，解析时必须原样保留 —— 布局层据此让它自然折行而不是省略成「@deepseek-...」。
+     * 守的是 2026-10-20 真机「内核包名被省略号吃掉」那条残留问题。
+     */
+    @Test
+    fun `three column table keeps the full first cell instead of treating it as a label`() {
+        val table = parseMarkdownTable(
+            """
+            | 层 | 安装形态 | 升级方式 |
+            |---|---|---|
+            | 内核 `@deepseek-ai/dsh` 0.2.0-rc.2 | npm 全局 | `npm i -g @deepseek-ai/dsh@0.2.1-rc.2` |
+            | 桌面壳 v0.2.19 | deb（/opt，root） | 已是最新 release，不用动 |
+            | 插件（web profile） | pnpm | `dsh plugin --profile web ...` |
+            """.trimIndent(),
+        )
+        assertNotNull(table)
+        assertEquals(listOf("层", "安装形态", "升级方式"), table!!.header)
+        assertEquals(3, table.rows.size)
+        // 第一列整串必须在，不能在数据层就丢字（省略只允许发生在两列字段表的 UI 层）。
+        assertEquals("内核 `@deepseek-ai/dsh` 0.2.0-rc.2", table.rows[0][0])
+        assertEquals("插件（web profile）", table.rows[2][0])
+    }
 }

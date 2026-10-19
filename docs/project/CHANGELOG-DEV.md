@@ -3,6 +3,44 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## 未发版 · Markdown 表格贴行不渲染（真机截图反馈，2026-10-20）
+
+### 基于什么
+
+用户真机截图：一张本该是表格的内容显示成一长串带竖线 `|` 的文字，竖线原样、换行被折叠。
+会话「DSH 全局命令升级研究」（2026-10-19 23:41）。
+
+### 根因（取模型原文 + 同款解析器 AST 对照，非猜测）
+
+- bridge（`chat-adapter.ts`）原样透传 `rawChunk.text`、App 拼接（`LiveChatState.append`）纯字符串相加不 trim，
+  传输层换行没丢；从内核 `session.v4.jsonl.zstd` 取出的模型原文换行完整，但标题行与表头间**没有空行**：
+  `**三层结构**` 紧接 `| 层 | … |`。
+- App 底层解析器 org.intellij.markdown（markdown-jvm 0.7.3）对「表格头紧贴上一行、无空行」**不产出 TABLE 节点**，
+  整表并入上一个 PARAGRAPH → 竖线变纯文本。GFM/GitHub 允许这种紧凑写法，这颗解析器更严格。
+  对照实验（同款 0.7.3 jar）：只补表头前一个空行即出 TABLE；后边界 / 文档开头 / 围栏内伪表格均不受影响。
+
+### 干了什么
+
+1. 新增 `ui/chat/ChatMarkdownNormalize.kt`：`normalizeMarkdownTables()` 渲染前只补「表格前边界」空行；
+   跳过围栏代码块（```` ``` ```` / `~~~` 同种符号闭合状态机）；流式安全（分隔行未到不补）；幂等。带 `@patch` 五要素
+   （id `glued-gfm-table-needs-blank-line`，因第三方解析器行为写的适配）。
+2. `ChatMessageItems.kt` 的 `AssistantBody` 最前接入，**plain 整段与切段 prose 两个分支都用规范化文本**
+   （第一版只改 segments，但现场消息无 dsh-ui 围栏走 plain，差点白修）。
+3. 连带修真机发现的残留：三列及以上数据表第一列是实体名（如「内核 `@deepseek-ai/dsh` 0.2.0-rc.2」），
+   原被两列「字段名窄列（104dp / 两行省略）」吃掉显示成 `@deepseek-...`；`ChatMarkdownTable.kt` 改为
+   **仅 ≥3 列时第一列也按权重列自然折行**，两列 Whaleness 定稿布局不动。
+4. 文档：PITFALLS 新增「表格贴上一行：intellij-markdown 不认无空行 GFM 表格」+ AGENTS §7 索引；
+   README 中英双站 + AGENTS §5 测试数 505→516（57→58 类）。
+
+### 测了什么
+
+- 新增 `ChatMarkdownNormalizeTest`（10 例：补行 / 幂等 / 文档开头 / 无分隔行不动 / 围栏内不动 / 流式半截 /
+  后边界 / 对齐冒号 / 尾换行，外加同款解析器「修复前 PARAGRAPH、修复后 TABLE」端到端断言）；
+  `ChatMarkdownTableTest` 加三列首列完整性 1 例。
+- 门验：`testDebugUnitTest` **58 类 / 516 用例 / 0 失败**、`docsCheck` 过、`lintDebug` 0 error、assembleDebug 成功。
+- **真机已复验**（V2080A，2026-10-20 07:24 包装机）：历史会话原表格显示为带边框三列真表格，三行完整，
+  第一列包名完整换行、无省略、无横向截断。
+
 ## v2.2.45 · 真机交互九条 + 交付物链接打不开（用户逐条点名，2026-10-19 晚）
 
 ### 基于什么

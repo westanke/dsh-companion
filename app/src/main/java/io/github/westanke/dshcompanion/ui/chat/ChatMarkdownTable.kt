@@ -176,8 +176,8 @@ private fun TableRow(cells: List<String>, isHeader: Boolean, showBottomDivider: 
                         color = MaterialTheme.colorScheme.outlineVariant,
                     )
                 }
-                if (columnIndex == 0) {
-                    // 第一列是字段名：窄列、最多两行、超出省略。
+                if (columnIndex == 0 && cells.size < 3) {
+                    // 两列表的第一列是字段名：窄列、最多两行、超出省略（Whaleness 定稿布局，勿动）。
                     Text(
                         cell,
                         modifier = Modifier.widthIn(max = LABEL_MAX_WIDTH).padding(start = 10.dp),
@@ -190,6 +190,32 @@ private fun TableRow(cells: List<String>, isHeader: Boolean, showBottomDivider: 
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.labelMedium,
                     )
+                } else if (columnIndex == 0) {
+                    // 三列及以上的数据表：第一列是有完整内容的实体（如「内核
+                    // @deepseek-ai/dsh 0.2.0-rc.2」），不能套字段名窄列把它省略掉。
+                    // 与其余列同权、自然折行，只保留左侧留白；颜色仍区分表头/数据。
+                    Box(Modifier.weight(1f).padding(start = 10.dp, end = 8.dp)) {
+                        val text = cell.ifBlank { "—" }
+                        if (isInlineOnly(text)) {
+                            Markdown(
+                                content = text,
+                                typography = compactMarkdownTypography(),
+                                flavour = GFMFlavourDescriptor(),
+                                components = chatMarkdownComponents,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        } else {
+                            Text(
+                                text,
+                                color = if (isHeader) {
+                                    MaterialTheme.colorScheme.onSurface
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
                 } else {
                     // 其余列是值：吃掉剩余宽度、自然折行。
                     Box(Modifier.weight(1f).padding(end = 10.dp)) {

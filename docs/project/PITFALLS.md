@@ -695,3 +695,62 @@ match: (event) => event.type === "turn/end" && event.data.reason.kind === "max-t
 **教训**：凡是注释里出现「XX 会渲染 / XX 会处理」的跨组件假设，
 **必须能指出那一行代码**。指不出来，就是两边都没做。
 本项目已因为同类误判踩过一次（`SelectionContainer` 那条空头支票），这次是第二次。
+
+### 表格贴上一行：intellij-markdown 不认无空行 GFM 表格
+
+**症状**（2026-10-20 真机截图）：模型输出了一张合法的 GFM 表格，但 App 里
+**没有表格结构**，竖线 `|` 原样显示成一长串文字，换行被折叠成空格：
+
+```
+三层结构 | 层 | 安装形态 | 升级方式 | |---|----|---||---
+内核 ... | npm 全局 ... | npm i -g ... |
+```
+
+**根因：不是换行丢了，是解析器压根没把它当表格。**
+
+先怀疑过「delta 传输把 `\n` 炖没了」，查了 bridge（`chat-adapter.ts` 原样透传
+`rawChunk.text`）与 App 拼接（`LiveChatState.append` 纯字符串相加，不 trim），
+都干净。最后从内核会话存储 `session.v4.jsonl.zstd` 取出**模型原文**，换行一个不缺，
+但标题行与表头之间**没有空行**：
+
+```
+**三层结构**
+| 层 | 安装形态 | 升级方式 |
+|---|---|---|
+```
+
+App 用的 `org.intellij.markdown`（markdown-jvm 0.7.3，`com.mikepenz.markdown` 的底层）
+在这种「表格头紧贴上一行、中间无空行」的写法下**不产出 TABLE 节点**——
+表格行被并进上一个 PARAGRAPH，于是竖线变纯文本。GitHub 网页端能渲染，是因为
+GFM 允许这种紧凑写法，**这颗解析器比 GitHub 更严格**。
+
+**实测对照**（同款 0.7.3 jar，证据脚本在工作区 `研究类/table-debug/Probe.java`、
+`Probe2.java`）：
+
+| 输入形态 | AST 结果 |
+|---|---|
+| 普通行紧接表格头（无空行） | 只有 PARAGRAPH，**无 TABLE** |
+| 表头前补一个空行 | 正常 TABLE |
+| 文档开头直接是表格 | TABLE（无需补） |
+| 表格**后**面紧贴文字 | TABLE（后边界不影响） |
+| 围栏代码块里的伪表格 | 不受影响（也不该动） |
+
+**修法**：渲染前规范化，只补「前边界」这一个空行 —— 新增
+`ui/chat/ChatMarkdownNormalize.kt` 的 `normalizeMarkdownTables()`：
+- 识别「本行像表格行 + 下一行是 `---|---` 分隔行」且上一行非空 → 在前面插一个空行；
+- **跳过围栏代码块内部**（```` ` / `~~~` 状态机，只认同种符号闭合），否则会破坏代码内容；
+- 流式安全：分隔行未到达时不补，避免半截表格期间空行抖动；
+- 幂等：已有空行不重复插。
+- 接在 `AssistantBody` 最前面（`ChatMessageItems.kt`），**plain 分支也要用规范化后的文本**——
+  第一版只改了 segments，而现场这条消息没有 dsh-ui 围栏、走的正是 plain 分支，差点白修。
+
+这是因第三方解析器行为写的适配，按 AGENTS.md §4.3 带 `@patch` 五要素
+（id `glued-gfm-table-needs-blank-line`），`ArchitectureGuardTest` 机检。
+
+**教训**：
+1. 「显示成一坨竖线」先别赖传输，**取模型原文**核对换行，再用**同款解析器**跑 AST 对照——
+   渲染问题的证据在 AST，不在猜测。
+2. 改渲染前处理，必须确认覆盖**所有渲染分支**（plain 整段 / 切段后 prose），漏一个分支就是
+   「修了但现场没好」。
+3. 客户端自渲染路线上，第三方 markdown 解析器与 GitHub 的方言差异要靠客户端兜，
+   不能指望模型永远输出最保守的写法。
