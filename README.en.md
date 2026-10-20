@@ -152,7 +152,7 @@ that `dsh-hyperframes` and `dsh-remotion` are installed but not enabled.
 >
 > **Three-way version table (added 2026-10-20)**: this app reaches the DSH kernel **only through**
 > `dsh-remote-bridge` (≥ 2.4.1) and never connects to the kernel directly. The verified combination is
-> "App v2.2.45 ↔ bridge 2.4.2 ↔ DSH 0.2.0-rc.2 / 0.2.1-rc.2" — all 10 host-service `inject` entries of
+> "App v2.2.46 ↔ bridge 2.4.3 ↔ DSH 0.2.0-rc.2 / 0.2.1-rc.2" — all 10 host-service `inject` entries of
 > the bridge still exist with unchanged signatures on 0.2.1-rc.2 (see
 > `dsh-remote-bridge/docs/project/DSH-0.2.1-ADAPTATION.md`). The kernel's new
 > `session/working-directory/{get,set}` belongs to the **SDK profile**, which the bridge does not pass
@@ -299,7 +299,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.45.apk
+DSH伴侣-companion-v2.2.46.apk
 ```
 
 Requirements:
@@ -589,25 +589,32 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.45` (`versionCode` 10070)
+- Version: `v2.2.46` (`versionCode` 10071)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
 - Unit tests: 59 test classes / 524 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.45.apk`, **3,034,832 bytes**, SHA-256
-  `6bd2634d08648f71ec5d0d32875a0228cf93f3ddaed7e013543e08c8bf9e713f` (kept in sync in
-  `artifacts/SHA256SUMS.txt`). **Released to Gitee + AtomGit** (tag `v2.2.45`) — Changes in this build:
+- Current APK: `DSH伴侣-companion-v2.2.46.apk`, **3,060,492 bytes**, SHA-256
+  `2451335fa3ec4f9024423aa01a0470afa15f5e66730774d8eb60930f1cc288c2` (kept in sync in
+  `artifacts/SHA256SUMS.txt`). **Released to Gitee + AtomGit** (tag `v2.2.46`) — Changes in this build:
   **specialized tool blocks** (read with a path header and line-numbered body / bash with a `$ command`
   line and dark output with ANSI stripped / edit·write with `-`/`+` diff coloring, matching the
   official Web blocks) and a **persistent permission-level pill above the composer** (same source and
   action as the ⋯ menu); chat.html parity (models grouped by vendor, tool-trajectory and statistics
   panels, `@` file completion, ▤ files aligned right, `/` command panel collapsing after send);
+  **background-jobs panel** (session ⋯ menu → "Background jobs", needs bridge **≥ 2.4.3**: a long
+  task started from the phone used to be invisible and unstoppable once you left the computer — you
+  can now see the roster with status badges, runtime, progress and terminal reason, expand the
+  retained output as monospace text (and are told explicitly when `lossy` means it is **not** the
+  whole output), and kill a job behind a confirmation dialog; `already-finished` reads "it already
+  finished — nothing to do" rather than "killed". The entry is gated on the `job-list-v1` capability
+  bit, so an older bridge simply does not show it instead of opening onto a 404);
   **"response truncated" notice** (needs bridge **≥ 2.4.1**); diagnostic-log switch, connection-import
   panel, keep-at-bottom follow on opening a session
 - Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25). The key did not change, but the
   **package name did in v2.2.41**, so `v2.2.40` and earlier still require an uninstall first
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)
 - License: [GNU Affero General Public License v3.0](./LICENSE)
-- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.7** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+; **approval and question cards need 2.3.7+**; gap resync / subscription baseline / live deliverable cards need 2.3.8+)
+- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.7** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+; **approval and question cards need 2.3.7+**; gap resync / subscription baseline / live deliverable cards need 2.3.8+; **the background-jobs panel needs 2.4.3+**)
   (formerly [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace))

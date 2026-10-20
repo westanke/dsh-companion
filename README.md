@@ -142,7 +142,7 @@ Host        一台电脑：名字、凭据、若干地址、上次成功用的�
 > 修复方式是给可选字段补默认值，使**单个字段缺失不再拖垮整个列表**。
 >
 > **三方版本对照（2026-10-20 补）**：本 App 通过 `dsh-remote-bridge`（≥ 2.4.1）间接使用 DSH 内核，
-> **不直接连内核**。已核对的组合是「App v2.2.45 ↔ bridge 2.4.2 ↔ DSH 0.2.0-rc.2 / 0.2.1-rc.2」——
+> **不直接连内核**。已核对的组合是「App v2.2.46 ↔ bridge 2.4.3 ↔ DSH 0.2.0-rc.2 / 0.2.1-rc.2」——
 > bridge 的 10 项宿主服务 `inject` 在 0.2.1-rc.2 上全部仍存在且签名未变（详见
 > `dsh-remote-bridge/docs/project/DSH-0.2.1-ADAPTATION.md`）。内核 0.2.1 新增的
 > `session/working-directory/{get,set}` 属 **SDK profile** 能力，bridge 侧尚未透出，故本 App
@@ -290,7 +290,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.45.apk
+DSH伴侣-companion-v2.2.46.apk
 ```
 
 安装要求：
@@ -536,22 +536,22 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.45`（`versionCode` 10070）
+- 当前版本：`v2.2.46`（`versionCode` 10071）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：59 个测试类 / 524 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.45.apk`，**3,034,832 字节**，
-  SHA-256 `6bd2634d08648f71ec5d0d32875a0228cf93f3ddaed7e013543e08c8bf9e713f`（`artifacts/SHA256SUMS.txt` 同步）。
-  **已发 Gitee + AtomGit**（tag `v2.2.45`）——
-  本版改动：**工具调用专用块**（read 路径头 + 行号正文 / bash `$ 命令` + 暗底输出（ANSI 已剥）/
-  edit·write `-`/`+` 对照，对标官方 Web 专用块）与**发送区常驻权限档位 Pill**（与 ⋯ 菜单同源同动作）；
-  chat.html 对标补全（模型按厂家树型分组、工具轨迹与统计面板、`@` 文件补全、▤ 文件靠右、
-  `/` 命令面板发送后落回）；**「回答被截断」提示**（需 bridge **≥ 2.4.1**）；
-  诊断日志开关、连接导入面板、进会话落底跟随
+- 当前 APK：`DSH伴侣-companion-v2.2.46.apk`，**3,060,492 字节**，
+  SHA-256 `2451335fa3ec4f9024423aa01a0470afa15f5e66730774d8eb60930f1cc288c2`（`artifacts/SHA256SUMS.txt` 同步）。
+  **已发 Gitee + AtomGit**（tag `v2.2.46`）——
+  本版改动：**后台任务面板**（会话 ⋯ 菜单 →「后台任务」，需 bridge **≥ 2.4.3**）——
+  远程场景下任务跑飞了看不到也停不掉，现在能看清单（状态徽标 / 运行时长 / 进度 / 终态原因）、
+  展开已保留输出（等宽文本，`lossy` 时明说「这段不完整」）、终止（带确认框；已是终态时显示
+  「它已经结束了，不用再管」而不是「已终止」）。按 `job-list-v1` 能力位显示入口，
+  老 bridge 上该入口不出现（而不是点进去看 404）
 - 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用。证书没变，但 **v2.2.41 起包名变了**，
   `v2.2.40` 及更早仍需先卸载）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)
 - 许可证：[GNU Affero General Public License v3.0](./LICENSE)
-- 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.7**（「加载更早消息」需要 2.3.1+；「插件」页清单与启停需要 2.3.2+ / 2.3.3+；**审批 / 问答卡片需要 2.3.7+**；**断档重同步 / 订阅基线 / 交付物实时卡片需要 2.3.8+**）
+- 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.7**（「加载更早消息」需要 2.3.1+；「插件」页清单与启停需要 2.3.2+ / 2.3.3+；**审批 / 问答卡片需要 2.3.7+**；**断档重同步 / 订阅基线 / 交付物实时卡片需要 2.3.8+**；「回答被截断」提示需 bridge **≥ 2.4.1**；后台任务面板需 bridge **≥ 2.4.3**）
   （旧名 [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace)）

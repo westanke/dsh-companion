@@ -801,8 +801,18 @@ android {
         //   测了什么：57 类 / 505 用例 / 0 失败；docsCheck 8 文档；lintDebug 0 error；
         //     真机逐条核对（顶栏、状态点、Pill 切换、停止键、文件打开、权限菜单全中文）。
         //   未做：「用其他应用打开」未真机验证（缺 docx/zip 素材）；桥最低版本升到 2.4.2。
-        versionCode = 10070
-        versionName = "2.2.45"
+        // v2.2.46（versionCode 10071）：**后台任务面板**（会话 ⋯ 菜单 →「后台任务」）。
+        //   基于什么：远程场景下「任务跑飞了看不到也停不掉」——人在外面，卡住的 bash 任务只能干等。
+        //     服务端先行：bridge 2.4.3 新增 /chat/sessions/{id}/jobs 三端点 + 三个能力位。
+        //   干了什么：data/JobViews.kt（wire 数据）+ DshClient 三方法 + supportsSessionJobs
+        //     能力位判据 + JobsPanelState/HarnessJobsViewModel（开面板/读清单/终止/展开输出）
+        //     + ChatJobsSheet（任务卡、状态徽标、运行时长、输出等宽区、终止确认、手动刷新）。
+        //     不做实时推送：服务端就是 REST 只读一帧，不为「看起来实时」在手机上挂轮询。
+        //   测了什么：59 类 / 524 用例 / 0 失败；docsCheck 8 文档 + README 双站 14 项；
+        //     lintDebug 0 error；真机验收入口/清单/输出/刷新全绿。
+        //   未做：终止确认框未真机点到（本机没有 running 任务）。
+        versionCode = 10071
+        versionName = "2.2.46"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。

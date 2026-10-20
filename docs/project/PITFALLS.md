@@ -166,6 +166,7 @@ sha256sum artifacts/DeepSeek-Harness-companion-v*.apk              # 摘要
 | 斜杠命令可用（`commands.execute` 四参数） | **2.4.0** |
 | 「回答被截断」提示（`turn/end` 透传 `reason.kind == 'max-tokens'`） | **2.4.1** |
 | 会话权限档位 Pill / 待办与工具轨迹读投影（`history` 透传 `projections`、权限目录 BFF） | **2.4.2** |
+| **后台任务面板（`/chat/sessions/{id}/jobs` 三端点 + `job-list-v1` 能力位）** | **2.4.3** |
 
 **DSH 内核版本基线**（2026-10-20 补，App 不直连内核，此栏仅用于服务端排错定位）：
 
