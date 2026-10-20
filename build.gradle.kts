@@ -1,6 +1,9 @@
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.file.RegularFileProperty
 import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.TaskAction
 
 plugins {
@@ -16,9 +19,31 @@ abstract class DocsCheckTask : DefaultTask() {
     /** 仓库根目录（docs/project 的上一级）。根 README 与 app/build.gradle.kts 都在它下面，
      *  所以必须显式传进来——直接在任务类里写 layout.projectDirectory 会让 Kotlin 把
      *  layout 解析到脚本外层作用域，嵌套类因此捕获脚本实例，Gradle 会以
-     *  "Class Build_gradle.DocsCheckTask is a non-static inner class" 拒绝创建任务。 */
-    @get:InputDirectory
+     *  "Class Build_gradle.DocsCheckTask is a non-static inner class" 拒绝创建任务。
+     *
+     *  ⚠️ 必须标 **@Internal 而不是 @InputDirectory**（2026-10-20 CI 实锤）：
+     * 仓库根目录**包含** app/build/，Gradle 9.5 的隐式依赖检查会认为本任务
+     * 消费了 :app:generateDebugResources / processDebugNavigationResources /
+     * generateDebugBuildConfig 的输出，于是报
+     * "uses this output of task ':app:xxx' without declaring an explicit or implicit dependency"
+     * 而**直接失败**。本地因为 `scripts/build.sh` 的任务图不同而不复现，只有 CI 挂。
+     *
+     * 改成 @Internal 后，Gradle 不再把它当输入；真正被读的那几个文件在下面
+     * 单独用 @InputFile 声明 —— 依赖关系准确，且不会有「整棵目录算输入」的副作用。 */
+    @get:Internal
     abstract val repoDirectory: DirectoryProperty
+
+    /** 本任务实际读取的根级文件（声明为输入，让 Gradle 知道变化）。
+     *  刻意**只声明这几个文件**而不是根目录：声明目录会把 app/build/ 一起算进去，
+     *  触发上面那条隐式依赖检查。 */
+    @get:InputFile
+    abstract val rootReadme: RegularFileProperty
+
+    @get:InputFile
+    abstract val rootReadmeEn: RegularFileProperty
+
+    @get:InputFile
+    abstract val appBuildGradle: RegularFileProperty
 
     /** 根 README 侧新增检查项的计数，最后统一汇总打印。
      *  每条断言都走 verify()：既计数又 check()，「解析类」断言在一条都没匹配到时同样会红。 */
@@ -186,4 +211,7 @@ tasks.register<DocsCheckTask>("docsCheck") {
     description = "Checks the persistent Android project tracking documents."
     docsDirectory.set(layout.projectDirectory.dir("docs/project"))
     repoDirectory.set(layout.projectDirectory)
+    rootReadme.set(layout.projectDirectory.file("README.md"))
+    rootReadmeEn.set(layout.projectDirectory.file("README.en.md"))
+    appBuildGradle.set(layout.projectDirectory.file("app/build.gradle.kts"))
 }
