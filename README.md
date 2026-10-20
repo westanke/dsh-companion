@@ -290,7 +290,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.46.apk
+DSH伴侣-companion-v2.2.47.apk
 ```
 
 安装要求：
@@ -536,19 +536,23 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.46`（`versionCode` 10071）
+- 当前版本：`v2.2.47`（`versionCode` 10072）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：60 个测试类 / 542 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.46.apk`，**3,060,492 字节**，
-  SHA-256 `2451335fa3ec4f9024423aa01a0470afa15f5e66730774d8eb60930f1cc288c2`（`artifacts/SHA256SUMS.txt` 同步）。
-  **已发 Gitee + AtomGit**（tag `v2.2.46`）——
-  本版改动：**后台任务面板**（会话 ⋯ 菜单 →「后台任务」，需 bridge **≥ 2.4.3**）——
-  远程场景下任务跑飞了看不到也停不掉，现在能看清单（状态徽标 / 运行时长 / 进度 / 终态原因）、
-  展开已保留输出（等宽文本，`lossy` 时明说「这段不完整」）、终止（带确认框；已是终态时显示
-  「它已经结束了，不用再管」而不是「已终止」）。按 `job-list-v1` 能力位显示入口，
-  老 bridge 上该入口不出现（而不是点进去看 404）
+- 当前 APK：`DSH伴侣-companion-v2.2.47.apk`，**3,061,356 字节**，
+  SHA-256 `f33b3ee3e1b2f0e6885e0130e27629931f3883a1866bd77334bf11744fb14370`（`artifacts/SHA256SUMS.txt` 同步）。
+  **已发 Gitee + AtomGit**（tag `v2.2.47`）——
+  本版改动：**正文里带位置的文档链接点开不再报「找不到这个路径」**。
+  模型引用文档几乎总带位置 ——`docs/project/STATUS.md:1`、`/abs/STATUS.md#L101`、
+  `src/a.ts:12:5` 都是常见写法，而此前这些后缀被当成路径的一部分原样发给服务端
+  （文件名里真的多了个 `#L101`），`roots/resolve` 只能回「不是普通文件」。
+  现在 `:1` / `:12-34` / `:12:5` / `#L101`（大小写不敏感）在发给服务端之前剥掉：
+  绝对路径在分类时剥、相对路径在拼工作目录之前剥；只剥**确定形态**、最多剥两段、剥成空串则不剥。
+  同时修掉同源缺陷：相对路径里的冒号曾被当成 scheme 分隔符，`docs/x.md:1` 直接判成
+  「未知协议」，连拼工作目录的机会都没有。`https://e.com/a#L1` 的页内跳转与
+  `http://host:8080` 的端口**刻意不动**
 - 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用。证书没变，但 **v2.2.41 起包名变了**，
   `v2.2.40` 及更早仍需先卸载）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)

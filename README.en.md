@@ -299,7 +299,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.46.apk
+DSH伴侣-companion-v2.2.47.apk
 ```
 
 Requirements:
@@ -589,15 +589,25 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.46` (`versionCode` 10071)
+- Version: `v2.2.47` (`versionCode` 10072)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
 - Unit tests: 60 test classes / 542 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.46.apk`, **3,060,492 bytes**, SHA-256
-  `2451335fa3ec4f9024423aa01a0470afa15f5e66730774d8eb60930f1cc288c2` (kept in sync in
-  `artifacts/SHA256SUMS.txt`). **Released to Gitee + AtomGit** (tag `v2.2.46`) — Changes in this build:
+- Current APK: `DSH伴侣-companion-v2.2.47.apk`, **3,061,356 bytes**, SHA-256
+  `f33b3ee3e1b2f0e6885e0130e27629931f3883a1866bd77334bf11744fb14370` (kept in sync in
+  `artifacts/SHA256SUMS.txt`). **Released to Gitee + AtomGit** (tag `v2.2.47`) — Changes in this build:
+  **document links with a location suffix no longer fail to open.** Model replies almost always cite
+  docs with a position — `docs/project/STATUS.md:1`, `/abs/STATUS.md#L101`, `src/a.ts:12:5` — and those
+  suffixes used to be sent to the server as part of the path (the filename really did acquire a
+  `#L101`), so `roots/resolve` could only answer "not a regular file". Now `:1` / `:12-34` / `:12:5` /
+  `#L101` (case-insensitive) are stripped **before** the path goes out: absolute paths at classify
+  time, relative paths before joining the session cwd; only the certain forms, at most two segments,
+  and never down to an empty string. The sibling defect is fixed too: a colon in a relative path used
+  to be read as a scheme separator, so `docs/x.md:1` was classified as "unknown scheme" and never got
+  the chance to be joined to the cwd. `https://e.com/a#L1` (in-page anchor) and `http://host:8080`
+  (port) are deliberately untouched
   **specialized tool blocks** (read with a path header and line-numbered body / bash with a `$ command`
   line and dark output with ANSI stripped / edit·write with `-`/`+` diff coloring, matching the
   official Web blocks) and a **persistent permission-level pill above the composer** (same source and

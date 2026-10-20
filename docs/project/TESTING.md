@@ -211,3 +211,9 @@ apksigner verify --verbose app\build\outputs\apk\release\app-release.apk
   本轮新增用例：`ComposerSendButtonTest`(3，发送键三态优先级)、`ChatPathLinksTest`(7，正文文件名链接化的三条安全约束)、`ChatLinkTargetTest`(+2，Markdown autolink 尖括号剥除)。
   **真机（vivo V2080A / Android 11 / 1080×2400 / serial 9540718532001JR）逐条核对**：权限 Pill 已移到状态行「● 已连接 🔒 完整访问」；状态点绿/红生效；顶栏只剩汉堡/文件夹/⋯（刷新与停止已入菜单）；输入区 + 号与发送键垂直居中、发送箭头朝上；运行中且输入框空显示**红色方形停止键**；权限菜单描述全中文（英文残留 0 处）；点会话正文里的文件链接→文件详情面板打开并渲染 Markdown（`text/markdown · 12.2 KiB`）。
   **未验**：「用其他应用打开」（需 docx/zip 类素材，尚未构造）。
+- `v2.2.47` 通过 `docsCheck`（8 文档 / 46 任务一致 + README 双站 14 项）、`:app:testDebugUnitTest`（**60 个测试文件 / 542 用例 / 0 失败**）、`:app:lintDebug`（0 error）与 `assembleRelease`。
+  本轮新增用例：`ChatLinkTargetTest` +5（22 → 27）——绝对路径六种位置写法（`:1` / `:12-34` / `:12:5` / `#L101` / `#L101-L120` / `#l7`）归到同一文件、
+  相对路径带后缀仍归 `RELATIVE_PATH` 且 `raw` 保留原文、网页 `#L1` 片段与 `:8080` 端口一字不动（含尖括号包裹写法）、
+  `stripLocationSuffix` 边界（日期不误伤 / 行范围要剥 / `:12` 不剥成空 / 三段只剥两段 / 空串原样返回）、
+  `joinUnderCwd` 拼接（含前导与尾随斜杠）。
+  **未做真机验收**：按用户既定口径由用户自行完成。单测绿 ≠ 行为对。

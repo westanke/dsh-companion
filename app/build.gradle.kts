@@ -811,8 +811,20 @@ android {
         //   测了什么：59 类 / 524 用例 / 0 失败；docsCheck 8 文档 + README 双站 14 项；
         //     lintDebug 0 error；真机验收入口/清单/输出/刷新全绿。
         //   未做：终止确认框未真机点到（本机没有 running 任务）。
-        versionCode = 10071
-        versionName = "2.2.46"
+        // v2.2.47（versionCode 10072）：**文档链接带位置后缀打不开**（真机截图反馈，与鸿蒙版同源双端修复）。
+        //   基于什么：模型引用文档几乎总带位置 —— `docs/project/STATUS.md:1`、`/abs/STATUS.md#L101`
+        //     都是常见写法。这些后缀不是路径的一部分，原样发给 `roots/resolve` 只会回「不是普通文件」。
+        //   两层根因：① 位置后缀被当成路径的一部分（文件名里真的多了个 `#L101` / `:1`）；
+        //     ② 分类用 indexOf(':') 一刀切认 scheme，`docs/x.md:1` 被判「未知协议」，连拼 cwd 的机会都没有。
+        //   干了什么：data/ChatLinkTarget.kt 新增 stripLocationSuffix()（只剥确定形态 :数字 / #L数字，
+        //     含 :12-34 / #L12-L34 / :12:5，大小写不敏感；最多剥两段；剥成空串则不剥）
+        //     + 纯函数 joinUnderCwd()（先剥后缀再拼 cwd）；绝对路径在 classify() 里剥、
+        //     相对路径在 ChatLinkHandlers 拼 cwd 前剥。刻意不动 `https://e.com/a#L1`（页内跳转）
+        //     与 `http://host:8080`（端口），靠「网页分支返回原文」保住。
+        //   测了什么：60 类 / 542 用例 / 0 失败；docsCheck 8 文档 + README 双站 14 项；lintDebug 0 error。
+        //   未做：真机复验由用户自行完成。
+        versionCode = 10072
+        versionName = "2.2.47"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。
