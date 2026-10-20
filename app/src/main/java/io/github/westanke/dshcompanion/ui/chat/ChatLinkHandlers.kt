@@ -13,6 +13,7 @@ import io.github.westanke.dshcompanion.openSessionFile
 import io.github.westanke.dshcompanion.R
 import io.github.westanke.dshcompanion.debug.DiagLog
 import io.github.westanke.dshcompanion.data.ChatLinkTarget
+import io.github.westanke.dshcompanion.data.joinUnderCwd
 
 /**
  * 会话里 Markdown 链接的**统一分发器**（从 `ChatDetail.kt` 拆出，职责本就独立）。
@@ -29,6 +30,10 @@ import io.github.westanke.dshcompanion.data.ChatLinkTarget
  *   引用的相对路径几乎总是相对会话工作目录（用户 2026-10-19 要求能打开）。
  *   拼完仍由 `roots/resolve` 兜底：不存在 / 越界会得到与其他路径一致的错误，
  *   不会打开「别的文件」；
+ * - 位置后缀（`:1` / `:12-34` / `:12:5` / `#L101`）**在拼接之前**剥（`joinUnderCwd`）——
+ *   `docs/x.md:1` 原样拼进 cwd 只会得到 `cwd/docs/x.md:1`，服务端回「不是普通文件」；
+ *   而 `https://e.com/a#L1` 的页内跳转与 `http://host:8080` 的端口不受影响
+ *   （网页分支返回原文，见 `ChatLinkTarget.classify`）；
  * - http(s) → 系统浏览器；
  * - 其余（锚点 / 未知 scheme / 没有基准的相对路径）→ 明确告知不支持，绝不猜。
  */
@@ -71,13 +76,10 @@ internal fun rememberSessionLinkHandler(
 
                     is ChatLinkTarget.Unsupported -> when {
                         // 相对路径：拿会话 cwd 当基准拼成绝对路径，走同一条正路。
+                        // 位置后缀（`:1` / `#L101`）在**拼接之前**剥 —— 直接拼会得到
+                        // `cwd/docs/x.md:1`，服务端只会回「不是普通文件」（2026-10-20 真机）。
                         target.reason == ChatLinkTarget.Reason.RELATIVE_PATH && cwdAbsolute != null -> {
-                            val joined = if (cwdAbsolute.endsWith("/")) {
-                                cwdAbsolute + target.raw.trimStart('/')
-                            } else {
-                                "$cwdAbsolute/${target.raw.trimStart('/')}"
-                            }
-                            onOpenSessionFile(joined)
+                            onOpenSessionFile(joinUnderCwd(cwdAbsolute, target.raw))
                         }
 
                         else -> toast(
