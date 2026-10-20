@@ -149,6 +149,15 @@ that `dsh-hyperframes` and `dsh-remotion` are installed but not enabled.
 > so the Agent preset picker failed entirely with
 > `Field 'trust' is required ... missing at path: $.items[0]`. The fix adds defaults to optional
 > fields so a single missing field can no longer break the whole list.
+>
+> **Three-way version table (added 2026-10-20)**: this app reaches the DSH kernel **only through**
+> `dsh-remote-bridge` (≥ 2.4.1) and never connects to the kernel directly. The verified combination is
+> "App v2.2.45 ↔ bridge 2.4.2 ↔ DSH 0.2.0-rc.2 / 0.2.1-rc.2" — all 10 host-service `inject` entries of
+> the bridge still exist with unchanged signatures on 0.2.1-rc.2 (see
+> `dsh-remote-bridge/docs/project/DSH-0.2.1-ADAPTATION.md`). The kernel's new
+> `session/working-directory/{get,set}` belongs to the **SDK profile**, which the bridge does not pass
+> through yet, so this app remains **read-only** for a session's working directory (it can display it
+> and use it as the `@` completion base, but cannot switch it inside a session).
 
 ### 7. Configurable send behaviour: queue vs. steer (v1.3.0)
 
@@ -594,7 +603,7 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
   official Web blocks) and a **persistent permission-level pill above the composer** (same source and
   action as the ⋯ menu); chat.html parity (models grouped by vendor, tool-trajectory and statistics
   panels, `@` file completion, ▤ files aligned right, `/` command panel collapsing after send);
-  **"response truncated" notice** (needs bridge **≥ 2.4.2**); diagnostic-log switch, connection-import
+  **"response truncated" notice** (needs bridge **≥ 2.4.1**); diagnostic-log switch, connection-import
   panel, keep-at-bottom follow on opening a session
 - Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25). The key did not change, but the
   **package name did in v2.2.41**, so `v2.2.40` and earlier still require an uninstall first

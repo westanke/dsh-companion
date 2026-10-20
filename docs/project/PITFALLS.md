@@ -163,6 +163,20 @@ sha256sum artifacts/DeepSeek-Harness-companion-v*.apk              # 摘要
 | 插件页清单（profile 判定） | **2.3.2** |
 | 插件页启停（`PATCH /settings/plugins`） | **2.3.3** |
 | **审批 / 问答卡片在手机端弹出** | **2.3.7** |
+| 斜杠命令可用（`commands.execute` 四参数） | **2.4.0** |
+| 「回答被截断」提示（`turn/end` 透传 `reason.kind == 'max-tokens'`） | **2.4.1** |
+| 会话权限档位 Pill / 待办与工具轨迹读投影（`history` 透传 `projections`、权限目录 BFF） | **2.4.2** |
+
+**DSH 内核版本基线**（2026-10-20 补，App 不直连内核，此栏仅用于服务端排错定位）：
+
+| 组合 | 状态 |
+|---|---|
+| App v2.2.45 ↔ bridge 2.4.2 ↔ DSH `0.2.0-rc.2` | 已验证（bridge 兼容层真机实测） |
+| App v2.2.45 ↔ bridge 2.4.2 ↔ DSH `0.2.1-rc.2` | 已做静态接口核对，**待真机回归** |
+
+bridge 2.4.2 的 10 项宿主服务 `inject`（`cordis.patch.yml`）在 0.2.1-rc.2 上全部仍存在、被调方法签名未变，
+故不需要改码；`permissionPresets` 的注入面在两版上都未确认（0.2.0 即注不进，已降级到内置目录）。
+证据与完整清单见 `dsh-remote-bridge/docs/project/DSH-0.2.1-ADAPTATION.md`。
 
 **现在怎么办**：README 双站「安装要求」与「项目信息」两处写的必须一致（曾一处 2.3.3、一处 2.3.1）。
 当前口径：**≥ 2.3.7**，并在括号里注明分项。
@@ -175,7 +189,8 @@ App 侧代码自始至终是对的。① `sessionIdOfAgent` 漏了内核 `Agent.
 **教训**：卡片不弹时**先查插件版本**再查 App —— 症状完全一样（手机零卡片、电脑端正常、
 两侧日志都不说一句话），但修的地方在另一个仓库。
 
-**铁律**：新增 bridge 依赖时，同步更新 README 双站 + `STATUS.md`，别只改一边。
+**铁律**：新增 bridge 依赖时，同步更新 README 双站 + `STATUS.md` + **本表**，别只改一边。
+（本表曾在 2.3.8 / 2.4.1 / 2.4.2 三版漏更，导致排错者得出「2.3.7 就够」的错误结论。）
 
 ---
 
