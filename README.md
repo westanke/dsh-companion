@@ -539,7 +539,7 @@ keyPassword=...
 - 当前版本：`v2.2.46`（`versionCode` 10071）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
-- 单元测试：59 个测试类 / 524 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
+- 单元测试：60 个测试类 / 537 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
 - 当前 APK：`DSH伴侣-companion-v2.2.46.apk`，**3,060,492 字节**，
   SHA-256 `2451335fa3ec4f9024423aa01a0470afa15f5e66730774d8eb60930f1cc288c2`（`artifacts/SHA256SUMS.txt` 同步）。

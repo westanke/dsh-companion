@@ -324,10 +324,16 @@
     <!-- 已保存电脑的按钮（已连上时）：进入 App -->
     <string name="enter_app">进入应用</string>
     <string name="connect_this_computer">连接</string>
+    <!-- 曾经连上、但现在复核发现不通：按钮要说「重新连接」而不是「连接」，
+         用户才看得出这台以前是通的（与 `connect_offline` 的状态点配合）。 -->
+    <string name="reconnect">重新连接</string>
     <string name="remove_computer">删除这台电脑</string>
     <string name="remove_computer_title">删除「%1$s」？</string>
     <string name="remove_computer_warning">该电脑的地址与设备令牌都会被删除，下次使用需要重新配对或重新导入配置。</string>
     <string name="endpoint_count">%1$d 个地址</string>
+    <!-- 当前活跃连接复核后发现链路已断（回前台轻探活失败）：与「已连接」成对出现。
+         刻意没有复用 `offline`（那条讲的是事件流断开，文案是另一套语义）。 -->
+    <string name="connect_offline">已断开</string>
     <string name="last_used_hint">上次使用</string>
     <string name="credentials_expired">登录凭据已过期，需要重新配对或重新导入配置</string>
     <string name="no_credentials">未保存凭据</string>

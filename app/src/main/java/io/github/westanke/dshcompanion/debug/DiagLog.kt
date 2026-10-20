@@ -156,6 +156,7 @@ object DiagLog {
         const val WEB = "WEB"        // WebView 加载与桥
         const val CLICK = "CLICK"    // 点击、返回、抽屉
         const val SCREEN = "SCREEN"  // 亮灭屏、旋转、尺寸变化
+        const val CONNECT = "CONNECT" // 连接状态复核（回前台轻探活）
     }
 
     // ---------------------------------------------------------------- 写入口

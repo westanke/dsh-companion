@@ -205,5 +205,6 @@ private fun colorFor(line: String): Color = when {
     line.contains(" WEB ") -> Color(0xFF80D8FF)
     line.contains(" SCREEN ") -> Color(0xFFFFAB91)
     line.contains(" CLICK ") -> Color(0xFFCCFF90)
+    line.contains(" CONNECT ") -> Color(0xFFB9F6CA)
     else -> Color(0xFFDDDDDD)
 }

@@ -770,3 +770,70 @@ GFM 允许这种紧凑写法，**这颗解析器比 GitHub 更严格**。
    「修了但现场没好」。
 3. 客户端自渲染路线上，第三方 markdown 解析器与 GitHub 的方言差异要靠客户端兜，
    不能指望模型永远输出最保守的写法。
+
+### 连接状态位是「曾经连上过」，不是「此刻还连着」
+
+**症状**（2026-10-20 真机，用户原话「当网络无法连接时候 都显示的『连接』」）：
+连着的时候断网 / 换网、电脑休眠、服务端重启、或锁屏几小时后回来，
+连接页仍显示「已连接」+「进入应用」。更难受的是点那个按钮**什么都没发生**：
+既不重连、也不进去、没有任何提示。
+
+**根因（三处代码把同一个历史值当成了现状）**：
+
+`HarnessState.connected` 只在**连接成功那一刻**置 true（`connectHostInternal` 与
+`loadSnapshot` 两处），而全仓**没有任何代码把它置回 false**。它的真实语义是
+「曾经连上过」，但下面三处都当成了「此刻还连着」：
+
+| 位置 | 错误的假设 | 真机表现 |
+|---|---|---|
+| 连接卡片的 `isActive` | 据此点亮「已连接」 | 断网了还说连着 |
+| 按钮点击的短路条件 | `(connected && hostId == activeHostId)` 成立就不重连 | 点了没反应 |
+| 回前台要不要复核 | 沿用它做早退判据就永远不跑 | 状态永远不自我纠正 |
+
+那个「点了没反应」还叠了第二层：短路把点击跳过之后，`App.kt` 的门闩
+（`!connectGatePassed || !state.connected`）因为 `connected` 仍是 true 而**放行**，
+用户被送进一个已经断了的会话页…然后任何一次请求失败又把他弹回来。
+整件事在屏幕上看起来就是「按钮坏了」。
+
+**修法（三处判据抽成带名字的纯函数，都有单测）**：
+新增 `data/ConnectionLiveness.kt`：
+- `shouldRecheckActiveConnection(...)` —— 回前台要不要探活；
+- `shouldReconnectOnTap(...)` —— 按钮点击要不要真发连接（判据是**客户端还在不在**，
+  不是 `connected`）；
+- `hostCardState(...)` —— 卡片三态 `CONNECTED / DISCONNECTED / IDLE`，
+  让「连过但断了」与「从来没连过」在屏幕上分得开。
+
+配合 `MainActivity.onResume` → `recheckConnectionIfOnConnectScreen()`：
+连接页可见时对当前链路发一次 `healthz`，失败就把 `connected` 翻回 false。
+**不走 `launchOperation`** —— 那个出口会弹 snackbar 并置 `busy`，每次回前台失败都吵一句红字，
+还把按钮压灰（见下一条）。
+
+**为什么不干脆上心跳轮询**：连接页是必经入口，用户回来看的就是「现在通不通」，
+一次探活足够；进了 App 之后由事件流（`eventsConnected`）盯着，再轮询是重复的。
+
+**教训**：
+1. 一个状态位被多处读取时，**先把每处的语义假设写成带名字的纯函数**，再谈修界面。
+   只改显示、不改判据，另外两处会继续错。
+2. `busy` 这种「有操作在跑」的标志，**只能由发起那个操作的公共出口（`launchOperation`）负责置位与复位**。
+   有第二条直达路径时，它会漏。
+
+### `busy` 只在 `launchOperation` 里收尾：绕过它的路径会把标志永久卡住
+
+**症状**（2026-10-20 真机，修上一条时被顺手抓到）：连接页按钮显示「连接」但是**灰的、点不动**，
+而实际上没有任何请求在跑。
+
+**根因**：`connectHostInternal` 里有一行 `busy = true`，而这条函数有**两个调用方**：
+
+| 调用方 | 谁负责清 busy |
+|---|---|
+| `connectHost` / `pair` / `importConfiguration` | `launchOperation`，它结束时 `copy(busy = false)` |
+| `restoreConnection`（冷启动自动重连） | **没有人** —— 它直接 `runCatching { connectHostInternal(target) }` |
+
+于是冷启动自动重连成功后 `busy` 永远是 true，连接页所有按钮的 `enabled` 判据
+（`!state.busy && !state.connecting`）一律落 false。转天再看还是灰的，因为这一位只在进程重建时复位。
+
+**修法**：`connectHostInternal` 里改为 `busy = false`，并在注释里写明
+「后台请求的转圈由 App 顶栏自己表达，不该借用这个字段」。
+
+**铁律**：`busy` 的所有权归 `launchOperation`。被它调用的函数**不许**自己置 `busy = true`
+—— 那条路径可能是别的入口（冷启动、事件回调）进来的，没有收尾者。

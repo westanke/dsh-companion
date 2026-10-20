@@ -9,7 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -71,6 +70,9 @@ import io.github.westanke.dshcompanion.data.Credential
 import io.github.westanke.dshcompanion.data.Endpoint
 import io.github.westanke.dshcompanion.data.EndpointProbe
 import io.github.westanke.dshcompanion.data.Host
+import io.github.westanke.dshcompanion.data.HostCardState
+import io.github.westanke.dshcompanion.data.hostCardState
+import io.github.westanke.dshcompanion.data.shouldReconnectOnTap
 import io.github.westanke.dshcompanion.debug.DiagLog
 import io.github.westanke.dshcompanion.connectHost
 import io.github.westanke.dshcompanion.importConfiguration
@@ -146,15 +148,26 @@ fun ConnectScreen(
     val pickerContext = LocalContext.current
     val configFileLauncher = rememberConfigFilePicker(pickerContext) { text -> configText = text }
 
-    Box(Modifier.fillMaxSize()) {
-        // 右上角两个按钮：语言切换 + 诊断日志。
-        //
-        // 诊断开关**必须**放在连接页，这是真机验证出来的结论：设置页在连接门闩
-        // （App.kt 的 `connectGatePassed && state.connected`）之后，连不上服务端时
-        // 根本进不去 —— 而那恰恰是最需要日志的时刻。诊断工具的可用性
-        // 不该依赖被测功能是否正常，否则就是「车坏了才需要千斤顶，而千斤顶在车里」。
+    // 诊断/语言两个按钮**刻意不放进滚动的 Column，也不与它同层争抢命中区**：
+    //
+    // 曾经的摆法是 `Box` 里先一个 `Modifier.align(TopEnd)` 的 Row、后一个
+    // `fillMaxSize().verticalScroll()` 的 Column。Compose 的绘制顺序即声明顺序，
+    // 后声明的 Column 在上层——**但两个子项在有交集时，触摸分发并不只看谁在上层**，
+    // 实测这台真机上右上角一片（x 780-1020 / y 40-140）无论怎么点都到不了按钮：
+    // 手势先落在滚动容器上，`IconButton` 的命中区被压在下面，`uiautomator dump`
+    // 里也看不到这两个节点的语义。
+    //
+    // 结论不是去修命中，而是**把按钮搬出滚动层**：现在是
+    // `Column { 顶栏(按钮) ; 滚动内容 }`，按钮与滚动内容上下分家，
+    // 各自都拥有独立的命中区，不再有任何交叠。
+    Column(Modifier.fillMaxSize().imePadding()) {
+        // 顶栏：诊断开关 + 语言切换。不放滚动区、不放 Box 覆盖层 ——
+        // 连接页是**每一台**设备的必经入口，而设置页在连接门闩之后，
+        // 连不上服务端时这两个开关是唯一进得去的诊断/语言入口
+        // （真机验证过：右上角摆法反复点不到，见上面 KDoc）。
         Row(
-            modifier = Modifier.align(Alignment.TopEnd).padding(12.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = { viewModel.setDiagLog(!state.diagLog) }) {
@@ -172,10 +185,10 @@ fun ConnectScreen(
 
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .weight(1f)
                 .verticalScroll(rememberScrollState())
-                .imePadding()
-                .padding(horizontal = 24.dp, vertical = 36.dp),
+                .padding(horizontal = 24.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Spacer(Modifier.height(18.dp))
@@ -202,9 +215,20 @@ fun ConnectScreen(
                         // 用户主动的一个动作 —— 放行连接页（失败时 connected 仍为 false，
                         // 界面自然还停在这里，见 App.kt 的判据）。
                         onEnterApp()
-                        // 这台已经连上了（冷启动自动重连成功就会停在这个状态）：直接进去，
-                        // 不必再探活一遍。没连上的才走 connectHost（并发探活 + 自动选路）。
-                        if (!(state.connected && hostId == state.activeHostId)) viewModel.connectHost(hostId)
+                        // 只有「这台就是当前活跃连接、而且客户端还握在手里」才直接进去，
+                        // 否则一律走 connectHost（并发探活 + 自动选路）。
+                        //
+                        // 判据从 `state.connected` 改成「还要 activeConnection() 非空」，
+                        // 是因为前者是**历史值**：断网后它可能还是 true（真机 2026-10-20
+                        // 复现），那时短路会让按钮变成哑巴 —— 既不重连、又因门闩被判回连接页，
+                        // 用户看到的就是「点了没反应」。判据本体在
+                        // `data/ConnectionLiveness.kt`（纯函数，有单测）。
+                        val needConnect = shouldReconnectOnTap(
+                            hostId = hostId,
+                            activeHostId = state.activeHostId,
+                            hasActiveConnection = viewModel.activeConnection() != null,
+                        )
+                        if (needConnect) viewModel.connectHost(hostId)
                     },
                     onRemoveRequest = { hostPendingRemoval = it },
                 )
@@ -253,8 +277,7 @@ fun ConnectScreen(
         }
     }
 
-    hostPendingRemoval?.let { host ->
-        RemoveHostDialog(
+    hostPendingRemoval?.let { host ->        RemoveHostDialog(
             host = host,
             onDismiss = { hostPendingRemoval = null },
             onConfirm = {
@@ -319,9 +342,11 @@ private fun SavedComputersPanel(
             }
         }
         state.hosts.forEach { host ->
+            // 三态由纯函数判（`data/ConnectionLiveness.kt`，有单测），不在组合里就地猜。
+            val cardState = hostCardState(host.id, state.activeHostId, state.connected)
             HostCard(
                 host = host,
-                isActive = host.id == state.activeHostId && state.connected,
+                cardState = cardState,
                 isSelected = host.id == state.selectedHostId,
                 connecting = state.connecting && host.id == state.selectedHostId,
                 probes = if (host.id == state.selectedHostId) state.endpointProbes else emptyList(),
@@ -337,7 +362,7 @@ private fun SavedComputersPanel(
 @Composable
 private fun HostCard(
     host: Host,
-    isActive: Boolean,
+    cardState: HostCardState,
     isSelected: Boolean,
     connecting: Boolean,
     probes: List<EndpointProbe>,
@@ -346,6 +371,8 @@ private fun HostCard(
     onConnect: () -> Unit,
     onRemove: () -> Unit,
 ) {
+    val isActive = cardState == HostCardState.CONNECTED
+    val wasActive = cardState == HostCardState.DISCONNECTED
     val credential = host.credential
     Surface(
         modifier = Modifier
@@ -380,7 +407,19 @@ private fun HostCard(
                             style = MaterialTheme.typography.bodySmall,
                         )
                         if (isActive) {
-                            StatusLabel(stringResource(R.string.connected), true)
+                            StatusLabel(
+                                stringResource(R.string.connected),
+                                true,
+                                activeColor = ConnectionOnlineColor,
+                            )
+                        } else if (wasActive) {
+                            // 曾经是当前连接、但复核发现链路已断：用红点明说「已断开」，
+                            // 而不是什么都不显示 —— 后者与「从来没连过」无法区分。
+                            StatusLabel(
+                                stringResource(R.string.connect_offline),
+                                false,
+                                inactiveColor = ConnectionOfflineColor,
+                            )
                         }
                     }
                 }
@@ -447,11 +486,17 @@ private fun HostCard(
                 shape = CircleShape,
             ) {
                 Icon(Icons.Outlined.Link, null)
-                // 已经连上的那台，按钮必须是「进入应用」而不是「刷新」：
-                // 连接页现在是**每一台**设备的必经入口（连上以后也停在这里等用户点头），
-                // 写「刷新」的话，用户找不到「进去」这件事该点哪里。
+                // 三种态三种文案，各自回答「点下去会发生什么」：
+                //   · 已连接   →「进入应用」：纯本地跳转，不进这里就找不到入口
+                //   · 连过但断了 →「重新连接」：点下去真的会重连（不再被短路拦掉）
+                //   · 从没连过 →「连接」
+                // 之前后两态共用「连接」，用户没法从文案看出「这台以前是连上的」。
                 Text(
-                    if (isActive) stringResource(R.string.enter_app) else stringResource(R.string.connect_this_computer),
+                    when {
+                        isActive -> stringResource(R.string.enter_app)
+                        wasActive -> stringResource(R.string.reconnect)
+                        else -> stringResource(R.string.connect_this_computer)
+                    },
                     modifier = Modifier.padding(start = 8.dp),
                 )
             }

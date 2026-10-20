@@ -318,10 +318,13 @@
     <!-- Saved-computer button when already connected: enter the app -->
     <string name="enter_app">Enter app</string>
     <string name="connect_this_computer">Connect</string>
+    <string name="reconnect">Reconnect</string>
     <string name="remove_computer">Remove this computer</string>
     <string name="remove_computer_title">Remove “%1$s”?</string>
     <string name="remove_computer_warning">Its addresses and device credential will be deleted. You will need to pair or import the configuration again.</string>
     <string name="endpoint_count">%1$d address(es)</string>
+    <!-- The active connection was found dead by the on-resume health check; pairs with `connected`. -->
+    <string name="connect_offline">Disconnected</string>
     <string name="last_used_hint">Last used</string>
     <string name="credentials_expired">Credential expired — pair again or re-import the configuration</string>
     <string name="no_credentials">No credential saved</string>

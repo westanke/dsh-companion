@@ -55,6 +55,8 @@ import io.github.westanke.dshcompanion.data.PreviewKind
 import io.github.westanke.dshcompanion.data.binaryPreviewByteLimit
 import io.github.westanke.dshcompanion.data.previewKind
 import io.github.westanke.dshcompanion.data.previewKindOf
+import io.github.westanke.dshcompanion.data.shouldRecheckActiveConnection
+import io.github.westanke.dshcompanion.debug.DiagLog
 import java.io.Closeable
 import java.io.EOFException
 import java.io.IOException
@@ -232,7 +234,14 @@ internal suspend fun HarnessViewModel.connectHostInternal(host: Host, device: De
     update {
         snapshot.copy(
             restoring = false,
-            busy = true,
+            // 这里**不能**置 busy=true。这条路径有两个调用方，语义不同：
+            //   · 手动连接（connectHost/pair/importConfiguration）走 launchOperation，
+            //     它自己会置 busy 并在结束时清掉；
+            //   · 冷启动自动重连（restoreConnection）直达这里，**没有** launchOperation 兜底 ——
+            //     置 true 就再也没人清，于是连接页的按钮一律灰掉（真机 2026-10-20 复现：
+            //     断网被复核纠正后，按钮显示「连接」但点不动）。
+            // 后台正在跑的那几个请求由 App 顶栏自己的转圈表达，不该借用这个字段。
+            busy = false,
             connecting = false,
             connected = true,
             healthOk = true,
@@ -305,6 +314,77 @@ internal fun HarnessViewModel.disconnect() {
     eventsPaused = false
     active = null
     mutableState.value = HarnessState(restoring = false, hosts = hostStore.loadHosts()).withPreferences()
+}
+
+/**
+ * 回前台时复核「当前这条连接是不是**此刻**还通」。
+ *
+ * ## 为什么要有这一步（2026-10-20 真机验证）
+ *
+ * [`HarnessState.connected`] 只在**连接成功那一刻**置 true（`connectHostInternal` 与
+ * `loadSnapshot` 两处），而全仓**没有任何代码把它置回 false** —— 它是「曾经连上过」，
+ * 不是「此刻还连着」。于是这三种日常情形里连接页会说假话：
+ *
+ * | 情形 | 界面 | 用户点下去的实际后果 |
+ * |---|---|---|
+ * | 连着的时候断网 / 换网 | 仍显示「已连接」+「进入应用」 | 放行了又立刻被门闩弹回，表现是「点了没反应」 |
+ * | 电脑休眠或服务端重启 | 同上 | 同上 |
+ * | 手机锁屏几小时后回来 | 同上 | 同上 |
+ *
+ * 那个「点了没反应」的连带缺陷就在 `ConnectScreen` 的短路条件
+ * （`if (!(state.connected && hostId == state.activeHostId)) viewModel.connectHost(hostId)`）：
+ * 它看到历史值 true，判定「这台已经连上了，直接进去」，于是既不重连也不探活。
+ * **根因是同一个**：状态位记的是历史，不是现状。本函数就是把它按现状纠正回来。
+ *
+ * ## 为什么只在**连接页**复核
+ *
+ * 进了 App 之后有事件流盯着链路（`eventsConnected`，断线即 false 并显示「已断开」），
+ * 再发健康检查是重复的。而连接页是**每一台设备的必经入口**，用户回来看的就是
+ * 「现在通不通」—— 这一次探活的代价完全值当。
+ *
+ * 判据因此是「门闩还没放行 **或** 状态已经是未连接」：前者是还停在连接页，
+ * 后者是上一次复核已经把它标成断了（再探一次没意义，等用户点「连接」即可）。
+ *
+ * ## 为什么不走 [launchOperation]
+ *
+ * 那个公共出口失败会写 `error`（App 层弹 snackbar）并置 `busy`（按钮变灰）。
+ * 而这里只是「回前台顺手确认一下」，网络抖一下本来就常见 —— 每次回前台都弹一句红字、
+ * 还把按钮压灰，比不做这件事更吵。所以自己起协程、自己吞错，只留一条诊断日志。
+ */
+internal fun HarnessViewModel.recheckConnectionIfOnConnectScreen() {
+    val connection = active
+    // 判据见 `data/ConnectionLiveness.kt`（纯函数，有单测）：这里不再就地猜一遍。
+    val shouldCheck = shouldRecheckActiveConnection(
+        connectGatePassed = connectGatePassed.value,
+        connected = mutableState.value.connected,
+        hasActiveConnection = connection != null,
+        connecting = mutableState.value.connecting,
+    )
+    if (!shouldCheck || connection == null) return
+
+    viewModelScope.launch {
+        val reachable = withContext(Dispatchers.IO) {
+            runCatching { connection.client.health() }.isSuccess
+        }
+        if (reachable) return@launch
+
+        DiagLog.w(DiagLog.Cat.CONNECT, "回前台复核：这条连接已经不通，把「已连接」纠正为未连接")
+        // 失效的客户端不能继续留着：后续请求会打到一条已经断的链路上，
+        // 而且 `activeConnection()` 是「这台是不是还握着一条活连接」的唯一判据
+        // （见 `data/ConnectionLiveness.shouldReconnectOnTap`）—— 留着它，
+        // 用户点「重新连接」会被误判成「已连上，直接进去」，又变回那个哑巴按钮。
+        active = null
+        update {
+            copy(
+                // connected=false + **保留** activeHostId：三态里的 DISCONNECTED 判据是
+                // `hostId == activeHostId && !connected`（`data/ConnectionLiveness.hostCardState`）。
+                // 之前把 activeHostId 一并清空，卡片就落进了「从来没连过」那一态，
+                // 屏幕上没有任何状态点 —— 与修复前一样看不出「这台断过」。
+                connected = false,
+                healthOk = false,
+            )
+        }
+    }
 }
 
 /**

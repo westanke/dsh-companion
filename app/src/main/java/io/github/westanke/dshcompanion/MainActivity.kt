@@ -140,6 +140,16 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         DiagLog.d(DiagLog.Cat.LIFE, "onResume " + windowState("恢复时"))
+        // 回前台时复核「这条连接此刻还通不通」。
+        //
+        // 为什么要挂在这里而不是连接页内部：连接页在 Compose 组合里，屏幕旋转、
+        // 主题切换、切页都会重建它 —— 拿「组合一次」当「回一次前台」会多探好几遍。
+        // Activity 的 onResume 才是「用户真的回到这个 App 了」的唯一时机。
+        //
+        // 这一步也顺带保住那句「连接页是第一屏」的承诺：复核失败会把 connected
+        // 翻成 false，而 `App.kt` 的门闩判据（`!connectGatePassed || !state.connected`）
+        // 因此成立 —— 界面自然会停/回到连接页，不会把用户送进一个已经断了的会话页。
+        viewModel.recheckConnectionIfOnConnectScreen()
     }
 
     override fun onPause() {
