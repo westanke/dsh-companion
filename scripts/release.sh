@@ -192,7 +192,11 @@ gitee_release() {
       ].join("\n");
       process.stdout.write(JSON.stringify({tag_name:process.env.TAG,name:process.env.VER,body,target_commitish:"main"}));
     ')
-    id=$(curl -s -X POST "https://gitee.com/api/v5/repos/$REPO_GITEE/releases" \
+    # `access_token` 必须随请求走：Gitee 创建接口不接受把它塞进 JSON body，
+    # 而下面 `-d "$payload"` 就是 JSON 正文，所以只能挂在 query 上。
+    # 2026-10-21 漏了这一步，v2.2.47 首跑报「登录失效，无权限访问该资源」（40001）——
+    # 同一个 token 做 GET 一切正常，说明不是凭据过期，纯粹是 POST 没带鉴权。
+    id=$(curl -s -X POST "https://gitee.com/api/v5/repos/$REPO_GITEE/releases?access_token=$GT" \
          -H 'Content-Type: application/json' -d "$payload" \
          | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).id||'')}catch{console.log('')}})")
     [ -n "$id" ] && ok "Gitee Release 已建（id $id）" || { bad "Gitee Release 建失败"; return 1; }
