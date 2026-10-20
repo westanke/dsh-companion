@@ -1,3 +1,13 @@
+- 日期：2026-10-20
+- **「回答被截断」提示真机端到端复核通过（零代码改动）**：v2.2.44 验收报告里唯一悬置的「⏸ 未验证」项就此闭环。
+  当晚 23:12 真实触发一次 max-tokens 截断（会话 `session-9b3d9ba9-b1aa-4cfa-b40d-d51fe80a5c44`），
+  四层取证：① 内核会话日志 `~/.dsh/sessions/<工作目录>/…/session.v4.jsonl.zstd` 里
+  `{"type":"turn/end","seq":3676,…,"reason":{"kind":"max-tokens"}}`（同日志仅 2 条 turn/end，
+  再次证实 `sessions.history` 不返回 turn/end、提示只能靠实时帧）；② web profile 运行中的
+  bridge 2.4.3 `lib/index.js` 含 `reason: turnReason` 透传；③ 真机 App 2.2.46
+  `TRUNCATED` 黄条全链路在岗；④ **用户亲眼看到提示**。结论：此前「无提示」系旧版双端所致，
+  升级后自愈。环境事实随记：desktop 实例（`~/.dsh-desktop`）**未装** remote-bridge 插件，
+  App 实际连的是 web profile（`dsh --profile web --port 35869`）。
 - 日期：2026-10-19
 - **v2.2.46（versionCode 10071，待发）**：后台任务面板（会话 ⋯ 菜单 →「后台任务」）。
   消费 bridge 2.4.3 的 `/chat/sessions/{id}/jobs` 三端点与 `job-list-v1` / `job-output-v1` /
