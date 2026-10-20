@@ -3,6 +3,65 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## 未发版 · 后台任务面板（会话 ⋯ 菜单 →「后台任务」）
+
+### 基于什么
+
+远程场景的真焦虑：在手机上让 agent 跑个长任务（构建、批量处理），然后切走或放下手机 ——
+此时没有任何地方能看到「它还在跑吗」，更没有地方能「让它停下」。任务跑飞了只能干等，
+或者回到电脑前。官方 WebUI 有 Jobs 面板（`IconJobs` / `client-ui-jobs`），
+而本 App 此前 26 个能力位里一个 job 相关的都没有。
+
+服务端先行：`dsh-remote-bridge` 本轮新增三个端点
+（`GET/POST /chat/sessions/{sessionId}/jobs*`，能力位 `job-list-v1` / `job-output-v1` /
+`job-kill-v1`），Kotlin SDK 同步了 `listSessionJobs` / `readJobOutput` / `killSessionJob`。
+本 App 按既有接入纪律消费 bridge 公开版本化 API。
+
+### 干了什么
+
+- `data/JobViews.kt`（新）：`JobView` / `JobStatus` / `JobOutput` / `JobKillResult`
+  wire 数据。三条 wire 约定写进注释：可选字段（owner/progress/detail/finishedAt）
+  缺省即没有；`next` 是绝对字节偏移；`lossy = true` 的输出**不是完整的**。
+- `DshClient` +3 方法：`sessionJobs` / `jobOutput`（支持 `?from=` 续读）/ `killJob`。
+- `BridgeCapabilities.supportsSessionJobs`：入口判据。三个能力位在服务端同批声明，
+  判据只查 `job-list-v1` 一个（逐个查只是把同一句话写三遍）。
+- `JobsPanelState` 进 `HarnessState` + `HarnessJobsViewModel.kt`（新）：
+  开/关面板、读清单（失败保留旧清单只亮错误）、终止（确认框在 UI 层；
+  `already-finished` 显示「它已经结束了，不用再管」—— 与「已终止」是两句话）、
+  展开/收起输出。展开状态跨刷新存活。
+- `ui/chat/ChatJobsSheet.kt`（新）：任务卡（label + 状态徽标 + 运行时长 + progress +
+  终态原因）、输出等宽文本区、终止确认对话框、手动刷新。**不做实时推送** ——
+  服务端就是 REST 只读一帧，v1 用按钮刷新，不为「看起来实时」在手机上挂轮询。
+- 入口：会话 ⋯ 菜单「后台任务」，按 `supportsSessionJobs` 能力位显示 ——
+  老 bridge 上这条路由是 404，显示入口只会让用户点进去看报错。
+
+### 测了什么
+
+- 新增 `JobViewsTest` 7 例：全字段解码、可选字段缺省、五种生命周期状态按 wire 名
+  逐一映射、roster 信封、输出（含 next/lossy/status）、两种 kill outcome、
+  **未知字段忽略**（内核加新字段不该让 App 整条解码失败、把「新增」升级成「功能全挂」）。
+- `BridgeCapabilitiesTest` 加 1 例：能力位判据（有清单/缺 job-list/空清单）。
+- 门禁：`testDebugUnitTest` 59 类 / 524 用例 0 失败（三处声明已同步：
+  README 双站 + AGENTS.md §5）、`docsCheck` 过、`lintDebug` 0 error、
+  `compileDebugKotlin` 过。
+
+### 踩过的坑（都在同一次编译里）
+
+1. **Kotlin 块注释可嵌套**：数据文件头注释里写了路径通配符（jobs 加斜杠星号），
+   那个「斜杠星号」被当成嵌套注释层开始，整个文件从那以后全部错位，
+   报 `Unclosed comment`（L80，离出错处 40 行远）。修的过程中在「教训注释」里
+   **又写了三处**同样的序列，再炸一次。最后用文字表述代替。
+2. **`HarnessViewModel.update` 的 transform 是 receiver lambda**
+   （`HarnessState.() -> HarnessState`）：里面直接读字段、直接 `copy(...)`，
+   **没有 `it` 也没有参数名**。写成 `update { it.copy(...) }` 或
+   `update { state -> ... }` 都是类型错误，报错信息（Map.Entry 未推断）完全不指向根因。
+3. **`pathUrl` 返回 `HttpUrl` 不是 String**：`resolve(pathUrl(...))` 类型不匹配，
+   直接 `pathUrl(...).newBuilder()`。
+
+### 待办
+
+- 真机验收：打开面板看清单渲染、终止确认框、输出展开、老 bridge（≤ 2.4.2）上入口隐藏。
+
 ## 未发版 · Markdown 表格贴行不渲染（真机截图反馈，2026-10-20）
 
 ### 基于什么

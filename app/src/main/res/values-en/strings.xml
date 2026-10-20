@@ -532,4 +532,26 @@
     <string name="image_saved_to_gallery">Saved to gallery</string>
     <string name="image_save_needs_permission">Saving to the gallery needs storage permission on Android 9 and below</string>
     <string name="image_save_failed">Could not save to the gallery</string>
+    <!-- Background jobs panel (bridge >= 2.4.3 /chat/sessions/{id}/jobs). -->
+    <string name="jobs_title">Background jobs</string>
+    <string name="jobs_empty">No background jobs in this session</string>
+    <string name="jobs_refresh">Refresh</string>
+    <string name="jobs_status_running">Running</string>
+    <string name="jobs_status_stopping">Stopping</string>
+    <string name="jobs_status_completed">Completed</string>
+    <string name="jobs_status_killed">Killed</string>
+    <string name="jobs_status_failed">Failed</string>
+    <string name="jobs_kill">Kill</string>
+    <string name="jobs_kill_confirm_title">Kill this job?</string>
+    <string name="jobs_kill_confirm_body">%1$s is still running. This cannot be undone.</string>
+    <string name="jobs_kill_confirm_yes">Kill</string>
+    <string name="jobs_cancel">Cancel</string>
+    <string name="jobs_kill_requested">Kill requested</string>
+    <string name="jobs_kill_already_finished">It already finished — nothing to do</string>
+    <string name="jobs_output_title">Output</string>
+    <string name="jobs_output_lossy">Earlier bytes were dropped; this output is incomplete</string>
+    <string name="jobs_output_empty">This job produced no output</string>
+    <string name="jobs_view_output">View output</string>
+    <string name="jobs_hide_output">Hide output</string>
+    <string name="jobs_unowned">Unowned</string>
 </resources>

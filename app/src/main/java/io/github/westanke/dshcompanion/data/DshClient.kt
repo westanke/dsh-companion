@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import androidx.appcompat.app.AppCompatDelegate
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -172,6 +173,42 @@ class DshClient(
  * 老 bridge 没有这条路由（404 `ROUTE_NOT_FOUND`），调用方必须容忍失败继续跑。
  */
 fun permissionPresets(): PermissionCatalog = get("chat/permission-presets", PermissionCatalog.serializer())
+
+    /**
+     * 某会话可见的后台任务清单（`GET /chat/sessions/{sessionId}/jobs`，bridge ≥ 2.4.3）。
+     *
+     * 返回的是**完整清单**：服务端只读内核 roster 流的第一帧，内核保证
+     * 「Whole-set replacement, so a reconnect's first frame is already the truth」。
+     * 所以这里没有分页，也没有游标 —— 拉一次就是全部。
+     *
+     * 空清单是正常结果（这个会话确实没有任务），不是失败；失败走 [DshApiException]。
+     */
+    fun sessionJobs(sessionId: String): List<JobView> =
+        get(pathUrl("chat", "sessions", sessionId, "jobs"), JobListEnvelope.serializer()).jobs
+
+    /**
+     * 读一个后台任务已保留的输出（`GET .../jobs/{jobId}/output`）。
+     *
+     * [from] 是**绝对字节偏移**：传上一次返回的 [JobOutput.next] 即增量续读，
+     * null 从最旧的保留字节开始。任务留存策略可能丢旧字节，丢过就会在
+     * [JobOutput.lossy] 上标记 —— 界面必须提示「这不是完整输出」。
+     */
+    fun jobOutput(sessionId: String, jobId: String, from: Long? = null): JobOutput {
+        val builder = pathUrl("chat", "sessions", sessionId, "jobs", jobId, "output").newBuilder()
+        if (from != null) builder.addQueryParameter("from", from.toString())
+        return get(builder.build(), JobOutput.serializer())
+    }
+
+    /**
+     * 终止一个后台任务（`POST .../jobs/{jobId}/kill`）。
+     *
+     * 两种成功语义必须区分：`requested`（已受理）与 `already-finished`
+     * （已是终态、无需再杀）。后者要显示「它已经结束了」—— 用户在远程场景下
+     * 看到这句话才知道**不用再管了**，与「已终止」不是一回事。
+     * 任务不存在或本会话看不到它时服务端返回 404 `JOB_NOT_FOUND`。
+     */
+    fun killJob(sessionId: String, jobId: String): JobKillResult =
+        post(pathUrl("chat", "sessions", sessionId, "jobs", jobId, "kill"), Unit, Unit.serializer(), JobKillResult.serializer())
 
     fun selectAgentPreset(sessionId: String, agentPreset: String): String = put(
         pathUrl("chat", "sessions", sessionId, "agent-preset"),

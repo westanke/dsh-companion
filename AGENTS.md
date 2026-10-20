@@ -150,7 +150,7 @@ web/           ← WebView 容器（chat.html 兜底路径）
 
 | 层 | 命令 | 说明 |
 |---|---|---|
-| 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 58 类 / 516 用例（随代码变化，勿当常量） |
+| 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 59 类 / 524 用例（随代码变化，勿当常量） |
 | 文档 | `scripts/build.sh docsCheck` | 8 文档 / ROADMAP 任务 / STATUS 引用一致性 |
 | 真机 | 人工 | **单测绿 ≠ 行为对**。涉及手势、键盘、WebView、耗电、断流的一律要真机确认 |
 

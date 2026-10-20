@@ -173,6 +173,7 @@ import io.github.westanke.dshcompanion.HarnessState
 import io.github.westanke.dshcompanion.HarnessViewModel
 import io.github.westanke.dshcompanion.ApprovalUiState
 import io.github.westanke.dshcompanion.PendingAttachment
+import io.github.westanke.dshcompanion.openJobsPanel
 import io.github.westanke.dshcompanion.R
 import io.github.westanke.dshcompanion.SessionFileOpen
 import io.github.westanke.dshcompanion.retryLastUserMessage
@@ -344,6 +345,7 @@ internal fun ChatDetail(
     var filesSheet by remember(selected.id) { mutableStateOf(false) }
     var statsSheet by remember(selected.id) { mutableStateOf(false) }
     var trajectorySheet by remember(selected.id) { mutableStateOf(false) }
+    var jobsSheet by remember(selected.id) { mutableStateOf(false) }
     var tasksExpanded by rememberSaveable(selected.id) { mutableStateOf(true) }
 
     // 链接分发器已拆到 ChatLinkHandlers.kt（含相对路径按会话 cwd 解析，2026-10-19）。
@@ -591,6 +593,7 @@ internal fun ChatDetail(
                 onModelClick = { modelSheet = true },
                 onOpenStats = { statsSheet = true },
                 onOpenTrajectory = { trajectorySheet = true },
+                onOpenJobs = { viewModel.openJobsPanel(selected.id); jobsSheet = true },
                 permission = permission,
                 permissionEnabled = canWrite && !state.busy,
                 onPermissionSelect = viewModel::selectPermissionPreset,
@@ -767,6 +770,7 @@ internal fun ChatDetail(
     if (modelSheet) ModelSheet(state, viewModel) { modelSheet = false }
     if (statsSheet) ChatStatsSheet(state) { statsSheet = false }
     if (trajectorySheet) ChatTrajectorySheet(state) { trajectorySheet = false }
+    if (jobsSheet) ChatJobsSheet(state, viewModel) { jobsSheet = false }
     if (filesSheet) {
         SessionFilesSheet(state, viewModel) {
             filesSheet = false

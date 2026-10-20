@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.List
 import androidx.compose.material.icons.outlined.ModelTraining
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.SubdirectoryArrowRight
 import androidx.compose.material3.DropdownMenu
@@ -43,6 +44,7 @@ import io.github.westanke.dshcompanion.cancelRun
 import io.github.westanke.dshcompanion.refreshHistory
 import io.github.westanke.dshcompanion.data.ChatSession
 import io.github.westanke.dshcompanion.data.PermissionSelect
+import io.github.westanke.dshcompanion.data.supportsSessionJobs
 import io.github.westanke.dshcompanion.ui.ConnectionOfflineColor
 import io.github.westanke.dshcompanion.ui.ConnectionOnlineColor
 import io.github.westanke.dshcompanion.ui.StatusLabel
@@ -64,6 +66,7 @@ internal fun ConversationHeader(
     onModelClick: () -> Unit,
     onOpenStats: () -> Unit,
     onOpenTrajectory: () -> Unit,
+    onOpenJobs: () -> Unit,
     permission: PermissionSelect?,
     permissionEnabled: Boolean,
     onPermissionSelect: (String) -> Unit,
@@ -174,6 +177,18 @@ internal fun ConversationHeader(
                     },
                     leadingIcon = { Icon(Icons.Outlined.Info, null) },
                 )
+                // 后台任务入口按能力位显示：老 bridge 上这条路由是 404，
+                // 显示入口只会让用户点进去看报错（见 BridgeCapabilities.supportsSessionJobs）。
+                if (supportsSessionJobs(state.bridgeCapabilities)) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.jobs_title)) },
+                        onClick = {
+                            moreOpen = false
+                            onOpenJobs()
+                        },
+                        leadingIcon = { Icon(Icons.Outlined.PlayCircle, null) },
+                    )
+                }
                 DropdownMenuItem(
                     text = {
                         Column {

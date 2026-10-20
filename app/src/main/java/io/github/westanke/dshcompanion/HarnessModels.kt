@@ -2,6 +2,8 @@ package io.github.westanke.dshcompanion
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.westanke.dshcompanion.data.JobOutput
+import io.github.westanke.dshcompanion.data.JobView
 import io.github.westanke.dshcompanion.data.InterfaceStyle
 import io.github.westanke.dshcompanion.data.QUESTION_STATE_CONTINUED
 import io.github.westanke.dshcompanion.data.ChatContentParts
@@ -182,6 +184,31 @@ sealed interface ApprovalUiState {
     data class Deciding(val item: PendingApproval, val items: List<PendingApproval>) : ApprovalUiState
 }
 
+/**
+ * 后台任务面板（`ChatJobsSheet`）的界面状态。
+ *
+ * 面板挂在**当前会话**维度上：内核的 jobs 清单是「该会话自己的 + 所有无主任务」，
+ * 换会话就要换一份。所以 [sessionId] 记着它属于谁 —— 切会话时由关闭方清掉，
+ * 而不是让面板显示上一个会话的任务。
+ */
+data class JobsPanelState(
+    val sessionId: String,
+    /** 正在读清单（首次打开或手动刷新）。 */
+    val loading: Boolean = false,
+    val jobs: List<JobView> = emptyList(),
+    /** 读取失败的原因（已本地化文案）；null = 没失败。空清单 + null = 真的没有任务。 */
+    val error: String? = null,
+    /** 正在终止的任务（null = 没在终止）。按 jobId 记，而不是一个布尔 —— 同时只能终止一条。 */
+    val killingJobId: String? = null,
+    /** 终止刚完成的那条的反馈（`已终止` / `它已经结束了`）；null = 没有反馈。 */
+    val killNotice: String? = null,
+    /** 展开看输出的任务（null = 全部收起）。刷新清单后要存活，所以进状态不留在局部。 */
+    val expandedJobId: String? = null,
+    /** 展开的那条的输出；null = 还在读（或该条没展开）。 */
+    val expandedOutput: JobOutput? = null,
+    val outputLoading: Boolean = false,
+)
+
 data class HarnessState(
     val restoring: Boolean = true,
     val busy: Boolean = false,
@@ -279,6 +306,15 @@ data class HarnessState(
      * 「整个权限入口消失」，就是 v2.2.44 那个缺陷本身。
      */
     val permissionCatalog: PermissionCatalog? = null,
+    /**
+     * 后台任务面板的状态（会话 ⋯ 菜单 →「后台任务」）；null = 面板关着。
+     *
+     * 数据进共享状态而不是留在 Sheet 里，是因为终止动作要跨两步
+     * （确认框 → kill → 刷新清单），这中间 Compose 的重组随时可能重建；
+     * 而「展开看输出」的 [JobsPanelState.expandedJobId] 也得在刷新后存活，
+     * 不然用户点开一条任务的输出、一刷新就整个收回去。
+     */
+    val jobsPanel: JobsPanelState? = null,
     /**
      * 输入框上方是否**开着补全面板**（`@` 文件补全，或 `/` 命令补全）。
      *

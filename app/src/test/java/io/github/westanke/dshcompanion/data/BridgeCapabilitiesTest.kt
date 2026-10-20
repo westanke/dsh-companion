@@ -93,4 +93,19 @@ class BridgeCapabilitiesTest {
     fun `required capabilities stay limited to the silent-failure ones`() {
         assertEquals(listOf("approvals-v1", "questions-v1"), REQUIRED_CAPABILITIES)
     }
+
+    /**
+     * 后台任务入口的守卫（bridge ≥ 2.4.3）。
+     *
+     * 三个能力位（job-list / job-output / job-kill）在服务端**同批声明**，
+     * 所以判据只查 `job-list-v1` 一个 —— 查全三个只是把同一句话写三遍。
+     * 这条用例同时钉住「判据名与能力位名的对应关系」，服务端若拆开发布
+     * （理论上不应发生），这里会先红。
+     */
+    @Test
+    fun `session jobs require the job capability`() {
+        assertTrue(supportsSessionJobs(setOf("job-list-v1", "job-output-v1", "job-kill-v1")))
+        assertFalse(supportsSessionJobs(setOf("job-output-v1", "job-kill-v1")))
+        assertFalse(supportsSessionJobs(emptySet()))
+    }
 }

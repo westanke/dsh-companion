@@ -536,4 +536,26 @@
     <string name="image_saved_to_gallery">已保存到相册</string>
     <string name="image_save_needs_permission">相册需要「存储」权限，Android 10 以下需授权后才能保存</string>
     <string name="image_save_failed">保存到相册失败</string>
+    <!-- 后台任务面板（bridge ≥ 2.4.3 的 /chat/sessions/{id}/jobs）。 -->
+    <string name="jobs_title">后台任务</string>
+    <string name="jobs_empty">这个会话现在没有后台任务</string>
+    <string name="jobs_refresh">刷新</string>
+    <string name="jobs_status_running">运行中</string>
+    <string name="jobs_status_stopping">停止中</string>
+    <string name="jobs_status_completed">已完成</string>
+    <string name="jobs_status_killed">已终止</string>
+    <string name="jobs_status_failed">已失败</string>
+    <string name="jobs_kill">终止</string>
+    <string name="jobs_kill_confirm_title">终止这个任务？</string>
+    <string name="jobs_kill_confirm_body">%1$s 还在运行，终止后无法恢复。</string>
+    <string name="jobs_kill_confirm_yes">终止</string>
+    <string name="jobs_cancel">取消</string>
+    <string name="jobs_kill_requested">已发送终止请求</string>
+    <string name="jobs_kill_already_finished">它已经结束了，不用再管</string>
+    <string name="jobs_output_title">输出</string>
+    <string name="jobs_output_lossy">开头有字节被丢弃，这不是完整输出</string>
+    <string name="jobs_output_empty">这个任务没有输出</string>
+    <string name="jobs_view_output">查看输出</string>
+    <string name="jobs_hide_output">收起输出</string>
+    <string name="jobs_unowned">无主任务</string>
 </resources>
