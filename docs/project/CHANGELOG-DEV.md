@@ -3,6 +3,36 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## v2.2.50（versionCode 10075）· 真机验证收口 v2.2.49 三处瑕疵（2026-10-21）
+
+### 基于什么
+
+v2.2.49 发布后在 vivo V2080A 上按 `android-ui-drive` 的规矩逐屏点击验证（坐标只取
+`uiautomator dump`、每次点击后复验），bridge 已升级到 2.5.0，目录通道首次真正跑通
+（目录下拉列出 amazon-bedrock / anthropic / google / groq 等休眠条目，选中 groq 后
+`defaultBaseURL` 预填为 `https://api.groq.com/openai/v1`、协议预选 `openai-completions`，
+适配器自动问出 7 个模型）。顺带撞见三处只在真机上才看得见的瑕疵。
+
+### 干了什么
+
+- 目录通道的状态行与校验文案：新建目录条目且模型目录为空时，原来沿用编辑态的
+  「已自定义模型目录」，还会在目录通道里显示自定义通道的专有报错
+  「自定义模型 API 至少需要一个模型。」。改为按 `rows.isEmpty()` 走官方文案
+  「该提供商没有列出任何模型，请手动添加。」，目录通道的空目录报错换成
+  「至少需要添加一个模型。」（自定义通道保留原专有文案）。新增两条中英字符串
+  `models_empty_hint` / `models_needs_models`。
+- 候选面板跨供应商残留：先选目录供应商 A 自动「获取可用模型」，再切到「自定义模型 API」
+  或改选供应商 B，A 的「已发现 N 个模型」面板仍挂在表单里。`AddProviderSheet` 里加
+  `LaunchedEffect(mode)` 与 `LaunchedEffect(picked?.id)` 先 `clearDiscoveredModels()`
+  再发现，切换即清空。
+
+### 测了什么
+
+- `./scripts/build.sh assembleDebug` 通过，装真机（`lastUpdateTime` 变化确认真换包）后复验：
+  目录通道空目录显示「该提供商没有列出任何模型，请手动添加。」+「至少需要添加一个模型。」；
+  目录选 groq → 自动发现 →（等发现返回后）切自定义 tab，页面上不再出现「已发现」面板。
+- 四项门禁：`docsCheck` + `:app:testDebugUnitTest` + `:app:lintDebug` + `assembleRelease` 全绿。
+
 ## v2.2.49（versionCode 10074）· 设置「模型 / 插件」对照官方 Web 对齐（2026-10-21）
 
 ### 基于什么

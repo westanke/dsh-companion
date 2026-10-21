@@ -299,7 +299,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.49.apk
+DSH伴侣-companion-v2.2.50.apk
 ```
 
 Requirements:
@@ -589,34 +589,24 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.49` (`versionCode` 10074)
+- Version: `v2.2.50` (`versionCode` 10075)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
 - Unit tests: 62 test classes / 575 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.49.apk`, **3,142,644 bytes**, SHA-256
-  `c06ec71912753ead9cf4f20d143a2664ca6918117d6b389d0a3e655e05e3ebd3` (kept in sync in
-  `artifacts/SHA256SUMS.txt`).   **Released on Gitee + AtomGit** (tag `v2.2.49`) —
-  what changed in this release: the Model and Plugins settings pages now match the official web UI.
-  **1. Model page** — official title/intro copy; a banner when the settings document is read-only;
-  "Add model provider" now offers two lanes: **Third-party providers** (pick an unconfigured
-  provider from the built-in catalog and just fill in its API key) and **Custom model API**
-  (enter ID, base URL, protocol and models yourself). The editor now shows the protocol as a
-  dropdown (options come from the server schema), and the API-key field hints follow the
-  credential state (leave blank to use the saved credential / environment variable detected /
-  enter a key) with a show/hide toggle. The model catalog is no longer a bare ID list: each row
-  carries ID, display name, context window and max output tokens (capacities accept 131072, 256K
-  or 1M), with per-row validation for required/duplicate IDs. New "Restore default models",
-  a "Discover available models" candidate panel (search / select all / deselect all / add
-  selected) and provider deletion (confirmation copy differs when a stored key exists). Opening
-  a card captures the settings revision; concurrent edits elsewhere surface "close and reopen the
-  card, then edit the current values", and a successful save reports "Saved {provider}.".
-  **2. Plugins page** — the inventory gained a search box (filters by name and description, with a
-  clear empty state) and each row expands to show the full name, installed version, declared
-  version, homepage and why it cannot be toggled.
-  **3. Prerequisite** — catalog metadata and "restore default models" need bridge 2.5.0 (see the
-  server plugin row below).
+- Current APK: `DSH伴侣-companion-v2.2.50.apk`, **3,143,660 bytes**, SHA-256
+  `001abbdbf0e2501ddae0e2bac331d35ecc740a4110ed45e2badaf7790082946d` (kept in sync in
+  `artifacts/SHA256SUMS.txt`).   **Released on Gitee + AtomGit** (tag `v2.2.50`) —
+  what changed in this release: three cosmetic defects found while verifying v2.2.49 on device (no
+  functional change). **1. Catalog-lane copy** — adding a provider from the built-in catalog no
+  longer claims "Model catalog customized" when the catalog is empty; it says "This provider lists
+  no models — add them manually." The empty-catalog validation also stops reusing the custom-lane
+  sentence ("A custom model API needs at least one model.") and says "At least one model is
+  required." **2. Candidate panel leak** — switching between the third-party and custom lanes, or
+  picking a different provider, now clears the previous provider's "discovered N models" panel
+  instead of attributing those models to the new one. **3. Prerequisite** — catalog metadata and
+  "restore default models" need bridge 2.5.0 (see the server plugin row below).
 - Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25). The key did not change, but the
   **package name did in v2.2.41**, so `v2.2.40` and earlier still require an uninstall first
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)

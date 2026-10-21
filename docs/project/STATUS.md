@@ -1,5 +1,16 @@
 - 日期：2026-10-21
-- **v2.2.49（versionCode 10074，2026-10-21，未发版）**：**模型/插件设置页对照官方 Web 界面对齐**（bridge 需 2.5.0，见其 CHANGELOG）。
+- **v2.2.50（versionCode 10075，2026-10-21，发）**：**真机验证收口 v2.2.49 三处瑕疵**（功能面不动）。
+  ① 目录通道状态行/校验文案：新建目录条目空目录时按官方说「该提供商没有列出任何模型，请手动添加。」，
+  目录通道的空目录报错换成「至少需要添加一个模型。」（自定义通道保留「自定义模型 API 至少需要…」）；
+  新增字符串 `models_empty_hint` / `models_needs_models`（中英同步）。
+  ② 候选面板跨供应商残留：`AddProviderSheet` 的 `LaunchedEffect(mode)` 与 `LaunchedEffect(picked?.id)`
+  先 `clearDiscoveredModels()`，切 tab / 换供应商即清空上一家的「已发现 N 个模型」。
+  门验：`docsCheck`（8 文档 / 46 任务 / 14 项根检查全过）+ `:app:testDebugUnitTest`（62 类 / 575 用例 / 0 失败）
+  + `:app:lintDebug` + `assembleRelease` 全绿；release 产物 3,143,660 字节，
+  SHA-256 `001abbdb…2946d`（`artifacts/SHA256SUMS.txt` 同步）。真机复验：目录选 groq → 自动发现 →
+  切自定义 tab 不再残留候选；空目录文案正确。
+
+- **v2.2.49（versionCode 10074，2026-10-21，发）**：**模型/插件设置页对照官方 Web 界面对齐**（bridge 需 2.5.0，见其 CHANGELOG）。
   - **模型页**（`ui/ModelsScreen.kt` 重写 + 新文件 `ui/ModelsEditorSheet.kt`）：
     文案对齐官方（「模型」+ 简介「填入各提供商的 API 密钥即可使用其模型。」）；只读横幅
     「当前部署的设置文档为只读。」；添加卡双 tab（「第三方模型提供商」目录下拉 = 休眠的

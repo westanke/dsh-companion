@@ -326,6 +326,8 @@
     <string name="models_remove_model">Remove model</string>
     <string name="models_selector_empty_warning">No models will appear in the model selector; IDs outside the catalog can still be sent directly.</string>
     <string name="models_custom_needs_models">A custom model API needs at least one model.</string>
+    <string name="models_empty_hint">This provider lists no models — add them manually.</string>
+    <string name="models_needs_models">At least one model is required.</string>
     <string name="models_candidate_search">Search models</string>
     <string name="models_candidate_all">Select all</string>
     <string name="models_candidate_none">Deselect all</string>

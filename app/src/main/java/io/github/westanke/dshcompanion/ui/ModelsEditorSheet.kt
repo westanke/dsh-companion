@@ -327,7 +327,14 @@ internal fun ProviderEditorForm(
     Text(stringResource(R.string.models_models_catalog), style = MaterialTheme.typography.titleSmall)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            stringResource(if (provider?.config?.modelsInherited == true) R.string.models_models_inherited else R.string.models_models_customized),
+            // 新建的目录条目还没有任何模型时，说「已自定义」会误导；按官方文案给「没有列出任何模型」。
+            stringResource(
+                when {
+                    provider?.config?.modelsInherited == true -> R.string.models_models_inherited
+                    rows.isEmpty() -> R.string.models_empty_hint
+                    else -> R.string.models_models_customized
+                },
+            ),
             modifier = Modifier.weight(1f),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodySmall,
@@ -355,7 +362,8 @@ internal fun ProviderEditorForm(
         )
         if (provider == null) {
             Text(
-                stringResource(R.string.models_custom_needs_models),
+                // 目录通道不是「自定义模型 API」，别套用那句专有文案。
+                stringResource(if (catalogEntry != null) R.string.models_needs_models else R.string.models_custom_needs_models),
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
             )

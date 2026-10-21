@@ -332,6 +332,8 @@
     <string name="models_remove_model">删除模型</string>
     <string name="models_selector_empty_warning">模型选择器中将不显示任何模型；目录外 ID 仍可直接发送。</string>
     <string name="models_custom_needs_models">自定义模型 API 至少需要一个模型。</string>
+    <string name="models_empty_hint">该提供商没有列出任何模型，请手动添加。</string>
+    <string name="models_needs_models">至少需要添加一个模型。</string>
     <string name="models_candidate_search">搜索模型</string>
     <string name="models_candidate_all">全选</string>
     <string name="models_candidate_none">取消全选</string>

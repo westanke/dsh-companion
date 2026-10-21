@@ -177,8 +177,11 @@ private fun AddProviderSheet(
     // 此时候选必然为空 —— 那不是「都添加过了」，要如实说是服务端太旧。
     val metadataSupported = remember(settings) { settings.providers.any { it.settingsNs != null } }
     var picked by remember { mutableStateOf<ProviderView?>(null) }
+    // 换模式/换供应商时先清掉上一家的候选，否则自定义 tab 会残留别家的「已发现 N 个模型」。
+    LaunchedEffect(mode) { viewModel.clearDiscoveredModels() }
     // 官方在选中目录供应商后会自动询问可用模型；休眠条目无需地址即可询问。
     LaunchedEffect(picked?.id) {
+        viewModel.clearDiscoveredModels()
         picked?.let { viewModel.discoverModels(it.id, null, null, null) }
     }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
