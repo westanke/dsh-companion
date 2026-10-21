@@ -564,4 +564,22 @@
     <string name="jobs_view_output">查看输出</string>
     <string name="jobs_hide_output">收起输出</string>
     <string name="jobs_unowned">无主任务</string>
+    <!-- 应用内更新检查（设置页「关于」） -->
+    <string name="update_check_title">检查更新</string>
+    <string name="update_check_current_version">当前版本：%1$s</string>
+    <string name="update_check_latest">已是最新版本</string>
+    <string name="update_check_new_version">发现新版本：%1$s</string>
+    <string name="update_check_release_notes">更新说明</string>
+    <string name="update_check_download">下载并安装</string>
+    <string name="update_check_downloading">正在下载 %1$s · %2$d%%</string>
+    <string name="update_check_install">安装</string>
+    <string name="update_check_check_failed">检查更新失败：%1$s</string>
+    <string name="update_check_download_failed">下载失败：%1$s</string>
+    <string name="update_check_verify_failed">校验失败，已删除下载文件</string>
+    <string name="update_check_install_failed">无法启动安装，请稍后重试</string>
+    <string name="update_check_permission_required">需要授权「安装未知来源应用」</string>
+    <string name="update_check_open_settings">打开授权设置</string>
+    <string name="update_check_rate_limited">GitHub 请求过于频繁，请稍后再试</string>
+    <string name="update_check_ready">下载完成，校验通过，点击安装</string>
+    <string name="update_check_retry">重试</string>
 </resources>

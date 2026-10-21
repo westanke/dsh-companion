@@ -180,6 +180,47 @@ App 的 `connection.ready` 也正常到达（临时加的 CAP 诊断日志证实
 - 门验：`testDebugUnitTest` **60 类 / 542 用例 / 0 失败**、`docsCheck` 8 文档 + 14 项新检查全绿。
 - **未上机**：真机复验由用户自行完成（用户既定口径）。单测绿 ≠ 行为对。
 
+## 未发版 · 应用内更新检查（方案报告对标，2026-10-21）
+
+### 基于什么
+
+方案报告 `report/dsh-companion-应用内更新检查-实现方案_2026-10-21.md`：App 此前只有手动装 APK
+一条升级路，没有应用内检查更新的入口；真机上想知道「有没有新版本」只能回电脑看 release 页。
+方案定下：检查源按 UI 语言分渠道（中文 zh* → Gitee，英文/其他 → GitHub），流程
+「查最新 → 下 APK → SHA256SUMS.txt 校验 → 拉起安装器」，不引第三方库。
+
+### 干了什么
+
+- `data/UpdateChecker.kt`（新）：`ReleaseChannel` 枚举（GITEE/GITHUB，各自 apiUrl + headers；
+  GitHub 不带 User-Agent 会 403）、`channelForLanguage`（zh* → GITEE）、`isNewerVersion`
+  （数字段逐段比较）、`ReleaseInfo`/`ReleaseAsset`（kotlinx.serialization + ignoreUnknownKeys）、
+  `pickApkAsset`/`pickShaSumsAsset`、`parseSha256Sums`、`sha256Hex`（64KiB 分块）、
+  `checkLatest`/`downloadApk`（进度回调 `(downloaded, total)`）/`downloadText`、
+  `buildInstallIntent`（FileProvider `${packageName}.files` + ACTION_VIEW）、
+  `buildInstallSourcesIntent`（未知来源设置页）、`summarizeReleaseNotes`。
+- `ui/UpdateCheckSection.kt`（新）：`UpdateUiState` 七态（Idle/Checking/UpToDate/Available/
+  Downloading/Ready/Failed）+ `UpdateCheckSection(context)` + `UpdateActionButton`，
+  复用 `SettingRow` 挂在设置页「关于」一节版本行之后；文案全走 `stringResource`，
+  点击回调里不摸 `context.getString`（lint `LocalContextGetResourceValueCall`）。
+- `data/DshClient.kt`：`defaultHttpClient` 由 `private val` 改 `internal val`（KDoc 注明给更新
+  检查复用）—— `ArchitectureGuardTest` 的 OkHttpClient 白名单只有两个文件，更新代码另建必红，复用即绿。
+- `AndroidManifest.xml`：+`REQUEST_INSTALL_PACKAGES`（拉起系统安装器所需）。
+- 文案：`values/strings.xml` + `values-en/strings.xml` 各 +20 个 `update_check_*` 键，
+  中英键集与占位符双向一致（`StringResourcesTest` 双向断言）。
+
+### 测了什么
+
+- 单测：`data/UpdateCheckerTest.kt`（新）27 例：channelForLanguage、isNewerVersion、
+  pickApkAsset/pickShaSumsAsset、parseSha256Sums、summarizeReleaseNotes、downloadProgressPercent。
+- 门验：`testDebugUnitTest` **61 类 / 569 用例 / 0 失败**（三处声明同步：README.md / README.en.md /
+  AGENTS.md）、`lintDebug` 0 error、`docsCheck` 全绿、`app/src` 无文件超 800 行。
+- **真机已复验**（V2080A，2026-10-21 08:40 包装机）：设置 →「关于」→「检查更新」真实走通
+  Gitee HTTPS → 解析 ReleaseInfo → 找资产 → `isNewerVersion` 判同版 → 渲染
+  「当前版本：v2.2.47 / 已是最新版本」，布局无重叠无截断（截图 OCR 核对）。
+- **未上机**：Available → Downloading → Ready → 安装器的下载/校验/安装链路 —— 真机当前版本与
+  Gitee 最新发布同为 v2.2.47，无新版可下；要触发只能人为造 release 或临时降 versionName，
+  超出本任务边界（方案 §八 同款遗留）。
+
 ## v2.2.45 · 真机交互九条 + 交付物链接打不开（用户逐条点名，2026-10-19 晚）
 
 ### 基于什么

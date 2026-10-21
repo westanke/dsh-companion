@@ -425,6 +425,12 @@ fun SettingsScreen(state: HarnessState, viewModel: HarnessViewModel) {
                 Modifier.padding(bottom = 18.dp),
             )
 
+            // ── 应用内更新检查 ────────────────────────────────────────────
+            // 入口紧贴版本行：它的语义就是「我装的这个版本够不够新」，用户想知道这件事时
+            // 第一眼就该在版本旁边看到它。更新源按界面语言分流：中文→Gitee 主站，
+            // 英文/其他→GitHub 镜像。
+            UpdateCheckSection(context)
+
             // 构建水印：版本号在多次重打之间不变，所以「改了没生效」的争议一直说不清。
             // 把 git 短哈希与构建时刻摆在版本行下面，用户一眼就能确认「我装的是哪一次构建」。
             Text(

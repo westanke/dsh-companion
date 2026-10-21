@@ -611,7 +611,16 @@ fun permissionPresets(): PermissionCatalog = get("chat/permission-presets", Perm
         private val JSON_MEDIA = "application/json".toMediaType()
         private val OCTET_STREAM = "application/octet-stream".toMediaType()
         private val EMPTY_BODY = ByteArray(0).toRequestBody(OCTET_STREAM)
-        private val defaultHttpClient = OkHttpClient.Builder()
+        /**
+         * 全 App 唯一的共享 OkHttp 客户端。
+         *
+         * **为什么是 `internal` 而不是 `private`**：`AGENTS.md` §4.1 立了「`DshClient` 是唯一网络
+         * 边界」，而 `ArchitectureGuardTest` 把这条变成会红的断言 —— 它只认 `data/DshClient.kt`
+         * 里的 `OkHttpClient` 构造点。应用内更新检查（`data/UpdateChecker.kt`）要访问发布 API，
+         * 必须复用这个客户端；若在 `UpdateChecker` 里再建一个，门禁直接红。
+         * 复用同一个实例也意味着连接池、超时、ping 策略只有一处定义。
+         */
+        internal val defaultHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(45, TimeUnit.SECONDS)
             .writeTimeout(45, TimeUnit.SECONDS)

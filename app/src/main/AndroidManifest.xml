@@ -4,6 +4,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- 发送反馈的触感震动（ChatWebBridge.haptic），normal 级安装时授予，无需运行时申请 -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- 应用内更新检查（设置页「关于」→「检查更新」）：调起系统安装器装 APK。
+         minSdk 26 起，未经此权限授权的应用无法调起安装器，故必须声明。 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:allowBackup="false"

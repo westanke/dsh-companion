@@ -557,4 +557,22 @@
     <string name="jobs_view_output">View output</string>
     <string name="jobs_hide_output">Hide output</string>
     <string name="jobs_unowned">Unowned</string>
+    <!-- In-app update check (Settings → About) -->
+    <string name="update_check_title">Check for updates</string>
+    <string name="update_check_current_version">Current version: %1$s</string>
+    <string name="update_check_latest">You are on the latest version</string>
+    <string name="update_check_new_version">New version available: %1$s</string>
+    <string name="update_check_release_notes">Release notes</string>
+    <string name="update_check_download">Download &amp; install</string>
+    <string name="update_check_downloading">Downloading %1$s · %2$d%%</string>
+    <string name="update_check_install">Install</string>
+    <string name="update_check_check_failed">Update check failed: %1$s</string>
+    <string name="update_check_download_failed">Download failed: %1$s</string>
+    <string name="update_check_verify_failed">Verification failed, downloaded file deleted</string>
+    <string name="update_check_install_failed">Cannot start the installer, please retry</string>
+    <string name="update_check_permission_required">Needs the “Install unknown apps” permission</string>
+    <string name="update_check_open_settings">Open permission settings</string>
+    <string name="update_check_rate_limited">GitHub rate limit exceeded, please try again later</string>
+    <string name="update_check_ready">Downloaded and verified. Tap install.</string>
+    <string name="update_check_retry">Retry</string>
 </resources>
