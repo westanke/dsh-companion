@@ -1,7 +1,6 @@
 # AGENTS.md — dsh-companion 工程宪法
 
 > 本文件是每次会话**必然读到**的那份约定。规矩写在这里，不靠记忆、不靠口头。
-> 来源：借鉴 [dsh-web-mobile](https://github.com/mexiaosqwq/dsh-web-mobile) 的 `AGENTS.md` 制度设计，
 > 按本项目（Android 原生客户端 + 服务端 bridge）的特色裁剪，见文末「制度来源」。
 >
 > **体积纪律**：本文件只写**命令、契约、触发词与一两行的铁律**；
