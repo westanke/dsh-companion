@@ -16,6 +16,8 @@
 |---|---|
 | 知道现在到哪了 | `docs/project/STATUS.md` → `ROADMAP.md` |
 | 知道某能力有没有、差什么 | `docs/project/PARITY.md` |
+| 知道某文件/目录干什么、新文件该放哪 | `docs/project/STRUCTURE.md` |
+| 知道某模块导出什么、接口签名长什么样 | `docs/project/INTERFACES.md` |
 | 知道为什么这么设计 | `docs/project/ARCHITECTURE.md` → `docs/project/decisions/` |
 | 知道这次改了什么、测了什么 | `docs/project/CHANGELOG-DEV.md` + `app/build.gradle.kts` 逐版注释 |
 | 改代码前避坑 | `docs/project/PITFALLS.md`（名字 = 触发词 = 锚点） |
@@ -50,7 +52,7 @@ bash scripts/release.sh --publish   # 发版·阶段 B：tag → 双推 → 两�
 scripts/build.sh                    # 默认 assembleDebug
 scripts/build.sh assembleRelease    # 发布包
 scripts/build.sh :app:testDebugUnitTest   # 单元测试
-scripts/build.sh docsCheck          # 文档一致性（8 文档 / ROADMAP 任务状态 / STATUS 引用）
+scripts/build.sh docsCheck          # 文档一致性（10 文档 / ROADMAP 任务状态 / STATUS 引用 / 目录与接口锚点双向）
 ```
 
 > **发版走 `scripts/release.sh`，不要手敲清单**。它按 `RELEASE.md` 的顺序铁律**分成两阶段**：
@@ -86,7 +88,7 @@ scripts/build.sh docsCheck          # 文档一致性（8 文档 / ROADMAP 任�
 | 测试类数 / 用例数 | `README` 中英双站 + `TESTING.md`（口径：数 `app/build/test-results/` XML） |
 | bridge 最低版本 | `README` 双站「安装要求」与「项目信息」两处必须一致 |
 
-**铁律**：`docsCheck` **只覆盖 `docs/project/` 下 8 份文档**，不覆盖 README。
+**铁律**：`docsCheck` 覆盖 `docs/project/` 下 **10 份必需文档**，但**不覆盖根 README**。
 README 中英双站是最容易漂移的地方（v2.2.33–2.2.35 三版漂移过：中文停 2.2.32、英文停 24 类/256 用例）。
 **发版前除 `docsCheck` 外，必须另跑一次对账**（命令见 `PITFALLS.md` §README 双站漂移）。
 
@@ -145,6 +147,36 @@ web/           ← WebView 容器（chat.html 兜底路径）
 - `test` 指向的测试**必须存在**——这条可机检，将来应进 `docsCheck`。
 - 没有 `@patch` 的适配代码 = 没人认领的补丁，后来者不敢删，只会在上面继续堆。
 
+### 4.4 目录结构与接口说明的同步纪律
+
+用户要求（2026-10-21）：「加目录结构与接口说明，方便 AI 阅读改代码，**后期改代码要同步改**。」
+「请记得同步」没有门禁等于没写（README 双站漂移就是这么漂了三版），所以它是**机检**的。
+
+| 改动 | **同一提交**内必须同步 |
+|---|---|
+| 新增 / 移动 / 删除 `app/src/main/java/` 下的 `.kt` | `docs/project/STRUCTURE.md` 的 `<!-- structure-check -->` 锚点 |
+| 改公开方法/类签名、搬模块 | `docs/project/INTERFACES.md` 的 `<!-- interfaces-check -->` 锚点与正文 |
+| 改消费的 bridge 端点或事件字段 | `INTERFACES.md` §3 + **先改 bridge 仓库**的 API/OpenAPI/AsyncAPI/SDK/合约测试 |
+| 新增一类文件（测试 / 脚本 / 文档 / 资源） | `STRUCTURE.md` 的「新增东西放哪里」表与对应小节 |
+
+门禁是**双向**的，`scripts/build.sh docsCheck`：
+
+1. **文档 → 源码**：锚点里的路径必须存在且类型对得上（`file` / `dir`）；
+   `INTERFACES.md` 锚点声明的标识符必须真能在指出的文件里 grep 到。
+2. **源码 → 文档**：`app/src/main/java/` 下每个 `.kt` 都必须登记在 `STRUCTURE.md` 锚点里。
+   这条才是「新增文件必须同步文档」的兑现 —— 只查第一向的话，新文件根本不会被发现。
+3. **下限断言**：锚点解析出的条目数低于阈值（STRUCTURE < 100 / INTERFACES < 25）时**直接红**，
+   报「表格格式可能变了」。防的是「解析失败 → 两个集合双双为空 → 被当成一致」的假绿。
+   > 这个阈值不是拍脑袋：2026-10-21 落地时**第一条就抓到了自己** ——
+   > Kotlin 的 `Regex("^…")` 默认不带 MULTILINE，多行表格只解析出 0 行。
+   > 少了这条断言，那次的 130 条锚点会「一条没查」却全绿。
+
+**铁律**：
+- **先改文档再提交，不允许「下个提交补」**。门禁红着提交等于把红转给下一个人。
+- 明细只写在 `STRUCTURE.md` / `INTERFACES.md` 一处；本文件**不抄文件清单和签名**
+  （抄了必然漂，见 §4.2 行数那段的教训）。
+- 锚点区的标题与标记是**机器契约**，改格式要同批改 `build.gradle.kts` 的 `DocsCheckTask`。
+
 ---
 
 ## 5. 测试纪律
@@ -152,7 +184,7 @@ web/           ← WebView 容器（chat.html 兜底路径）
 | 层 | 命令 | 说明 |
 |---|---|---|
 | 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 62 类 / 575 用例（随代码变化，勿当常量） |
-| 文档 | `scripts/build.sh docsCheck` | 8 文档 / ROADMAP 任务 / STATUS 引用一致性 |
+| 文档 | `scripts/build.sh docsCheck` | 10 文档 / ROADMAP 任务 / STATUS 引用 / 根 README 双站 / 目录与接口锚点双向 |
 | 真机 | 人工 | **单测绿 ≠ 行为对**。涉及手势、键盘、WebView、耗电、断流的一律要真机确认 |
 
 **铁律**：
@@ -208,6 +240,7 @@ web/           ← WebView 容器（chat.html 兜底路径）
 - `连接状态位是「曾经连上过」，不是「此刻还连着」`
 - `busy 只在 launchOperation 里收尾：绕过它的路径会把标志永久卡住`
 - `文档链接带位置后缀（:行号 / #L行号）被当成路径的一部分`
+- `目录结构与接口说明漂移`
 
 > 新坑位：名字加进上面清单 + 原文写进 `PITFALLS.md` 并补 `### 同名` 锚点。
 
@@ -223,6 +256,9 @@ web/           ← WebView 容器（chat.html 兜底路径）
 | 债务台账只许收紧 | `architecture.test.ts` 强制（环/行数/模块状态） | 改 `TECH-DEBT.md` + 行数预算 800；**2026-10-17 起由 `ArchitectureGuardTest` 扫行数兑现**（超预算须在台账登记）—— 原以为「Kotlin 侧无等价解析器」，实测**文本匹配就够** |
 | 文档路由表 | 13 条场景路由 | 收敛为第 0 节一张表 |
 | 坑位索引 | 67 条 | 11 条起步，按需增长 |
+
+**2026-10-21 新增**：`docs/project/STRUCTURE.md`（代码地图）与 `INTERFACES.md`（契约与签名），
+连同 `docsCheck` 的**双向锚点校验**一起落地 —— 与姊妹仓同制度、同格式、不同阈值。
 
 **刻意没抄的**：CDP 探针体系（22 个）——本项目没有 WebUI 宿主，无处安放。
 **本项目特有的三条**：Bridge 版本基线两处一致、熄屏断流与亮屏接回、WebView 与原生双实现。

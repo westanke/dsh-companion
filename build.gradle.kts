@@ -68,6 +68,10 @@ abstract class DocsCheckTask : DefaultTask() {
             "SECURITY.md",
             "TESTING.md",
             "CHANGELOG-DEV.md",
+            // 2026-10-21 新增：给 AI 与改代码的人用的两张导航图。
+            // 它们不是散文型文档，末尾带机检锚点区，由下面「目录结构与接口说明」一段双向校验。
+            "STRUCTURE.md",
+            "INTERFACES.md",
         )
         val missing = required.filterNot { directory.file(it).asFile.isFile }
         check(missing.isEmpty()) { "Missing project documents: ${missing.joinToString()}" }
@@ -189,8 +193,113 @@ abstract class DocsCheckTask : DefaultTask() {
                 "低于 README 声明的门槛 $threshold——表格疑似漏更，请补表（PITFALLS.md §bridge 版本基线）。"
         }
 
+        // ========== 目录结构与接口说明（2026-10-21 新增） ==========
+        // 用户要求：「加目录结构与接口说明，方便 AI 阅读改代码，**后期改代码要同步改**」。
+        // 前两句写两份 md 就够；难的是第三句——没有门禁的「请记得同步」等于没写。
+        // 本仓已有实锤先例（README 双站漂移连续三版无人发现，见 PITFALLS.md 同名条目），
+        // 所以这里把它做成机检。
+        //
+        // 为什么**双向**：
+        // - 只查「文档 → 源码」（锚点路径必须存在）时，**新增文件永远发现不了** ——
+        //   新加一个 ui/Xxx.kt 压根没登记，旧条目全部有效，检查照样全绿。那只是
+        //   惩罚「删文件忘删条目」，漏掉真正高频的那一半。
+        // - 只查「源码 → 文档」时，锚点里写错路径、指向不存在的文件同样发现不了。
+        //
+        // 为什么**下限断言**：解析失败（标记被改、表格格式变了、锚点被套进代码块）会让
+        // 两个集合双双为空而「一致」，于是「零解析」被当成「零问题」——这是本仓坑位索引
+        // 那一节最初撞上的假绿，教训已写进 docsCheck 的注释里。
+        val sourceRoot = rootDirectory.resolve("app").resolve("src").resolve("main").resolve("java")
+        val sourceFiles = sourceRoot.walkTopDown()
+            .filter { it.isFile && it.extension == "kt" }
+            .map { it.relativeTo(rootDirectory).invariantSeparatorsPath }
+            .toList()
+        verify(sourceFiles.size > 50) {
+            "app/src/main/java 下只扫到 ${sourceFiles.size} 个 .kt（预期 > 50）——源码树结构变了，" +
+                "请同步更新 docsCheck 的扫描根目录，不许静默通过。"
+        }
+
+        val structureDoc = directory.file("STRUCTURE.md").asFile
+        verify(structureDoc.isFile) { "Missing docs/project/STRUCTURE.md（目录结构，给 AI 读的代码地图）" }
+        val structureText = structureDoc.readText()
+        val structureBlock = anchorBlock(structureText, "<!-- structure-check:begin -->", "<!-- structure-check:end -->")
+        verify(structureBlock != null) {
+            "STRUCTURE.md 缺少 `<!-- structure-check:begin/end -->` 机检锚点（格式见文末），解析不出任何条目。" +
+                "若改了锚点格式，请同步更新 docsCheck——不许静默通过。"
+        }
+        // RegexOption.MULTILINE 不能省：Kotlin 的 `^` 默认只匹配**输入开头**（不像 JS 的 /gm）。
+        // 少了它，多行表格只会解析出 0 行 —— 下面那条下限断言会立刻红，但红的原因看着像「格式变了」，
+        // 实际是解析器自己写错了。踩过一次，留注释。
+        val structureRows = Regex("""^\|\s*`([^`]+)`\s*\|\s*(file|dir)\s*\|""", RegexOption.MULTILINE)
+            .findAll(structureBlock ?: "")
+            .map { it.groupValues[1].trim() to it.groupValues[2] }
+            .toList()
+        verify(structureRows.size >= 100) {
+            "STRUCTURE.md 锚点只解析出 ${structureRows.size} 行（预期 ≥ 100），表格格式可能变了——不许静默通过。"
+        }
+        for ((relative, kind) in structureRows) {
+            val target = rootDirectory.resolve(relative)
+            verify(target.exists()) {
+                "STRUCTURE.md 锚点里的 `$relative` 不存在——文件已删除/移动，请同步锚点（AGENTS.md §4.4）。"
+            }
+            verify(if (kind == "file") target.isFile else target.isDirectory) {
+                "STRUCTURE.md 锚点把 `$relative` 标成 $kind，但它的实际类型不符。"
+            }
+        }
+        val declaredSources = structureRows.map { it.first }.toSet()
+        // **反向**：app/src/main/java 下每个 .kt 都必须登记。这条才是「新增文件必须同步文档」的兑现。
+        for (relative in sourceFiles) {
+            verify(relative in declaredSources) {
+                "`$relative` 未登记进 STRUCTURE.md 机检锚点——新增/移动/删除 app/src/main/java 下文件时请同步（AGENTS.md §4.4）。"
+            }
+        }
+
+        val interfacesDoc = directory.file("INTERFACES.md").asFile
+        verify(interfacesDoc.isFile) { "Missing docs/project/INTERFACES.md（接口说明，签名与契约清单）" }
+        val interfacesText = interfacesDoc.readText()
+        val interfacesBlock = anchorBlock(interfacesText, "<!-- interfaces-check:begin -->", "<!-- interfaces-check:end -->")
+        verify(interfacesBlock != null) {
+            "INTERFACES.md 缺少 `<!-- interfaces-check:begin/end -->` 机检锚点（格式见文末），解析不出任何条目。"
+        }
+        val interfaceRows = Regex("""^\|\s*`([^`]+)`\s*\|\s*`([^`]+)`\s*\|\s*([a-z]+)\s*\|""", RegexOption.MULTILINE)
+            .findAll(interfacesBlock ?: "")
+            .map { Triple(it.groupValues[1], it.groupValues[2].trim(), it.groupValues[3]) }
+            .toList()
+        verify(interfaceRows.size >= 25) {
+            "INTERFACES.md 锚点只解析出 ${interfaceRows.size} 行（预期 ≥ 25），表格格式可能变了——不许静默通过。"
+        }
+        val sourceCache = mutableMapOf<String, String>()
+        for ((symbol, relative, _) in interfaceRows) {
+            val target = rootDirectory.resolve(relative)
+            if (!target.isFile) {
+                verify(false) {
+                    "INTERFACES.md 锚点里的 `$relative` 不存在——文件已删除/移动，请同步锚点（AGENTS.md §4.4）。"
+                }
+                continue
+            }
+            // 从签名片段里取最后一个标识符：`fun ChatHistory.displayItems(...)` → displayItems。
+            val identifier = Regex("""[A-Za-z_][A-Za-z0-9_]*""").findAll(symbol).lastOrNull()?.value
+            verify(identifier != null) {
+                "INTERFACES.md 锚点条目「$symbol」里取不出标识符，格式应为 `<签名片段>` | `<文件路径>` | <类型>。"
+            }
+            val body = sourceCache.getOrPut(relative) { target.readText() }
+            verify(Regex("""\b${Regex.escape(identifier!!)}\b""").containsMatchIn(body)) {
+                "INTERFACES.md 锚点说 `$relative` 有「$identifier」，但源码里找不到——" +
+                    "导出改名/搬文件后请同步（AGENTS.md §4.4）。"
+            }
+        }
+
         println("docsCheck: ${required.size} documents and ${tasks.size} tasks are consistent")
         println("docsCheck: root README bilingual / versionName / CHANGELOG / pitfalls baseline — $rootCheckCount new checks passed")
+        println("docsCheck: STRUCTURE.md ${structureRows.size} anchors (${sourceFiles.size} source files all registered) / INTERFACES.md ${interfaceRows.size} anchors, both directions consistent")
+    }
+
+    /** 取出 begin/end 标记之间的正文；缺任意一个标记都返回 null（调用方按解析失败处理）。 */
+    private fun anchorBlock(text: String, begin: String, end: String): String? {
+        val from = text.indexOf(begin)
+        if (from < 0) return null
+        val to = text.indexOf(end, from + begin.length)
+        if (to < 0) return null
+        return text.substring(from + begin.length, to)
     }
 
     /** 三段 X.Y.Z 语义化比较：a > b 返回正数，相等返回 0。字符串比大小会把 2.4.10 排到 2.4.2 之后，故不能直接用 compareTo。 */
