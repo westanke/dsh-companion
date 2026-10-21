@@ -151,7 +151,7 @@ data class ChatDeliverable(
  * 那个是从工具参数里嗅「提到过哪些路径」（带一堆刻意的取舍与白名单），
  * 这个读的是内核明说的「这是我给你的东西」，可靠度高得多、还带说明。
  *
- * 下个版本起 [displayItems] 也把交付物渲染成**消息流里的卡片**（对齐桌面端钉在
+ * v2.2.48 起 [displayItems] 也把交付物渲染成**消息流里的卡片**（对齐桌面端钉在
  * 轮次收尾）。此前 [displayItems] 只认 user/message、assistant/message、tool/call
  * 三类，`deliverables/presented` 落到 `else -> emptyList()` 被整类丢掉 —— 数据一直
  * 在日志里，就是没人读，用户问「我要你写的报告呢」找不到入口。

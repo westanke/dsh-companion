@@ -1,5 +1,16 @@
 - 日期：2026-10-21
-- **未发版 · 会话内联交付物卡片（对齐桌面端，仅本地提交）**：用户对照两端截图发现电脑会话里
+- **v2.2.48（versionCode 10073，2026-10-21 发）**：三笔未发版合并随本版发布 ——
+  ① **Markdown 表格贴行不渲染**（2026-10-20 完成、真机已复验）：org.intellij.markdown 对
+  「表头紧贴上一行、无空行」的 GFM 表格不产出 TABLE 节点，整表并入上一段落显示成一串竖线文字；
+  修法：新增 `ui/chat/ChatMarkdownNormalize.kt` 渲染前补表格前边界空行（围栏感知 / 流式安全 / 幂等，
+  `@patch` `glued-gfm-table-needs-blank-line`），`AssistantBody` plain/prose 两分支都接入；
+  连带修三列及以上表格首列被窄列截断（`ChatMarkdownTable.kt` 仅 ≥3 列时首列按权重折行）。
+  ② **应用内更新检查**（2026-10-21 完成、真机已复验）：设置「关于」区「检查更新」条目，
+  `data/UpdateChecker.kt` 按界面语言分流渠道（zh*→Gitee、其他→GitHub），下载 APK 到
+  cacheDir/updates/ + SHA256SUMS 校验 + FileProvider 安装引导；下载/安装链路未上机（当时无新版可触发）。
+  ③ **会话内联交付物卡片**：见下条。门验（发版终态）：**62 类 / 575 用例 / 0 失败** +
+  docsCheck 全绿 + lintDebug 0 error + assembleRelease 成功。
+- **v2.2.48 · 会话内联交付物卡片（对齐桌面端）**：用户对照两端截图发现电脑会话里
   交付物有内联文件卡片、手机端只有「本会话的文件」弹层。数据一直在历史里，是 `displayItems()`
   把 `deliverables/presented` 整类丢掉。修法：`ChatItemKind.DELIVERABLE` + 两段式冲刷
   （按出现顺序缓冲，每轮 `turn/end` 处出卡、钉在轮次收尾；无 `turn/end` 补尾；

@@ -290,7 +290,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.47.apk
+DSH伴侣-companion-v2.2.48.apk
 ```
 
 安装要求：
@@ -536,23 +536,23 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.47`（`versionCode` 10072）
+- 当前版本：`v2.2.48`（`versionCode` 10073）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：62 个测试类 / 575 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.47.apk`，**3,061,356 字节**，
-  SHA-256 `f33b3ee3e1b2f0e6885e0130e27629931f3883a1866bd77334bf11744fb14370`（`artifacts/SHA256SUMS.txt` 同步）。
-  **已发 Gitee + AtomGit**（tag `v2.2.47`）——
-  本版改动：**正文里带位置的文档链接点开不再报「找不到这个路径」**。
-  模型引用文档几乎总带位置 ——`docs/project/STATUS.md:1`、`/abs/STATUS.md#L101`、
-  `src/a.ts:12:5` 都是常见写法，而此前这些后缀被当成路径的一部分原样发给服务端
-  （文件名里真的多了个 `#L101`），`roots/resolve` 只能回「不是普通文件」。
-  现在 `:1` / `:12-34` / `:12:5` / `#L101`（大小写不敏感）在发给服务端之前剥掉：
-  绝对路径在分类时剥、相对路径在拼工作目录之前剥；只剥**确定形态**、最多剥两段、剥成空串则不剥。
-  同时修掉同源缺陷：相对路径里的冒号曾被当成 scheme 分隔符，`docs/x.md:1` 直接判成
-  「未知协议」，连拼工作目录的机会都没有。`https://e.com/a#L1` 的页内跳转与
-  `http://host:8080` 的端口**刻意不动**
+- 当前 APK：`DSH伴侣-companion-v2.2.48.apk`，**3,085,852 字节**，
+  SHA-256 `e67f5362dafdefd23416fb3a7605bec3fc0c04a3d57541645799d8896576ef35`（`artifacts/SHA256SUMS.txt` 同步）。
+  **已发 Gitee + AtomGit**（tag `v2.2.48`）——
+  本版改动：三笔一起上。
+  **① 会话内联交付物卡片（对齐桌面端）**：模型 `present` 的文件现在和电脑端一样
+  钉在消息流里（每轮收尾处出卡；同轮同路径只留最后说明），点按直接进文件预览面板；
+  卡片数据来自交付物事件，不做路径嗅探。
+  **② 应用内更新检查**：设置 →「关于」→「检查更新」——渠道按界面语言分流
+  （中文 → Gitee，英文/其他 → GitHub），发现新版本后下载 APK、对照 SHA256SUMS 校验、
+  再拉起系统安装器；全程不引第三方库。
+  **③ Markdown 表格贴行修复**：表头紧贴上一行的 GFM 表格（模型常这么写）此前会
+  显示成一串竖线文字，渲染前自动补表格前空行修复；三列及以上表格的首列不再被窄列截断。
 - 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用。证书没变，但 **v2.2.41 起包名变了**，
   `v2.2.40` 及更早仍需先卸载）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)

@@ -299,7 +299,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.47.apk
+DSH伴侣-companion-v2.2.48.apk
 ```
 
 Requirements:
@@ -589,42 +589,30 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.47` (`versionCode` 10072)
+- Version: `v2.2.48` (`versionCode` 10073)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
 - Unit tests: 62 test classes / 575 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.47.apk`, **3,061,356 bytes**, SHA-256
-  `f33b3ee3e1b2f0e6885e0130e27629931f3883a1866bd77334bf11744fb14370` (kept in sync in
-  `artifacts/SHA256SUMS.txt`). **Released to Gitee + AtomGit** (tag `v2.2.47`) — Changes in this build:
-  **document links with a location suffix no longer fail to open.** Model replies almost always cite
-  docs with a position — `docs/project/STATUS.md:1`, `/abs/STATUS.md#L101`, `src/a.ts:12:5` — and those
-  suffixes used to be sent to the server as part of the path (the filename really did acquire a
-  `#L101`), so `roots/resolve` could only answer "not a regular file". Now `:1` / `:12-34` / `:12:5` /
-  `#L101` (case-insensitive) are stripped **before** the path goes out: absolute paths at classify
-  time, relative paths before joining the session cwd; only the certain forms, at most two segments,
-  and never down to an empty string. The sibling defect is fixed too: a colon in a relative path used
-  to be read as a scheme separator, so `docs/x.md:1` was classified as "unknown scheme" and never got
-  the chance to be joined to the cwd. `https://e.com/a#L1` (in-page anchor) and `http://host:8080`
-  (port) are deliberately untouched
-  **specialized tool blocks** (read with a path header and line-numbered body / bash with a `$ command`
-  line and dark output with ANSI stripped / edit·write with `-`/`+` diff coloring, matching the
-  official Web blocks) and a **persistent permission-level pill above the composer** (same source and
-  action as the ⋯ menu); chat.html parity (models grouped by vendor, tool-trajectory and statistics
-  panels, `@` file completion, ▤ files aligned right, `/` command panel collapsing after send);
-  **background-jobs panel** (session ⋯ menu → "Background jobs", needs bridge **≥ 2.4.3**: a long
-  task started from the phone used to be invisible and unstoppable once you left the computer — you
-  can now see the roster with status badges, runtime, progress and terminal reason, expand the
-  retained output as monospace text (and are told explicitly when `lossy` means it is **not** the
-  whole output), and kill a job behind a confirmation dialog; `already-finished` reads "it already
-  finished — nothing to do" rather than "killed". The entry is gated on the `job-list-v1` capability
-  bit, so an older bridge simply does not show it instead of opening onto a 404);
-  **"response truncated" notice** (needs bridge **≥ 2.4.1**); diagnostic-log switch, connection-import
-  panel, keep-at-bottom follow on opening a session
+- Current APK: `DSH伴侣-companion-v2.2.48.apk`, **3,085,852 bytes**, SHA-256
+  `e67f5362dafdefd23416fb3a7605bec3fc0c04a3d57541645799d8896576ef35` (kept in sync in
+  `artifacts/SHA256SUMS.txt`). **Released to Gitee + AtomGit** (tag `v2.2.48`) — Changes in this
+  build, three items at once:
+  **1. Inline deliverable cards (desktop parity)** — files the model `present`s now show up in the
+  chat flow just like on desktop (one card per completed turn; a same-path re-presentation keeps
+  the latest description). Tap a card to open the file preview sheet. Card data comes from the
+  deliverable events — no path sniffing.
+  **2. In-app update check** — Settings → About → "Check for updates": the channel follows the UI
+  language (Chinese → Gitee, English/others → GitHub); on a newer release it downloads the APK,
+  verifies it against SHA256SUMS, then hands off to the system installer. No third-party libraries.
+  **3. Glued GFM table fix** — tables whose header row sits right under the previous line (the way
+  models often write them) used to render as a wall of pipe characters; a blank line is now
+  inserted before the table at render time, and the first column of 3+-column tables is no longer
+  crushed into the narrow label column.
 - Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25). The key did not change, but the
   **package name did in v2.2.41**, so `v2.2.40` and earlier still require an uninstall first
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)
 - License: [GNU Affero General Public License v3.0](./LICENSE)
-- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.7** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+; **approval and question cards need 2.3.7+**; gap resync / subscription baseline / live deliverable cards need 2.3.8+; **the background-jobs panel needs 2.4.3+**)
+- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.7** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+; **approval and question cards need 2.3.7+**; gap resync / subscription baseline / live deliverable cards need 2.3.8+; the "response truncated" notice needs bridge **≥ 2.4.1**; the background-jobs panel needs bridge **≥ 2.4.3**)
   (formerly [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace))

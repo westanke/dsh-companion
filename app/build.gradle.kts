@@ -823,8 +823,21 @@ android {
         //     与 `http://host:8080`（端口），靠「网页分支返回原文」保住。
         //   测了什么：60 类 / 542 用例 / 0 失败；docsCheck 8 文档 + README 双站 14 项；lintDebug 0 error。
         //   未做：真机复验由用户自行完成。
-        versionCode = 10072
-        versionName = "2.2.47"
+        // v2.2.48（versionCode 10073）：**三笔未发版合并发版**（表格贴行 + 应用内更新检查 + 会话内联交付物卡片）。
+        //   基于什么：三笔分别完成于 2026-10-20 / 10-21（前两笔真机已复验），都没赶上 v2.2.47 的车，
+        //     一直以「未发版」挂在 CHANGELOG-DEV 里；本次随 v2.2.48 一起发出。
+        //   干了什么：① Markdown 表格贴行 —— ChatMarkdownNormalize.kt 渲染前补表格前边界空行
+        //     （org.intellij.markdown 不认无空行 GFM 表格），AssistantBody plain/prose 两分支接入，
+        //     连带修三列表首列被窄列截断（ChatMarkdownTable.kt 仅 ≥3 列首列按权重折行）；
+        //   ② 应用内更新检查 —— 设置「关于」区条目，UpdateChecker.kt 按界面语言分流渠道
+        //     （zh*→Gitee、其他→GitHub），下载到 cacheDir/updates/ + SHA256SUMS 校验 + FileProvider 安装引导；
+        //   ③ 会话内联交付物卡片 —— ChatItemKind.DELIVERABLE + displayItems() 两段式冲刷
+        //     （每轮 turn/end 处出卡、钉轮次收尾、同轮同路径单卡），ChatDeliverableCard.kt
+        //     点按走 openSessionFile + 文件面板。
+        //   测了什么：62 类 / 575 用例 / 0 失败；docsCheck 8 文档 + README 双站；lintDebug 0 error。
+        //   未做：③ 交付物卡片真机复验由用户自行完成（①②已复验）。
+        versionCode = 10073
+        versionName = "2.2.48"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。
