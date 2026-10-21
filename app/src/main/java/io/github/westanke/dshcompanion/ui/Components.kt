@@ -51,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import io.github.westanke.dshcompanion.ui.theme.LocalSemanticColors
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -112,10 +113,25 @@ fun WarningBanner(message: String, modifier: Modifier = Modifier) {
 /**
  * 连接状态的**语义色**：绿=已连接、红=已断开。
  *
- * 刻意不用主题色：这两个是「通/断」的语义色，不该随主题变（深色主题下也要一眼可辨）。
+ * ## 为什么从两个常数改成 `@Composable` 取值
+ *
+ * 改造前这里是两个写死的 `Color(0xFF2E7D32)` / `Color(0xFFC62828)`，理由是
+ * 「语义色不该随主题变，深色下也要一眼可辨」。那个**理由成立，做法错了**：
+ * 固定色值在深色底上只有 3.47 / 3.16:1，小字号读不清（WCAG AA 要 4.5:1）。
+ *
+ * 正确做法不是「固定」，而是**每套主题各给一对达标的语义色** ——
+ * 语义（通=绿、断=红）不变，但明度随底色走。取色在
+ * `ui/theme/ThemePalettes.kt` 的 `SemanticColors` 里定义，由
+ * `DeepSeekHarnessTheme` 通过 `LocalSemanticColors` 下发。
+ *
+ * 现在这两个名字是**取色入口**而不是常量：调用方写法几乎没变（仍是
+ * `activeColor = ConnectionOnlineColor`），但必须在 `@Composable` 上下文里读。
  */
-val ConnectionOnlineColor = Color(0xFF2E7D32)
-val ConnectionOfflineColor = Color(0xFFC62828)
+val ConnectionOnlineColor: Color
+    @Composable get() = LocalSemanticColors.current.online
+
+val ConnectionOfflineColor: Color
+    @Composable get() = LocalSemanticColors.current.offline
 
 /**
  * 一行状态：**状态点 + 文字**。

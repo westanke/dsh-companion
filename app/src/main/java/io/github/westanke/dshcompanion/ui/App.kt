@@ -142,7 +142,11 @@ private fun ConnectedApp(
     val scope = rememberCoroutineScope()
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val wide = maxWidth >= 840.dp
+        // 840dp 魔数收敛成具名常量的三档判据（见 AdaptiveBreakpoints.kt）。
+        // **语义与改造前二进制等价**：isWideLayout(maxWidth) == maxWidth >= 840.dp，
+        // 所以手机端（Compact / Medium）走的还是原来那条 else 分支，一个字符都没动。
+        // 单测 PaneModeTest 在 599/600/839/840/1199/1200 六个边界上钉住这条等价性。
+        val wide = isWideLayout(maxWidth)
         // 平板（wide）下导航面板**默认收起**（用户方案：让会话/文件页显示区域更大）。
         //
         // 展开时是从左缘滑出的 264dp 抽屉，盖在内容之上（overlay，不挤压内容）——

@@ -91,4 +91,17 @@ class AppearancePreferencesTest {
         assertEquals(InterfaceStyle.SYSTEM, state.interfaceStyle)
         assertFalse(state.fontFollowsSystem)
     }
+
+    /**
+     * 配色主题的默认值必须是 PAPER。
+     *
+     * 与上面那条同一个理由，但多一层分量：PAPER 是「与改造前逐字段相同」的那套配色，
+     * 默认值一旦漂成别的主题，**所有用户升级后第一眼就会看到界面变样** ——
+     * 而这是本项目「新增可选外观而不是改版」的承诺。
+     * （PAPER 本身是否仍等于旧色值，由 `AppThemeTest` 逐字段盯着。）
+     */
+    @Test
+    fun `默认配色主题是 PAPER`() {
+        assertEquals(AppTheme.PAPER, HarnessState().appTheme)
+    }
 }

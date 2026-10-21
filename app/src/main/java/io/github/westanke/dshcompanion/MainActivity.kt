@@ -126,6 +126,10 @@ class MainActivity : AppCompatActivity() {
             DeepSeekHarnessTheme(
                 darkTheme = state.interfaceStyle.isDark(isSystemInDarkTheme()),
                 fontScale = state.effectiveFontScale,
+                // 配色主题（PAPER / WARM / MIST / INK）。它与明暗风格正交：
+                // 前者定色相基调，后者定深浅，组合出 8 份色板。
+                // 默认 PAPER = 加这套机制之前的配色，不切换就一个像素都不变。
+                appTheme = state.appTheme,
             ) {
                 DeepSeekHarnessApp(viewModel)
             }

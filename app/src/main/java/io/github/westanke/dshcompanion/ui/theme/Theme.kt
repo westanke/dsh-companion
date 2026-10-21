@@ -5,96 +5,30 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.westanke.dshcompanion.data.AppTheme
 
-private val Paper = Color(0xFFF9F9F7)
-private val Oat = Color(0xFFF0EFEC)
-private val Ink = Color(0xFF131313)
-private val Graphite = Color(0xFF383835)
-private val Muted = Color(0xFF74726D)
-private val DeepSeekTeal = Color(0xFF006A60)
-private val Clay = Color(0xFFC6613F)
-
-private val LightColors = lightColorScheme(
-    primary = Ink,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFE0F2EF),
-    onPrimaryContainer = Color(0xFF073B36),
-    secondary = DeepSeekTeal,
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFCDEDE7),
-    onSecondaryContainer = Color(0xFF073B36),
-    tertiary = Clay,
-    onTertiary = Color.White,
-    tertiaryContainer = Color(0xFFFFDBCF),
-    onTertiaryContainer = Color(0xFF542013),
-    background = Paper,
-    onBackground = Ink,
-    surface = Paper,
-    onSurface = Ink,
-    surfaceVariant = Oat,
-    onSurfaceVariant = Muted,
-    surfaceDim = Color(0xFFE7E5E0),
-    surfaceBright = Color.White,
-    surfaceContainerLowest = Color.White,
-    surfaceContainerLow = Color(0xFFF5F4F1),
-    surfaceContainer = Oat,
-    surfaceContainerHigh = Color(0xFFE9E7E2),
-    surfaceContainerHighest = Color(0xFFE2E0DA),
-    inverseSurface = Graphite,
-    inverseOnSurface = Paper,
-    surfaceTint = DeepSeekTeal,
-    outline = Color(0xFF8B8983),
-    outlineVariant = Color(0xFFD7D5CF),
-    error = Color(0xFFB3261E),
-    onError = Color.White,
-    errorContainer = Color(0xFFFFDAD6),
-    onErrorContainer = Color(0xFF410002),
-)
-
-private val DarkColors = darkColorScheme(
-    primary = Color(0xFFF3F2ED),
-    onPrimary = Ink,
-    primaryContainer = Color(0xFF164B45),
-    onPrimaryContainer = Color(0xFFCEF2EC),
-    secondary = Color(0xFF83D5C8),
-    onSecondary = Color(0xFF003730),
-    secondaryContainer = Color(0xFF164B45),
-    onSecondaryContainer = Color(0xFFCDEDE7),
-    tertiary = Color(0xFFFFB59B),
-    onTertiary = Color(0xFF5D1B0A),
-    tertiaryContainer = Color(0xFF75321F),
-    onTertiaryContainer = Color(0xFFFFDBCF),
-    background = Color(0xFF181816),
-    onBackground = Color(0xFFF0EFEA),
-    surface = Color(0xFF181816),
-    onSurface = Color(0xFFF0EFEA),
-    surfaceVariant = Color(0xFF2A2A27),
-    onSurfaceVariant = Color(0xFFBEBBB3),
-    surfaceDim = Color(0xFF121210),
-    surfaceBright = Color(0xFF383834),
-    surfaceContainerLowest = Color(0xFF10100F),
-    surfaceContainerLow = Color(0xFF1D1D1B),
-    surfaceContainer = Color(0xFF22221F),
-    surfaceContainerHigh = Color(0xFF2B2B28),
-    surfaceContainerHighest = Color(0xFF343430),
-    inverseSurface = Color(0xFFF0EFEA),
-    inverseOnSurface = Ink,
-    surfaceTint = Color(0xFF83D5C8),
-    outline = Color(0xFF918F88),
-    outlineVariant = Color(0xFF41413D),
-    error = Color(0xFFFFB4AB),
-    onError = Color(0xFF690005),
-    errorContainer = Color(0xFF93000A),
-    onErrorContainer = Color(0xFFFFDAD6),
-)
+/**
+ * 语义色（连接通/断）的 **CompositionLocal**。
+ *
+ * 为什么走 CompositionLocal 而不是让组件自己判明暗：`Components.kt` 里的
+ * `StatusLabel` 是**跨页复用**的哑组件，它不该知道「现在是哪套主题、深还是浅」——
+ * 那是主题层的知识。主题在这里下发一次，组件只消费。
+ *
+ * 默认值取 PAPER 浅色那一对：任何在 `DeepSeekHarnessTheme` 之外渲染的场景
+ * （预览、单测、将来某个忘了包主题的入口）都不会拿到 null。
+ */
+val LocalSemanticColors = staticCompositionLocalOf {
+    SemanticColors(online = Color(0xFF2E7D32), offline = Color(0xFFC62828))
+}
 
 private val Baseline = Typography()
 private val AppTypography = Typography(
@@ -137,25 +71,32 @@ private val AppTypography = Typography(
  *   设置里新增了「跟随系统 / 浅色 / 深色」三档，配色必须由那条偏好驱动。
  *   参数给了**默认值**，于是老的调用点（测试、预览）不传也仍然可用。
  * - [fontScale] 是应用内字号倍数（1f = 空操作），见 [AppFontScale]。
+ * - [appTheme] 是**配色主题**（PAPER / WARM / MIST / INK），默认 [AppTheme.PAPER] ——
+ *   与加这套机制之前的配色逐字段相同。它与 [darkTheme] 正交：
+ *   主题定色相与基调，明暗定深浅，两者组合出 8 份色板。
  */
 @Composable
 fun DeepSeekHarnessTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     fontScale: Float = 1f,
+    appTheme: AppTheme = AppTheme.PAPER,
     content: @Composable () -> Unit,
 ) {
+    val palette = remember(appTheme) { paletteOf(appTheme) }
     AppFontScale(fontScale) {
-        MaterialTheme(
-            colorScheme = if (darkTheme) DarkColors else LightColors,
-            typography = AppTypography,
-            shapes = Shapes(
-                extraSmall = RoundedCornerShape(4.dp),
-                small = RoundedCornerShape(6.dp),
-                medium = RoundedCornerShape(8.dp),
-                large = RoundedCornerShape(8.dp),
-                extraLarge = RoundedCornerShape(8.dp),
-            ),
-            content = content,
-        )
+        CompositionLocalProvider(LocalSemanticColors provides palette.semantics(darkTheme)) {
+            MaterialTheme(
+                colorScheme = palette.colorScheme(darkTheme),
+                typography = AppTypography,
+                shapes = Shapes(
+                    extraSmall = RoundedCornerShape(4.dp),
+                    small = RoundedCornerShape(6.dp),
+                    medium = RoundedCornerShape(8.dp),
+                    large = RoundedCornerShape(8.dp),
+                    extraLarge = RoundedCornerShape(8.dp),
+                ),
+                content = content,
+            )
+        }
     }
 }

@@ -182,7 +182,7 @@ web/           ← WebView 容器（chat.html 兜底路径）
 
 | 层 | 命令 | 说明 |
 |---|---|---|
-| 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 62 类 / 575 用例（随代码变化，勿当常量） |
+| 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 66 类 / 588 用例（随代码变化，勿当常量） |
 | 文档 | `scripts/build.sh docsCheck` | 10 文档 / ROADMAP 任务 / STATUS 引用 / 根 README 双站 / 目录与接口锚点双向 |
 | 真机 | 人工 | **单测绿 ≠ 行为对**。涉及手势、键盘、WebView、耗电、断流的一律要真机确认 |
 
@@ -190,6 +190,19 @@ web/           ← WebView 容器（chat.html 兜底路径）
 - 修 bug 必须带回归用例（`TESTING.md` 记录演进：112 → 135 → 151 → 156 → 169 → 273）。
 - 测试文件命名与被测类对应（`XxxTest.kt`），夹具集中在 `app/src/test/resources/`。
 - 不许为凑数加空断言测试。
+- **桥的安全模型变了，客户端必须跟着过一遍**（用户 2026-10-21 定，与姊妹仓
+  `dsh-remote-bridge` 的「改桥必测安全」成对）。本 App 只消费 `/api/v1`，**不碰 `/manage`**
+  （已核实全仓无管理面调用），所以**管理面收紧不会影响本 App**；但以下几种改动仍会连带：
+
+  | 桥侧改动 | 本 App 必须确认 |
+  |---|---|
+  | 认证/令牌格式、`Authorization` 头形态、WS 子协议 | `data/DshClient` 与 WS 建连仍能过鉴权；撤销后重连行为正确 |
+  | 新增/删除 scope、`connection.ready` 能力位 | `data/BridgeCapabilities` 判据与实际服务端一致，不得按版本号猜 |
+  | 新增错误码（如 `TUNNEL_MODE_ADMIN_DISABLED`） | `data/ErrorMessages` 有对应文案，不得落到「未知错误」 |
+  | 隧道/反代相关行为 | 手机从公网经隧道连回来时仍可用（隧道只会禁管理面，不应禁数据面） |
+
+  桥侧发版后，本仓至少复跑 `:app:testDebugUnitTest` 并真机连一次；**不许只看桥的测试绿就放行** ——
+  2026-10-21 的提权漏洞正是「桥自己有 349 个测试全绿」却没测到管理面来源判定。
 
 ---
 

@@ -8,6 +8,7 @@ import io.github.westanke.dshcompanion.data.EventDebouncer
 import io.github.westanke.dshcompanion.data.SeqVerdict
 import io.github.westanke.dshcompanion.data.RequestGate
 import io.github.westanke.dshcompanion.data.InterfaceStyle
+import io.github.westanke.dshcompanion.data.AppTheme
 import io.github.westanke.dshcompanion.data.parseBridgeCapabilities
 import io.github.westanke.dshcompanion.data.QUESTION_STATE_CONTINUED
 import io.github.westanke.dshcompanion.data.ChatContentParts
@@ -220,6 +221,8 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         // 外观三项同样必须在这里盖 —— 漏了它们，用户切一次连接
         // 就会看到主题被打回「跟随系统」、字号被打回 1.0（与上面那段注释同一个坑）。
         interfaceStyle = preferences.interfaceStyle,
+        // 配色主题同理：漏了它，用户切一次连接，自己挑的暖米/青灰就被打回纸感。
+        appTheme = preferences.appTheme,
         fontScale = preferences.fontScale,
         fontFollowsSystem = preferences.fontFollowsSystem,
     )
@@ -361,6 +364,19 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
     fun setInterfaceStyle(style: InterfaceStyle) {
         preferences.interfaceStyle = style
         update { copy(interfaceStyle = style) }
+    }
+
+    /**
+     * 改**配色主题**（PAPER / WARM / MIST / INK）；立刻生效，不需要重启。
+     *
+     * 与 [setInterfaceStyle] 同一条路：偏好写盘 + 状态更新，两者必须一起做 ——
+     * 只写偏好界面不会变（不是 Compose 状态），只改状态重启后会丢。
+     * 主题在 `MainActivity` 的 `setContent` 最外层消费，所以改完**下一帧**全 App 换色，
+     * 连接页、会话页、设置页同时变，不会出现「设置页变了、退回去还是旧色」的半截状态。
+     */
+    fun setAppTheme(theme: AppTheme) {
+        preferences.appTheme = theme
+        update { copy(appTheme = theme) }
     }
 
     /** 改应用内字号倍数；立刻生效，取值由偏好层收敛到 0.8–1.5。 */

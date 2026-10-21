@@ -633,7 +633,15 @@ internal fun ChatDetail(
             }
             // 渲染用 displayEntries（由 visibleItems 折出，滚动中那份冻结快照），
             // **不是** displayItems：数据源每帧都在变，而滚动期间我们刻意不改列表内容。
-            items(displayEntries, key = { entry -> displayEntryKey(entry) }) { entry ->
+            //
+            // contentType（O-06）：消息与过程组是两种视觉结构，混排时必须标出来，
+            // 否则滚动时 Compose 会把消息的槽位复用给过程组，每次都要重建结构。
+            // 官方文档明确要求「异质列表必须给 contentType」；这里是纯性能参数，不改视觉。
+            items(
+                items = displayEntries,
+                key = { entry -> displayEntryKey(entry) },
+                contentType = { entry -> displayEntryContentType(entry) },
+            ) { entry ->
                 ChatDisplayEntryRow(
                     entry = entry,
                     images = state.attachmentImages,

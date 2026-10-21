@@ -50,6 +50,7 @@ import io.github.westanke.dshcompanion.HarnessViewModel
 import io.github.westanke.dshcompanion.BuildConfig
 import io.github.westanke.dshcompanion.R
 import io.github.westanke.dshcompanion.data.BusySendMode
+import io.github.westanke.dshcompanion.data.AppTheme
 import io.github.westanke.dshcompanion.data.InterfaceStyle
 import io.github.westanke.dshcompanion.debug.DiagLog
 import io.github.westanke.dshcompanion.ui.chat.copyText
@@ -243,6 +244,38 @@ fun SettingsScreen(state: HarnessState, viewModel: HarnessViewModel) {
                     ) { Text(stringResource(label)) }
                 }
             }
+            // 配色主题。与「界面风格」并列、互不替代：前者定色相基调，后者定深浅，
+            // 两份偏好正交组合出 8 份色板。放在明暗下面而不是另开一节，
+            // 是因为它们同属「外观」这件事 —— 用户想调颜色时视线不必来回跳。
+            //
+            // 默认 PAPER = 加这套机制之前的配色（逐字段相同，有单测钉着）。
+            // 四套都在这儿出现：主题是**手机上**的功能，不能只给平板。
+            Text(
+                stringResource(R.string.app_theme),
+                modifier = Modifier.padding(bottom = 8.dp),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                val themes = listOf(
+                    AppTheme.PAPER to R.string.theme_paper,
+                    AppTheme.WARM to R.string.theme_warm,
+                    AppTheme.MIST to R.string.theme_mist,
+                    AppTheme.INK to R.string.theme_ink,
+                )
+                themes.forEachIndexed { index, (theme, label) ->
+                    SegmentedButton(
+                        selected = state.appTheme == theme,
+                        onClick = { viewModel.setAppTheme(theme) },
+                        shape = SegmentedButtonDefaults.itemShape(index, themes.size),
+                    ) { Text(stringResource(label)) }
+                }
+            }
+            Text(
+                stringResource(R.string.app_theme_desc),
+                modifier = Modifier.padding(bottom = 20.dp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall,
+            )
             SwitchRow(
                 title = stringResource(R.string.font_follows_system),
                 description = stringResource(R.string.font_follows_system_desc),

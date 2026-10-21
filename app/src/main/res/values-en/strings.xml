@@ -138,6 +138,12 @@
     <string name="interface_style_system">System</string>
     <string name="interface_style_light">Light</string>
     <string name="interface_style_dark">Dark</string>
+    <string name="app_theme">Colour theme</string>
+    <string name="app_theme_desc">Changes hue and tone only — independent of the light/dark style above. The default Paper theme is the original palette.</string>
+    <string name="theme_paper">Paper</string>
+    <string name="theme_warm">Warm</string>
+    <string name="theme_mist">Mist</string>
+    <string name="theme_ink">High contrast</string>
     <string name="font_scale">Text size</string>
     <string name="font_scale_value">%1$s×</string>
     <string name="font_scale_desc">Applies to this app only, multiplied with the system text size.</string>

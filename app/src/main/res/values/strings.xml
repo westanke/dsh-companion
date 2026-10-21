@@ -144,6 +144,13 @@
     <string name="interface_style_system">跟随系统</string>
     <string name="interface_style_light">浅色</string>
     <string name="interface_style_dark">深色</string>
+    <!-- 配色主题：与明暗风格正交，默认 PAPER = 现状配色（零改动）。 -->
+    <string name="app_theme">配色主题</string>
+    <string name="app_theme_desc">只改色相与基调，与上面的明暗风格互不影响；默认「纸感」就是原来的配色。</string>
+    <string name="theme_paper">纸感</string>
+    <string name="theme_warm">暖米</string>
+    <string name="theme_mist">青灰</string>
+    <string name="theme_ink">高对比</string>
     <string name="font_scale">字号大小</string>
     <string name="font_scale_value">%1$s×</string>
     <string name="font_scale_desc">只作用于这个 App，会与系统字号相乘。</string>

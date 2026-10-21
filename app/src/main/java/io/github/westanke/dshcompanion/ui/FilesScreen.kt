@@ -326,7 +326,14 @@ private fun FileBrowser(
                 Modifier.weight(1f).fillMaxWidth(),
                 contentPadding = PaddingValues(vertical = 8.dp),
             ) {
-                items(entries, key = { it.path }) { entry -> FileRow(entry, viewModel) }
+                // contentType：目录与文件虽共用 FileRow，但内部走不同分支（图标/操作/尺寸），
+                // 属于「视觉结构不同」。标出来能避免滚动时把目录行的槽位复用给文件行。
+                // 纯性能参数，不改视觉（O-06）。
+                items(
+                    items = entries,
+                    key = { it.path },
+                    contentType = { it.kind },
+                ) { entry -> FileRow(entry, viewModel) }
                 if (state.directory?.nextCursor != null) {
                     item {
                         TextButton(onClick = viewModel::loadNextDirectoryPage, modifier = Modifier.fillMaxWidth()) {

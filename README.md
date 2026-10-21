@@ -290,7 +290,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.50.apk
+DSH伴侣-companion-v2.2.51.apk
 ```
 
 安装要求：
@@ -536,21 +536,24 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.50`（`versionCode` 10075）
+- 当前版本：`v2.2.51`（`versionCode` 10076）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
-- 单元测试：62 个测试类 / 575 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
+- 单元测试：66 个测试类 / 588 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.50.apk`，**3,143,660 字节**，
-  SHA-256 `001abbdbf0e2501ddae0e2bac331d35ecc740a4110ed45e2badaf7790082946d`（`artifacts/SHA256SUMS.txt` 同步）。
-  **已发 Gitee + AtomGit**（tag `v2.2.50`）——
-  本版改动：v2.2.49 真机验证登记的三处瑕疵收口（功能面不动）。
-  **① 目录通道文案**：从内置目录挑供应商时，模型目录为空不再误报「已自定义模型目录」，
-  改说官方那句「该提供商没有列出任何模型，请手动添加。」；空目录的校验提示也不再套用
-  「自定义模型 API 至少需要一个模型。」（那是自定义通道的专有文案），改为「至少需要添加一个模型。」。
-  **② 候选面板串味**：切换「第三方 / 自定义」通道或改选供应商时，先清掉上一家的
-  「已发现 N 个模型」候选，不再把别家的模型挂到当前供应商名下。
-  **③ 对齐前提**：目录元数据与「恢复默认模型」依赖 bridge 2.5.0（见下方服务端插件一栏）。
+- 当前 APK：`DSH伴侣-companion-v2.2.51.apk`，**3,146,456 字节**，
+  SHA-256 `23321a39a5e55e93047a65318f5a5a3bb84366f0aa2009a7f1e02d0bf4ea026f`（`artifacts/SHA256SUMS.txt` 同步）。
+  **已发 Gitee + AtomGit**（tag `v2.2.51`）——
+  本版改动：**配色主题四套 + 平板零风险项 + 同步 bridge 2.5.1 安全模型**。
+  **① 配色主题**：外观新增「配色主题」，四套可选 —— 纸感（默认，逐字段等于原配色）、暖米（降蓝光）、
+  青灰（冷感）、高对比（强光）。每套各含明暗两份色板，与既有「界面风格（跟随系统/浅/深）」正交；
+  实时生效、无需重启；不切换则看不到任何变化。
+  **② 平板项**：840dp 魔数收敛为具名常量与四档纯函数（与旧判据二进制等价，手机端零影响）；
+  会话/文件列表补 `contentType`（纯性能）。
+  **③ 可读性**：连接状态语义色改为主题成对色，深色底对比度 3.47/3.16 → **9.90/7.79**（达 WCAG AA）；
+  附件删除键触摸区 30dp → 48dp。
+  **④ 与 bridge 2.5.1 的关系**：bridge 收紧管理面判据（隧道模式下管理面整体禁用），本 App 只消费
+  `/api/v1`、不碰 `/manage`，**管理面收紧对本 App 零影响**。
 - 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用。证书没变，但 **v2.2.41 起包名变了**，
   `v2.2.40` 及更早仍需先卸载）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)

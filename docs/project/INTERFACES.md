@@ -162,7 +162,9 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `interface SecretBox` | `data/HostStore.kt` | 加解密抽象 |
 | `class SecureConnectionStore(context: Context)` | `data/SecureConnectionStore.kt` | 凭据与主机存储门面 |
 | `class AppPreferences(context: Context)` | `data/AppPreferences.kt` | 纯偏好（明文）：语言/主题/字号/诊断开关等 |
-| `enum class InterfaceStyle` | `data/AppPreferences.kt` | 界面语言三档（语言分流判断复用 `AppCompatDelegate` 逻辑） |
+| `enum class InterfaceStyle` | `data/AppPreferences.kt` | 界面明暗三档（SYSTEM/LIGHT/DARK） |
+| `enum class AppTheme` | `data/AppPreferences.kt` | 配色主题四套（PAPER/WARM/MIST/INK），默认 PAPER = 改造前配色 |
+| `var AppPreferences.appTheme: AppTheme` | `data/AppPreferences.kt` | 配色主题偏好（存 enum name，不存 ordinal） |
 | `internal fun normalizeFontScale(value: Float): Float` | `data/AppPreferences.kt` | 字号兜底（防非法值） |
 | `class ConnectionCoordinator(...)` | `data/ConnectionCoordinator.kt` | 多地址探活与选路；全失败抛 `DshConnectionException` |
 | `class DshConnectionException(...)` | `data/ConnectionCoordinator.kt` | 携带**每个地址**的失败原因（诊断面板逐条展示） |
@@ -184,6 +186,7 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | --- | --- | --- |
 | `data class HarnessState(...)` | `HarnessModels.kt` | App 的**唯一 UI 状态**（Compose 只消费它） |
 | `val HarnessState.effectiveFontScale: Float` | `HarnessModels.kt` | 有效字号倍数 |
+| `fun HarnessViewModel.setAppTheme(theme: AppTheme)` | `HarnessViewModel.kt` | 切配色主题（写偏好 + 更新状态，实时生效） |
 | `class HarnessViewModel(application: Application) : AndroidViewModel(application)` | `HarnessViewModel.kt` | 唯一 ViewModel，持有 state 与跨域基础设施 |
 | 各域扩展函数（`fun HarnessViewModel.xxx()`） | `HarnessConnectionViewModel.kt` / `HarnessSessionsViewModel.kt` / `HarnessFilesViewModel.kt` / `HarnessInteractionsViewModel.kt` / `HarnessAttachmentsViewModel.kt` / `HarnessJobsViewModel.kt` / `HarnessPluginsViewModel.kt` / `HarnessDiagViewModel.kt` / `HarnessTruncationViewModel.kt` | 按域拆分的动作集；调用方写法与成员函数一致 |
 | `HarnessEventRules` 纯函数 | `HarnessEventRules.kt` | 事件帧与输入行的判定（可单测） |
@@ -223,6 +226,24 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `DiagLog` | `debug/DiagLog.kt` | 诊断日志单一出口；`enabled` 关掉就什么都不做 |
 | `DiagProbe` | `debug/DiagProbe.kt` | 探针浮层（可拖动，收起成小条） |
 
+### 4.6 主题与自适应（`ui/theme/`、`ui/AdaptiveBreakpoints.kt`）
+
+| 符号 | 位置 | 说明 |
+| --- | --- | --- |
+| `fun DeepSeekHarnessTheme(darkTheme, fontScale, appTheme, content)` | `ui/theme/Theme.kt` | 全 App 唯一主题入口；`appTheme` 默认 `PAPER`（零改动） |
+| `val LocalSemanticColors` | `ui/theme/Theme.kt` | 连接通/断语义色下发（CompositionLocal） |
+| `internal fun paletteOf(theme: AppTheme): ThemePalette` | `ui/theme/ThemePalettes.kt` | 主题 → 明暗两份色板 + 两套语义色 |
+| `data class ThemePalette` / `data class SemanticColors` | `ui/theme/ThemePalettes.kt` | 一套主题的完整外观 |
+| `internal enum class PaneMode` | `ui/AdaptiveBreakpoints.kt` | 宽度四档（Compact/Medium/Expanded/Large） |
+| `internal fun paneModeFor(width: Dp): PaneMode` | `ui/AdaptiveBreakpoints.kt` | 纯函数，阈值 600/840/1200 |
+| `internal fun isWideLayout(width: Dp): Boolean` | `ui/AdaptiveBreakpoints.kt` | 等价于改造前的 `maxWidth >= 840.dp` |
+| `val ConnectionOnlineColor` / `ConnectionOfflineColor` | `ui/Components.kt` | `@Composable` 取色入口（语义色随主题走） |
+| `internal fun displayEntryContentType(entry)` | `ui/chat/ChatProcessGroup.kt` | LazyColumn `contentType`（消息 / 过程组） |
+
+> **主题与明暗正交**：`AppTheme` 定色相基调，`InterfaceStyle` 定深浅，组合出 8 份色板。
+> 两份偏好**都进 `HarnessState`**，且都必须出现在 `withPreferences()` 里 ——
+> 漏一处，用户切一次连接就被打回默认（选择器会「自己跳回去」）。
+
 ---
 
 ## 5. 改接口的检查清单
@@ -261,6 +282,12 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `class SecureConnectionStore` | `app/src/main/java/io/github/westanke/dshcompanion/data/SecureConnectionStore.kt` | class |
 | `class AppPreferences` | `app/src/main/java/io/github/westanke/dshcompanion/data/AppPreferences.kt` | class |
 | `fun normalizeFontScale` | `app/src/main/java/io/github/westanke/dshcompanion/data/AppPreferences.kt` | function |
+| `enum class AppTheme` | `app/src/main/java/io/github/westanke/dshcompanion/data/AppPreferences.kt` | enum |
+| `fun paletteOf` | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/ThemePalettes.kt` | function |
+| `data class ThemePalette` | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/ThemePalettes.kt` | class |
+| `fun paneModeFor` | `app/src/main/java/io/github/westanke/dshcompanion/ui/AdaptiveBreakpoints.kt` | function |
+| `fun isWideLayout` | `app/src/main/java/io/github/westanke/dshcompanion/ui/AdaptiveBreakpoints.kt` | function |
+| `enum class PaneMode` | `app/src/main/java/io/github/westanke/dshcompanion/ui/AdaptiveBreakpoints.kt` | enum |
 | `class ConnectionCoordinator` | `app/src/main/java/io/github/westanke/dshcompanion/data/ConnectionCoordinator.kt` | class |
 | `class DshConnectionException` | `app/src/main/java/io/github/westanke/dshcompanion/data/ConnectionCoordinator.kt` | class |
 | `interface ProbeOutcome` | `app/src/main/java/io/github/westanke/dshcompanion/data/ConnectionCoordinator.kt` | interface |

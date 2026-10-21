@@ -299,7 +299,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.50.apk
+DSH伴侣-companion-v2.2.51.apk
 ```
 
 Requirements:
@@ -589,24 +589,27 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.50` (`versionCode` 10075)
+- Version: `v2.2.51` (`versionCode` 10076)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
-- Unit tests: 62 test classes / 575 cases at the last run (0 failures). The counts move with the code, so
+- Unit tests: 66 test classes / 588 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.50.apk`, **3,143,660 bytes**, SHA-256
-  `001abbdbf0e2501ddae0e2bac331d35ecc740a4110ed45e2badaf7790082946d` (kept in sync in
-  `artifacts/SHA256SUMS.txt`).   **Released on Gitee + AtomGit** (tag `v2.2.50`) —
-  what changed in this release: three cosmetic defects found while verifying v2.2.49 on device (no
-  functional change). **1. Catalog-lane copy** — adding a provider from the built-in catalog no
-  longer claims "Model catalog customized" when the catalog is empty; it says "This provider lists
-  no models — add them manually." The empty-catalog validation also stops reusing the custom-lane
-  sentence ("A custom model API needs at least one model.") and says "At least one model is
-  required." **2. Candidate panel leak** — switching between the third-party and custom lanes, or
-  picking a different provider, now clears the previous provider's "discovered N models" panel
-  instead of attributing those models to the new one. **3. Prerequisite** — catalog metadata and
-  "restore default models" need bridge 2.5.0 (see the server plugin row below).
+- Current APK: `DSH伴侣-companion-v2.2.51.apk`, **3,146,456 bytes**, SHA-256
+  `23321a39a5e55e93047a65318f5a5a3bb84366f0aa2009a7f1e02d0bf4ea026f` (kept in sync in
+  `artifacts/SHA256SUMS.txt`).   **Released on Gitee + AtomGit** (tag `v2.2.51`) —
+  what changed in this release: **four colour themes + tablet-safe items + bridge
+  2.5.1 security model sync**. **1. Colour themes** — Appearance gains a "Colour theme" row with four
+  options: Paper (default, field-for-field identical to the previous palette), Warm (lower blue light),
+  Mist (cool), High contrast (bright light). Each ships light and dark palettes and is orthogonal to the
+  existing "Interface style" (follow system / light / dark). Applies live, no restart; nothing changes
+  unless you switch. **2. Tablet items** — the 840dp magic number became named constants and four pure
+  tier functions (binary-identical to the old predicate, zero impact on phones); conversation and file
+  lists gained `contentType` (pure performance). **3. Legibility** — connection-state semantic colours
+  are now theme-paired; dark-mode contrast 3.47/3.16 → **9.90/7.79** (meets WCAG AA); the attachment
+  delete target went 30dp → 48dp. **4. Relation to bridge 2.5.1** — bridge tightened its admin
+  predicate (admin surface fully disabled while a tunnel runs). This app only consumes `/api/v1` and
+  never touches `/manage`, so the tightening has **zero impact here**.
 - Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25). The key did not change, but the
   **package name did in v2.2.41**, so `v2.2.40` and earlier still require an uninstall first
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)

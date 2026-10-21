@@ -140,11 +140,12 @@ dsh-companion/
 真正的部件都在兄弟文件里；列表层 `ChatSessionPane.kt`，消息项 `ChatMessageItems.kt`，
 交互卡片 `ChatApprovals.kt`，输入区 `ChatComposer.kt`。
 
-### 3.4 `ui/theme/`（2）· `web/`（2）· `debug/`（2）
+### 3.4 `ui/theme/`（3）· `web/`（2）· `debug/`（2）
 
 | 文件 | 职责 |
 | --- | --- |
-| `ui/theme/Theme.kt` | 应用主题（跟随系统 / 浅色 / 深色三档由偏好驱动） |
+| `ui/theme/Theme.kt` | 应用主题装配（明暗三档 + 配色主题四套 → 选色板、下发语义色） |
+| `ui/theme/ThemePalettes.kt` | 四套配色色板（PAPER/WARM/MIST/INK × light/dark）+ 连接语义色 |
 | `ui/theme/AppFontScale.kt` | 应用内字号缩放（替换 `LocalDensity`） |
 | `web/ChatWebBridge.kt` | 注入 `assets/chat.html` 的 JS 桥（**已登记的网络例外**） |
 | `web/ActiveChatBridge.kt` | 当前存活的桥实例（Activity 回调落点） |
@@ -217,7 +218,7 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/` | dir | 主题与字号缩放 |
 | `app/src/main/java/io/github/westanke/dshcompanion/web/` | dir | WebView 容器与 JS 桥 |
 | `app/src/main/java/io/github/westanke/dshcompanion/debug/` | dir | 诊断日志与探针 |
-| `app/src/test/java/` | dir | 单元测试（62 类） |
+| `app/src/test/java/` | dir | 单元测试（64 类） |
 | `app/src/androidTest/java/` | dir | 仪器测试 |
 | `app/src/main/assets/chat/` | dir | WebView 版会话页资源 |
 | `app/src/main/res/` | dir | Android 资源（含双语 values） |
@@ -335,7 +336,9 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatToolDetail.kt` | file | 一条工具调用的详情视图 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatTrajectorySheet.kt` | file | 轨迹页：按轮次折时间轴并展开原始载荷 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/AppFontScale.kt` | file | 应用内字号缩放（替换 LocalDensity） |
-| `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/Theme.kt` | file | 应用主题（跟随系统/浅色/深色三档） |
+| `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/Theme.kt` | file | 应用主题装配（明暗三档 + 配色主题） |
+| `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/ThemePalettes.kt` | file | 四套配色色板与连接语义色 |
+| `app/src/main/java/io/github/westanke/dshcompanion/ui/AdaptiveBreakpoints.kt` | file | 宽度档位三档纯函数（840dp 具名常量） |
 | `app/src/main/java/io/github/westanke/dshcompanion/web/ActiveChatBridge.kt` | file | 当前存活的 ChatWebBridge（Activity 回调落点） |
 | `app/src/main/java/io/github/westanke/dshcompanion/web/ChatWebBridge.kt` | file | 注入 assets/chat.html 的 JS 桥（唯一登记的网络例外） |
 <!-- structure-check:end -->

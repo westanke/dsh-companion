@@ -273,7 +273,16 @@ internal fun AttachmentChip(attachment: PendingAttachment, onRemove: () -> Unit)
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
-            IconButton(onClick = onRemove, modifier = Modifier.size(30.dp)) {
+            // 删除键：**布局 48dp、视觉 30dp**（O-10）。
+            //
+            // 改造前写的是 `IconButton(modifier = Modifier.size(30.dp))` ——
+            // `IconButton` 自己会施加 `minimumInteractiveComponentSize`（48dp 触摸扩展），
+            // 但按官方 API 文档的警告，**显式 size 会先限制布局约束**，那个扩展就不能
+            // 保证生效；附件缩略图密集区容易点不中（MASTER.md:38 要求 ≥ 48dp）。
+            //
+            // 正确用法是把视觉尺寸挪到 Icon 上，IconButton 用默认 48dp 布局：
+            // 触摸区达标，图标还是 15dp，**看起来跟以前一样**。
+            IconButton(onClick = onRemove) {
                 Icon(
                     Icons.Outlined.Close,
                     stringResource(R.string.attachment_remove),

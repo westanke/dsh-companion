@@ -40,6 +40,21 @@ internal fun displayEntryKey(entry: ChatDisplayEntry): String = when (entry) {
 }
 
 /**
+ * LazyColumn 的 `contentType`：告诉 Compose 哪些条目的**视觉结构**相同。
+ *
+ * 「消息」与「过程组」的构成完全不同（消息是整块正文 + 附件 + 卡片；
+ * 过程组是一行可折叠摘要 + 展开后的列表）。不标的话，滚动时 Compose 会把
+ * 消息的 composition 槽位复用给过程组 —— 官方文档明确要求「异质列表必须给
+ * contentType」，否则每次复用都要丢掉旧结构、重建新结构，滚动会抖。
+ *
+ * 纯性能参数：不改视觉、不改布局、不改交互。
+ */
+internal fun displayEntryContentType(entry: ChatDisplayEntry): String = when (entry) {
+    is ChatDisplayEntry.Message -> "message"
+    is ChatDisplayEntry.ProcessGroup -> "process"
+}
+
+/**
  * 会话列表的一行：**消息**直接渲染，**过程组**渲染成一行可折叠的摘要。
  *
  * ## 为什么要分组

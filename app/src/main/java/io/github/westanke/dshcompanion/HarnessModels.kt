@@ -4,6 +4,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.westanke.dshcompanion.data.JobOutput
 import io.github.westanke.dshcompanion.data.JobView
+import io.github.westanke.dshcompanion.data.AppTheme
 import io.github.westanke.dshcompanion.data.InterfaceStyle
 import io.github.westanke.dshcompanion.data.QUESTION_STATE_CONTINUED
 import io.github.westanke.dshcompanion.data.ChatContentParts
@@ -375,6 +376,13 @@ data class HarnessState(
      * 只在 setter 里改一次的话，用户切一次连接就会被系统配色顶回去。
      */
     val interfaceStyle: InterfaceStyle = InterfaceStyle.SYSTEM,
+    /**
+     * 配色主题（PAPER / WARM / MIST / INK）；见 [AppPreferences.appTheme]。
+     *
+     * 与 [interfaceStyle] 同一个坑、同一条纪律：主题在三处被整个重建
+     * （初始、disconnect、loadSnapshot），漏一处用户切一次连接就被打回默认。
+     */
+    val appTheme: AppTheme = AppTheme.PAPER,
     /** 应用内字号倍数；见 [AppPreferences.fontScale]。 */
     val fontScale: Float = 1f,
     /** 字号是否完全跟随系统；见 [AppPreferences.fontFollowsSystem]。 */

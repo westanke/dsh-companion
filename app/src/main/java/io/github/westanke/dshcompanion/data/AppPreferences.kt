@@ -30,6 +30,33 @@ enum class InterfaceStyle {
     }
 }
 
+/**
+ * 配色主题（与明暗风格**正交**：这里只管色相与明度基调，深浅仍由 [InterfaceStyle] 决定）。
+ *
+ * 为什么把枚举放在 `data/` 而不是 `ui/theme/`：偏好要存它，而分层方向是
+ * `ui → data`（见 AGENTS.md §4.1）。枚举若放 `ui/theme/`，`AppPreferences` 就得
+ * 反向 import 表现层，等于把分层倒过来。色板本身（Color）仍然只住在 `ui/theme/`。
+ *
+ * **[PAPER] 必须是默认，且必须与加这套机制之前的配色逐字段相同** ——
+ * 用户不切换就看不到任何变化，这是「新增可选外观」而不是「改版」的底线。
+ * 那条底线由 `AppThemeTest` 逐字段钉住（防漂移）。
+ *
+ * 顺序即设置页的展示顺序。存 `name` 不存 ordinal（理由同 [interfaceStyle]）。
+ */
+enum class AppTheme {
+    /** 现状：米白纸感 + 墨黑 + 深青强调。默认，零改动。 */
+    PAPER,
+
+    /** 暖米黄（降低蓝光，长时间阅读更省眼）；强调色降饱和、偏暖青。 */
+    WARM,
+
+    /** 青灰（冷调、低饱和，偏冷静与专注）。 */
+    MIST,
+
+    /** 高对比（纯白/近黑），给白天强光下看不清屏幕时用。 */
+    INK,
+}
+
 class AppPreferences(context: Context) {
 
     private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -45,6 +72,19 @@ class AppPreferences(context: Context) {
             ?.let { name -> InterfaceStyle.entries.firstOrNull { it.name == name } }
             ?: InterfaceStyle.SYSTEM
         set(value) = preferences.edit { putString(KEY_INTERFACE_STYLE, value.name) }
+
+    /**
+     * 配色主题。默认 [AppTheme.PAPER]（= 加这套机制之前的配色，升级后观感不变）。
+     *
+     * 存 `name` 而不是 ordinal，理由与 [interfaceStyle] 完全相同：枚举顺序将来若调整，
+     * ordinal 会把老用户的「暖米」静默读成「青灰」—— 这种错位不崩溃、只是难看，
+     * 比崩溃更难查。
+     */
+    var appTheme: AppTheme
+        get() = preferences.getString(KEY_APP_THEME, null)
+            ?.let { name -> AppTheme.entries.firstOrNull { it.name == name } }
+            ?: AppTheme.PAPER
+        set(value) = preferences.edit { putString(KEY_APP_THEME, value.name) }
 
     /**
      * 应用内字号缩放倍数（1.0 = 系统字号原样）。
@@ -152,6 +192,7 @@ class AppPreferences(context: Context) {
         const val KEY_SHOW_CONTEXT = "show_context"
         const val KEY_DIAG_LOG = "diag_log"
         const val KEY_INTERFACE_STYLE = "interface_style"
+        const val KEY_APP_THEME = "app_theme"
         const val KEY_FONT_SCALE = "font_scale"
         const val KEY_FONT_FOLLOWS_SYSTEM = "font_follows_system"
         const val KEY_LANGUAGE_CHOSEN = "language_chosen"

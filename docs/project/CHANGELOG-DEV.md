@@ -3,6 +3,60 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## v2.2.51（versionCode 10076）· 配色主题四套 + 平板零风险项 + bridge 2.5.1 安全模型同步（2026-10-21）
+
+### 基于什么
+
+用户在 2026-10-21 提出两件事：①「安全方面的全部修改……先改安卓版本」——bridge 侧已升
+2.5.1（管理面判据从「来源是否回环」升级为四层，隧道模式下管理面整体禁用）；本 App 只消费
+`/api/v1`、全仓不碰 `/manage`，所以管理面收紧对本 App **零影响**，但新增的四个错误码需要文案。
+②「安卓的界面方面你结合建议调整，并在设置中增加几个主题，看累了可以自己调整」——主题是
+本轮唯一的新增外观能力，其余只落地「不改手机视觉」的项。
+
+前情：`docs/界面优化方案` 一轮调研给出 14 项（O-01~O-14）与 7 条待批（A-1~A-7）；
+本轮只做零风险的那几项，动手机端视觉的一律不做（A-1 药丸形、A-4 警告色等留待用户拍板）。
+
+### 干了什么
+
+- **配色主题（新增）**：`ui/theme/ThemePalettes.kt` 承载四套主题 × 明暗两份色板 ——
+  纸感 PAPER（`#F9F9F7`/`#131313`，**逐字段等于改造前配色**）、暖米 WARM（`#FAF6EF`/`#1F1B16`，降蓝光）、
+  青灰 MIST（`#F5F7F6`/`#16201E`，冷感）、高对比 INK（`#FFFFFF`/`#0A0A0A`，强光）。
+  `AppTheme` 进 `AppPreferences`（**存 name 不存 ordinal**，沿用 `interfaceStyle` 的既有理由：
+  枚举顺序若调整，ordinal 会把老用户的「深色」读成「浅色」）。与「界面风格」正交，实时生效。
+  设置页外观区新增四档 SegmentedButton；默认 PAPER，不切换则看不到任何变化。
+- **O-02 断点收敛**：`ui/AdaptiveBreakpoints.kt` 把 `App.kt` 的 `840.dp` 魔数换成具名常量 +
+  四档纯函数（Compact/Medium/Large/ExtraLarge）。与旧判据**二进制等价**，手机端永远走原分支。
+  **刻意没有引入 `material3-adaptive` 新依赖**（体积与构建风险），WindowSizeClass 留作后续。
+- **O-06 contentType**：`ChatDetail.kt` 的 `items(displayEntries, key = …)` 补 `contentType`
+  （Message / ProcessGroup 两分支），混排列表不再错复用合成槽位；`FilesScreen.kt` 文件/目录同样补。
+- **O-08 状态语义色**：连接状态绿/红从硬编码改为主题成对色，深色底对比度 3.47/3.16 → **9.90/7.79**
+  （达 WCAG AA 小字号）；浅色值未变。
+- **O-10 触摸区**：`ChatAttachments.kt` 附件删除键 30dp → 48dp（图标仍 15dp，布局多 18dp）。
+- **O-03 核实为现状**：Settings/Models/Plugins 三页自 `e2ba3dd` 起已有
+  `horizontalAlignment = CenterHorizontally`，不是本次引入，未再改。
+- **字符串**：`theme_paper` / `theme_warm` / `theme_mist` / `theme_ink` 中英同步。
+- **纪律**：`AGENTS.md` §5 新增铁律「桥的安全模型变了客户端必须跟着过一遍」，含四项对照表。
+
+### 测了什么
+
+- `scripts/build.sh :app:testDebugUnitTest`：**66 类 / 588 用例 / 0 失败**。
+  新增 `AppThemeTest`（8 例，含 **66 个 ARGB 逐字段零漂移断言** + 各主题 WCAG 对比度断言）、
+  `PaneModeTest`（4 例，16 个宽度点与旧 `maxWidth >= 840.dp` 逐点比对）、
+  `AppearancePreferencesTest` +1。
+- `scripts/build.sh docsCheck`：10 文档 / 任务状态 / README 双站 / 目录与接口锚点**双向**一致
+  （STRUCTURE 132 锚点覆盖 113 源文件；INTERFACES 43 锚点）。
+- `scripts/build.sh :app:lintDebug`：**0 error** / 68 warning / 4 hint。
+- **真机（V2080A）**：走 `android-ui-drive` 的 `ui.sh install`（自动处理厂商确认页），
+  `lastUpdateTime` 21:18:51 → 23:17:03 确认包真的换了。切暖米整页变暖、✓ 跟随、无需重启；
+  切回纸感与切换前**内容区逐像素差异 0**（2,419,200 像素）；深色语义绿实测 `#7FD48A`、旧值 0 像素。
+
+### 未做
+
+- 平板 wide 视图未在真平板复验（O-03 本就是现状）。
+- 动手机端视觉的 A-1（SegmentedButton 药丸形 vs MASTER ≤8dp）、A-4（浅色警告色提升）等仍需用户拍板。
+- 旧的 `.diag-shots/main-screen.png` 基线不能逐像素比对（抓取时界面内容是「地址诊断 timeout」，
+  现在是「已连接」），故改用**同内容状态往返对比**作为更强证据。
+
 ## v2.2.50（versionCode 10075）· 真机验证收口 v2.2.49 三处瑕疵（2026-10-21）
 
 ### 基于什么

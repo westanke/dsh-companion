@@ -393,7 +393,9 @@ private fun GenUiStat(node: GenUiNode) {
                 Text(
                     delta,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (positive) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error,
+                    // positive 用主题语义色（O-08）：改造前写死 #2E7D32，深色底上 3.47:1 不达 AA。
+                    // 现在跟连接状态同一个来源 —— 语义（正向=绿）不变，明度随主题走。
+                    color = if (positive) ConnectionOnlineColor else MaterialTheme.colorScheme.error,
                     modifier = Modifier.padding(start = 6.dp, bottom = 2.dp),
                 )
             }
