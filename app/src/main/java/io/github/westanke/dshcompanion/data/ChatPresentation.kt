@@ -38,8 +38,41 @@ fun ChatHistory.displayItems(): List<ChatDisplayItem> {
     // 结果的 callId 藏在 `data.message.toolCallId` 里，配对要跨事件 ——
     // 单看一条 entry 是配不上的（这正是以前 tool/result 整类被丢掉的原因）。
     val results = toolResultsByCallId(events)
-    return mergeToolRuns(events.flatMap { displayItems(it, results) })
+    // 显式交付物卡片：对齐桌面端，钉在**轮次收尾**（收尾消息之后），而不是钉在
+    // present 工具调用的位置上 —— 模型总在交付后补一句「文件在这儿」，卡片出现在
+    // 那句之后才叫「轮次收尾」。做法：按出现顺序缓冲交付物，每轮 turn/end 处冲刷；
+    // 会话尾部没有 turn/end（仍在运行、或老格式历史）时补在最后，不丢。
+    val pending = LinkedHashMap<String, ChatDeliverable>()
+    val items = ArrayList<ChatDisplayItem>()
+    events.forEach { entry ->
+        if (entry.event.type == "deliverables/presented") {
+            deliverablesOf(entry).forEach { pending[it.path] = it }
+            return@forEach
+        }
+        // 先冲卡片、再渲染 turn/end 本身：交付发生在轮次结束**之前**（失败也一样），
+        // 时间序上卡片必须排在收尾消息/失败行前面。
+        if (entry.event.type == "turn/end") items += pending.takeCards()
+        items += displayItems(entry, results)
+    }
+    items += pending.takeCards()
+    return mergeToolRuns(items)
 }
+
+/**
+ * 把缓冲的交付物换成卡片并清空缓冲。
+ *
+ * id 规则 `"${seq}-deliverable-$index"`：seq 是事件序号（全局唯一），index 是本轮
+ * 冲刷批内的序号 —— 两批卡片绝不撞 key（LazyColumn 的 key 必须唯一）。
+ */
+private fun LinkedHashMap<String, ChatDeliverable>.takeCards(): List<ChatDisplayItem> =
+    values.mapIndexed { index, file ->
+        ChatDisplayItem(
+            id = "${file.seq}-deliverable-$index",
+            seq = file.seq,
+            kind = ChatItemKind.DELIVERABLE,
+            deliverable = file,
+        )
+    }.also { clear() }
 
 fun ChatHistory.todoItems(): List<TodoItem> {
     val values = (projections as? JsonObject)?.objectValue("values") ?: return emptyList()
@@ -118,9 +151,10 @@ data class ChatDeliverable(
  * 那个是从工具参数里嗅「提到过哪些路径」（带一堆刻意的取舍与白名单），
  * 这个读的是内核明说的「这是我给你的东西」，可靠度高得多、还带说明。
  *
- * 为什么以前 App 里看不到交付物：[displayItems] 只认 user/message、assistant/message、
- * tool/call 三类，`deliverables/presented` 落到 `else -> emptyList()` 被整类丢掉。
- * 于是用户问「我要你写的报告呢、你打好的包呢」—— 数据一直在日志里，就是没人读。
+ * 下个版本起 [displayItems] 也把交付物渲染成**消息流里的卡片**（对齐桌面端钉在
+ * 轮次收尾）。此前 [displayItems] 只认 user/message、assistant/message、tool/call
+ * 三类，`deliverables/presented` 落到 `else -> emptyList()` 被整类丢掉 —— 数据一直
+ * 在日志里，就是没人读，用户问「我要你写的报告呢」找不到入口。
  *
  * 同一个路径出现多次时保留**最后一次**的说明（后写的更新）。
  */
@@ -128,13 +162,21 @@ fun ChatHistory.deliverables(): List<ChatDeliverable> {
     val out = LinkedHashMap<String, ChatDeliverable>()
     events.forEach { entry ->
         if (entry.event.type != "deliverables/presented") return@forEach
-        val data = entry.event.data as? JsonObject ?: return@forEach
-        val files = data["files"] as? JsonArray ?: return@forEach
-        files.forEach { raw ->
-            val file = raw as? JsonObject ?: return@forEach
-            val path = file.stringValue("path")?.takeIf { it.isNotBlank() } ?: return@forEach
-            out[path] = ChatDeliverable(path, file.stringValue("description"), entry.event.seq)
-        }
+        deliverablesOf(entry).forEach { out[it.path] = it }
     }
     return out.values.toList()
+}
+
+/**
+ * 单条 `deliverables/presented` 事件的文件清单（按出现顺序，不做跨事件去重 ——
+ * 去重语义由调用方决定：[deliverables] 全局保留最后说明，[displayItems] 按轮冲刷）。
+ */
+internal fun deliverablesOf(entry: HistoryEntry): List<ChatDeliverable> {
+    val data = entry.event.data as? JsonObject ?: return emptyList()
+    val files = data["files"] as? JsonArray ?: return emptyList()
+    return files.mapNotNull { raw ->
+        val file = raw as? JsonObject ?: return@mapNotNull null
+        val path = file.stringValue("path")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        ChatDeliverable(path, file.stringValue("description"), entry.event.seq)
+    }
 }

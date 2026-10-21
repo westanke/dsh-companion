@@ -145,6 +145,12 @@ sha256sum artifacts/DeepSeek-Harness-companion-v*.apk              # 摘要
 **刻意不解析 `bash` 命令里的路径**——那里面大多是搜索范围、变量或 `echo` 文本，
 **误报比少列更糟**（点一个打不开的路径，用户会以为功能坏了）。
 
+**下个版本起消息流里也有卡片**：用户对照桌面端发现电脑会话里交付物有**内联卡片**、
+手机端只有弹层 —— 数据一直在历史里，是 `displayItems()` 的映射把 `deliverables/presented`
+整类丢掉。修法：按出现顺序缓冲交付物，每轮 `turn/end` 处冲刷成 `DELIVERABLE` 卡片
+（钉在**轮次收尾**，对齐桌面端 turnTail 的钉法；会话尾部没有 turn/end 时补在最后）。
+同一轮里同一路径重复交付只留一张卡、说明取最后一次。回归用例在 `ChatDeliverableCardsTest.kt`。
+
 **铁律**：文件预览按类型分流，`.md` 渲染、`.html` 结构化抽取（**丢弃 `script` 与 `style`**），
 **刻意不用 WebView**——那等于让会话里出现的任意文件在手机上拿到执行权。
 

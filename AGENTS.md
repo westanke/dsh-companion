@@ -112,7 +112,8 @@ web/           ← WebView 容器（chat.html 兜底路径）
   清账路径：给 `DshClient` 加通用转发入口后，删掉该例外、`TECH-DEBT.md` 条目与测试白名单项。
 - Compose 表现层**不得**自己发网络请求或读 `SharedPreferences` 当状态（那会导致「点了开关不动」，
   见 `PITFALLS.md` §Compose 状态与 SharedPreferences）。
-- 会话展示走 `ChatPresentation` 单一出口：只输出用户/助手正文、推理摘要、上下文注入来源、工具摘要；
+- 会话展示走 `ChatPresentation` 单一出口：只输出用户/助手正文、推理摘要、上下文注入来源、工具摘要、
+  显式交付物卡片（`deliverables/presented`，钉在轮次收尾）；
   `step/end`、`turn/end`、token 序列与未知内部事件**不渲染为聊天卡片**。
 
 ### 4.2 债务台账（只许收紧）
@@ -150,7 +151,7 @@ web/           ← WebView 容器（chat.html 兜底路径）
 
 | 层 | 命令 | 说明 |
 |---|---|---|
-| 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 61 类 / 569 用例（随代码变化，勿当常量） |
+| 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 62 类 / 575 用例（随代码变化，勿当常量） |
 | 文档 | `scripts/build.sh docsCheck` | 8 文档 / ROADMAP 任务 / STATUS 引用一致性 |
 | 真机 | 人工 | **单测绿 ≠ 行为对**。涉及手势、键盘、WebView、耗电、断流的一律要真机确认 |
 

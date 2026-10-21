@@ -217,3 +217,10 @@ apksigner verify --verbose app\build\outputs\apk\release\app-release.apk
   `stripLocationSuffix` 边界（日期不误伤 / 行范围要剥 / `:12` 不剥成空 / 三段只剥两段 / 空串原样返回）、
   `joinUnderCwd` 拼接（含前导与尾随斜杠）。
   **未做真机验收**：按用户既定口径由用户自行完成。单测绿 ≠ 行为对。
+  **未做真机验收**：按用户既定口径由用户自行完成。单测绿 ≠ 行为对。
+- 未发版（会话内联交付物卡片）通过 `docsCheck`（8 文档 / 46 任务一致）、`:app:testDebugUnitTest`
+  （**64 个测试文件 / 62 个测试类 / 575 用例 / 0 失败**）、`:app:lintDebug`（0 error）。
+  本轮新增用例：`ChatDeliverableCardsTest`(6) —— 轮次收尾钉卡（卡片在收尾消息后、下一轮提问前）、
+  无 `turn/end` 补尾、同轮同路径单卡取最后说明、失败轮保卡（交付在失败前）、
+  空 `files` / 缺说明容忍、DELIVERABLE 不折进过程组。
+  **未做真机验收**：按用户既定口径由用户自行完成。单测绿 ≠ 行为对。

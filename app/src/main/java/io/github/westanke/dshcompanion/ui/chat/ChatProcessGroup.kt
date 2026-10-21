@@ -68,6 +68,7 @@ internal fun ChatDisplayEntryRow(
     genUiDebug: Boolean,
     onRetry: (() -> Unit)? = null,
     onForkAt: ((Int) -> Unit)? = null,
+    onOpenFile: ((String) -> Unit)? = null,
 ) {
     when (entry) {
         is ChatDisplayEntry.Message -> ChatItem(
@@ -79,6 +80,7 @@ internal fun ChatDisplayEntryRow(
             genUiDebug = genUiDebug,
             onRetry = onRetry,
             onForkAt = onForkAt,
+            onOpenFile = onOpenFile,
         )
 
         is ChatDisplayEntry.ProcessGroup -> {
@@ -94,6 +96,7 @@ internal fun ChatDisplayEntryRow(
                         genUiDebug = genUiDebug,
                         onRetry = onRetry,
                         onForkAt = onForkAt,
+                        onOpenFile = onOpenFile,
                     )
                 }
             } else {

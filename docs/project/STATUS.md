@@ -1,4 +1,12 @@
 - 日期：2026-10-21
+- **未发版 · 会话内联交付物卡片（对齐桌面端，仅本地提交）**：用户对照两端截图发现电脑会话里
+  交付物有内联文件卡片、手机端只有「本会话的文件」弹层。数据一直在历史里，是 `displayItems()`
+  把 `deliverables/presented` 整类丢掉。修法：`ChatItemKind.DELIVERABLE` + 两段式冲刷
+  （按出现顺序缓冲，每轮 `turn/end` 处出卡、钉在轮次收尾；无 `turn/end` 补尾；
+  同轮同路径单卡取最后说明）。新卡片 `ui/chat/ChatDeliverableCard.kt`，点按走
+  `openSessionFile` + 文件面板（与正文链接同路）。
+  门验：**62 类 / 575 用例 / 0 失败** + docsCheck 全绿 + lintDebug 0 error；
+  回归用例 `ChatDeliverableCardsTest.kt` 6 例。**真机复验由用户自行完成**。
 - **v2.2.47（versionCode 10072，2026-10-21 发）**：**文档链接带位置后缀打不开**（与鸿蒙版同源双端修复）。
   用户真机截图：`docs/project/STATUS.md:1`、`/…/STATUS.md#L101` 点开报「找不到这个路径」，
   文件其实存在。**两层根因**：① 位置后缀（`:1` / `:12-34` / `:12:5` / `#L101`）被当成路径

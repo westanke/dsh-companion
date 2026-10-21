@@ -260,7 +260,8 @@ class ChatDisplayGroupsTest {
     @Test
     fun flatteningEveryGroupingReproducesTheInputExactly() {
         val sequences = allKindSequences()
-        assertEquals(2800, sequences.size)
+        // 8 种 kind（DELIVERABLE 入枚举后）长度 1-4 的全排列：8+64+512+4096。
+        assertEquals(4680, sequences.size)
 
         var processGroups = 0
         var messageEntries = 0

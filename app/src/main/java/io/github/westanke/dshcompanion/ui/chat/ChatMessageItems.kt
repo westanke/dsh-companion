@@ -255,6 +255,14 @@ internal fun ChatItem(
 
     onForkAt: ((Int) -> Unit)? = null,
 
+    /**
+
+     * 「预览显式交付物卡片」；null = 卡片不响应点击。只有 DELIVERABLE 项会用到。
+
+     */
+
+    onOpenFile: ((String) -> Unit)? = null,
+
 ) {
 
     val context = LocalContext.current
@@ -424,6 +432,12 @@ internal fun ChatItem(
 
         // 输出 token 上限：截断不是失败，单独一条黄色警示（内核 turn-max-tokens 节点）。
         ChatItemKind.TRUNCATED -> TruncatedNoticeRow()
+
+        // 显式交付物：内核明说的「这是我给你的东西」—— 点开走文件预览（与正文里的
+        // 文件链接同一条 openSessionFile 通道）。卡片版式在 ChatDeliverableCard.kt。
+        ChatItemKind.DELIVERABLE -> item.deliverable?.let {
+            DeliverableCardRow(item, onOpenFile = onOpenFile ?: {})
+        }
 
         else -> ActivityRow(item)
 

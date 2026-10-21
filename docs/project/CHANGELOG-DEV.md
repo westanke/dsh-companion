@@ -221,6 +221,37 @@ App 的 `connection.ready` 也正常到达（临时加的 CAP 诊断日志证实
   Gitee 最新发布同为 v2.2.47，无新版可下；要触发只能人为造 release 或临时降 versionName，
   超出本任务边界（方案 §八 同款遗留）。
 
+## 未发版 · 会话内联交付物卡片（对齐桌面端，2026-10-21）
+
+### 基于什么
+
+用户对照两端截图：电脑端会话里 `present` 的文件有**内联卡片**（钉在消息尾部），
+手机端只有「本会话的文件」弹层。数据其实一直在历史里 —— `deliverables/presented`
+事件早已被 `deliverables()` 读去弹层面板，但 `displayItems()` 的映射把这一类整条丢弃，
+消息流里从来没有卡片。
+
+### 干了什么
+
+- `ChatItemKind.DELIVERABLE`（新枚举值）+ `ChatDisplayItem.deliverable` 字段：
+  与 `failure` 同一条纪律 —— 卡片信息由事件显式给出，**不做路径嗅探**。
+- `ChatPresentation.displayItems()` 改两段式：按出现顺序把 `deliverables/presented`
+  缓冲进 pending（同路径重复交付只留一条、说明取最后一次），每轮 `turn/end` 处冲刷成卡片
+  —— 钉在**轮次收尾**，与桌面端 turnTail 的钉法一致；会话尾部没有 `turn/end` 时补在最后。
+  交付发生在轮次结束之前，卡片排在 `turn/end` 行（失败/截断提示）之前，时间序不错位。
+- `ui/chat/ChatDeliverableCard.kt`（新）：紧凑卡片（图标 + 文件名 marquee + 说明），
+  **不带完整路径**（预览面板里有，对齐桌面端信息密度）；点按走 `openSessionFile` +
+  文件面板，与正文里的文件链接同一条路（`ChatItem` / `ChatDisplayEntryRow` 加
+  `onOpenFile` 形参，带默认值不破坏调用方）。
+- 文档：PITFALLS §交付物事件与路径嗅探 补内联卡片段；AGENTS §4.1 输出清单加显式交付物。
+
+### 测了什么
+
+- 新增 `ChatDeliverableCardsTest` 6 例：轮次收尾钉卡（卡片在收尾消息后、下一轮提问前）、
+  无 `turn/end` 补尾、同轮同路径单卡取最后说明、失败轮保卡（交付在失败前）、
+  空 `files` / 缺说明容忍、DELIVERABLE 不折进过程组。
+- 门验：`testDebugUnitTest` **62 类 / 575 用例 / 0 失败**、`docsCheck` 全绿、`lintDebug` 0 error。
+- **未上机**：真机复验由用户自行完成（用户既定口径）。单测绿 ≠ 行为对。
+
 ## v2.2.45 · 真机交互九条 + 交付物链接打不开（用户逐条点名，2026-10-19 晚）
 
 ### 基于什么

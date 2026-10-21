@@ -645,6 +645,12 @@ internal fun ChatDetail(
                     genUiDebug = state.genUiDebug,
                     onRetry = viewModel::retryLastUserMessage,
                     onForkAt = { seq -> forkAtSeq = seq },
+                    // 交付物卡片点开 = 预览：与正文里的文件链接同一条路（openSessionFile
+                    // 先把解析结果指到这个文件，再开弹层显示详情）。
+                    onOpenFile = { path ->
+                        viewModel.openSessionFile(path)
+                        filesSheet = true
+                    },
                 )
             }
         }
