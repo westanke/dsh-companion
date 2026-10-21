@@ -532,9 +532,9 @@ per-release comments in `app/build.gradle.kts`), but that is "fix what someone h
 on-device pass. The interface layer (pairing, connection, sessions, files, plugin inventory, session
 deliverables) was exercised end to end against a local DSH WebUI during development.
 
-### 15. Hardening pass: session-page comfort, file cards and reliability (**unreleased**)
+### 15. Hardening pass: session-page comfort, file cards and reliability (since v2.2.42)
 
-> This batch is **not released yet** — the changes live in the working tree. What follows is what a user
+> This batch shipped in v2.2.42. What follows is what a user
 > can actually notice.
 
 - **Messages read better**: code blocks gain language labels, a copy button and highlighting;
@@ -597,8 +597,8 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
   `app/src/test/` and the `@Test` annotations
 - Current APK: `DSH伴侣-companion-v2.2.49.apk`, **3,142,644 bytes**, SHA-256
   `c06ec71912753ead9cf4f20d143a2664ca6918117d6b389d0a3e655e05e3ebd3` (kept in sync in
-  `artifacts/SHA256SUMS.txt`).   **Not released yet** (not pushed, no tag; the artifact is built locally) —
-  what changed in this build: the Model and Plugins settings pages now match the official web UI.
+  `artifacts/SHA256SUMS.txt`).   **Released on Gitee + AtomGit** (tag `v2.2.49`) —
+  what changed in this release: the Model and Plugins settings pages now match the official web UI.
   **1. Model page** — official title/intro copy; a banner when the settings document is read-only;
   "Add model provider" now offers two lanes: **Third-party providers** (pick an unconfigured
   provider from the built-in catalog and just fill in its API key) and **Custom model API**
