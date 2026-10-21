@@ -299,7 +299,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.48.apk
+DSH伴侣-companion-v2.2.49.apk
 ```
 
 Requirements:
@@ -589,30 +589,37 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.48` (`versionCode` 10073)
+- Version: `v2.2.49` (`versionCode` 10074)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
 - Unit tests: 62 test classes / 575 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.48.apk`, **3,085,852 bytes**, SHA-256
-  `e67f5362dafdefd23416fb3a7605bec3fc0c04a3d57541645799d8896576ef35` (kept in sync in
-  `artifacts/SHA256SUMS.txt`). **Released to Gitee + AtomGit** (tag `v2.2.48`) — Changes in this
-  build, three items at once:
-  **1. Inline deliverable cards (desktop parity)** — files the model `present`s now show up in the
-  chat flow just like on desktop (one card per completed turn; a same-path re-presentation keeps
-  the latest description). Tap a card to open the file preview sheet. Card data comes from the
-  deliverable events — no path sniffing.
-  **2. In-app update check** — Settings → About → "Check for updates": the channel follows the UI
-  language (Chinese → Gitee, English/others → GitHub); on a newer release it downloads the APK,
-  verifies it against SHA256SUMS, then hands off to the system installer. No third-party libraries.
-  **3. Glued GFM table fix** — tables whose header row sits right under the previous line (the way
-  models often write them) used to render as a wall of pipe characters; a blank line is now
-  inserted before the table at render time, and the first column of 3+-column tables is no longer
-  crushed into the narrow label column.
+- Current APK: `DSH伴侣-companion-v2.2.49.apk`, **3,142,644 bytes**, SHA-256
+  `c06ec71912753ead9cf4f20d143a2664ca6918117d6b389d0a3e655e05e3ebd3` (kept in sync in
+  `artifacts/SHA256SUMS.txt`).   **Not released yet** (not pushed, no tag; the artifact is built locally) —
+  what changed in this build: the Model and Plugins settings pages now match the official web UI.
+  **1. Model page** — official title/intro copy; a banner when the settings document is read-only;
+  "Add model provider" now offers two lanes: **Third-party providers** (pick an unconfigured
+  provider from the built-in catalog and just fill in its API key) and **Custom model API**
+  (enter ID, base URL, protocol and models yourself). The editor now shows the protocol as a
+  dropdown (options come from the server schema), and the API-key field hints follow the
+  credential state (leave blank to use the saved credential / environment variable detected /
+  enter a key) with a show/hide toggle. The model catalog is no longer a bare ID list: each row
+  carries ID, display name, context window and max output tokens (capacities accept 131072, 256K
+  or 1M), with per-row validation for required/duplicate IDs. New "Restore default models",
+  a "Discover available models" candidate panel (search / select all / deselect all / add
+  selected) and provider deletion (confirmation copy differs when a stored key exists). Opening
+  a card captures the settings revision; concurrent edits elsewhere surface "close and reopen the
+  card, then edit the current values", and a successful save reports "Saved {provider}.".
+  **2. Plugins page** — the inventory gained a search box (filters by name and description, with a
+  clear empty state) and each row expands to show the full name, installed version, declared
+  version, homepage and why it cannot be toggled.
+  **3. Prerequisite** — catalog metadata and "restore default models" need bridge 2.5.0 (see the
+  server plugin row below).
 - Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25). The key did not change, but the
   **package name did in v2.2.41**, so `v2.2.40` and earlier still require an uninstall first
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)
 - License: [GNU Affero General Public License v3.0](./LICENSE)
-- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.7** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+; **approval and question cards need 2.3.7+**; gap resync / subscription baseline / live deliverable cards need 2.3.8+; the "response truncated" notice needs bridge **≥ 2.4.1**; the background-jobs panel needs bridge **≥ 2.4.3**)
+- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.7** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+; **approval and question cards need 2.3.7+**; gap resync / subscription baseline / live deliverable cards need 2.3.8+; the "response truncated" notice needs bridge **≥ 2.4.1**; the background-jobs panel needs bridge **≥ 2.4.3**; the model page's catalog add and restore-default-models need bridge **≥ 2.5.0**)
   (formerly [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace))

@@ -18,6 +18,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -26,18 +28,21 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.westanke.dshcompanion.HarnessState
@@ -249,17 +254,41 @@ private fun InventoryContent(
         )
     }
     Spacer(Modifier.height(22.dp))
+    // Surface 的内容槽是 Box：搜索框与列表必须显式包一层 Column，
+    // 否则两者会重叠（真机实测「搜索插件」占位文案会浮在首个插件行上）。
+    // Surface 的内容槽是 Box：搜索框与列表必须显式包一层 Column，
+    // 否则两者会重叠（真机实测「搜索插件」占位文案会浮在首个插件行上）。
     SectionPanel(title = R.string.plugins_list_title) {
-        if (inventory.items.isEmpty()) {
-            Text(
-                stringResource(R.string.plugins_empty),
-                modifier = Modifier.padding(16.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodyMedium,
+        Column(Modifier.fillMaxWidth()) {
+            var query by rememberSaveable { mutableStateOf("") }
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                placeholder = { Text(stringResource(R.string.plugins_search)) },
+                singleLine = true,
             )
-        } else {
-            Column(Modifier.fillMaxWidth()) {
-                inventory.items.forEachIndexed { index, entry ->
+            // 官方「搜索插件」语义：按名称/描述过滤，无匹配给出专用空态。
+            val filtered = inventory.items.filter {
+                query.isBlank() || it.name.contains(query, ignoreCase = true) ||
+                    it.description?.contains(query, ignoreCase = true) == true
+            }
+            if (inventory.items.isEmpty()) {
+                Text(
+                    stringResource(R.string.plugins_empty),
+                    modifier = Modifier.padding(16.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            } else if (filtered.isEmpty()) {
+                Text(
+                    stringResource(R.string.plugins_none_matched),
+                    modifier = Modifier.padding(16.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            } else {
+                filtered.forEachIndexed { index, entry ->
                     if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                     PluginRow(
                         entry = entry,
@@ -298,108 +327,126 @@ private fun PluginRow(
     context: Context,
     onToggle: (String, Boolean) -> Unit,
 ) {
-    Row(
-        Modifier.fillMaxWidth().padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    entry.name,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                if (entry.official) {
-                    Spacer(Modifier.width(8.dp))
-                    OfficialBadge()
+    // 官方清单卡片是可展开的：主行 = 名称 + 状态，展开后才显示版本/声明/主页等细节。
+    var expanded by rememberSaveable(entry.name) { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        entry.name,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    if (entry.official) {
+                        Spacer(Modifier.width(8.dp))
+                        OfficialBadge()
+                    }
+                }
+                // 简介：手机上只有一串 @scope/name@1.2.3 时，用户没法判断「这个能不能停用」，
+                // 描述就是那个判断的主要依据 —— 官方清单页也把它放在这一行。
+                entry.description?.takeIf { it.isNotBlank() }?.let { description ->
+                    Text(
+                        description,
+                        modifier = Modifier.padding(top = 2.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = if (expanded) Int.MAX_VALUE else 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
             }
-            // 简介：手机上只有一串 @scope/name@1.2.3 时，用户没法判断「这个能不能停用」，
-            // 描述就是那个判断的主要依据 —— 官方清单页也把它放在这一行。
-            entry.description?.takeIf { it.isNotBlank() }?.let { description ->
-                Text(
-                    description,
-                    modifier = Modifier.padding(top = 2.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodySmall,
-                )
+            Spacer(Modifier.width(12.dp))
+            Column(horizontalAlignment = Alignment.End) {
+                PluginStateBadge(entry.state)
+                // 开关只在「能启停 + 有写权限」时出现。没权限时**不画一个点了会失败的开关**，
+                // 而是在页面顶部由 canRead 那条横幅说明缺什么 —— 两处都提示反而啰嗦。
+                if (entry.toggleable && canWrite) {
+                    Spacer(Modifier.height(3.dp))
+                    Switch(
+                        checked = entry.loaded,
+                        onCheckedChange = { next -> onToggle(entry.name, next) },
+                        enabled = !busy,
+                    )
+                }
             }
-            val rawInstalled = entry.installed
-            val installed = when {
-                rawInstalled != null -> stringResource(R.string.plugins_installed_version, rawInstalled)
-                // 官方包不在 profile 的 node_modules 里，报「版本未知」会制造假警报。
-                entry.state == STATE_RUNTIME_PROVIDED -> stringResource(R.string.plugins_version_runtime_provided)
-                else -> stringResource(R.string.plugins_installed_version, stringResource(R.string.plugins_version_unknown))
-            }
-            Text(
-                installed,
-                modifier = Modifier.padding(top = 2.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
+            Icon(
+                if (expanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.ExpandMore,
+                contentDescription = stringResource(
+                    if (expanded) R.string.plugins_collapse else R.string.plugins_expand,
+                ),
+                modifier = Modifier.padding(start = 6.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            entry.declared?.let { declared ->
-                Text(
-                    stringResource(R.string.plugins_declared, declared),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            // 更新提示只在**确实有新版本**时出现；`updateAvailable == null`（没查）
-            // 什么都不显示 —— 显示「已是最新」是撒谎，显示「未知」是噪音。
-            if (entry.updateAvailable == true && entry.latestVersion != null) {
-                Text(
-                    stringResource(R.string.plugins_update_available, entry.latestVersion),
-                    modifier = Modifier.padding(top = 2.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            entry.homepage?.takeIf { it.isNotBlank() }?.let { homepage ->
-                Text(
-                    stringResource(R.string.plugins_homepage),
-                    modifier = Modifier
-                        .padding(top = 4.dp)
-                        .clickable { openUrl(context, homepage) },
-                    color = MaterialTheme.colorScheme.primary,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-            // 不能启停的原因要说出来，否则用户会去找一个根本不存在的开关。
-            if (!entry.toggleable) {
-                Text(
-                    when {
-                        entry.official -> stringResource(R.string.plugins_toggle_official_locked)
-                        entry.state == STATE_DECLARED_MISSING -> stringResource(R.string.plugins_toggle_missing_locked)
-                        else -> stringResource(R.string.plugins_toggle_not_installed_locked)
-                    },
-                    modifier = Modifier.padding(top = 3.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
         }
-        Spacer(Modifier.width(12.dp))
-        Column(horizontalAlignment = Alignment.End) {
-            PluginStateBadge(entry.state)
-            // 开关只在「能启停 + 有写权限」时出现。没权限时**不画一个点了会失败的开关**，
-            // 而是在页面顶部由 canRead 那条横幅说明缺什么 —— 两处都提示反而啰嗦。
-            if (entry.toggleable && canWrite) {
-                Spacer(Modifier.height(3.dp))
-                Switch(
-                    checked = entry.loaded,
-                    onCheckedChange = { next -> onToggle(entry.name, next) },
-                    enabled = !busy,
-                )
+        if (expanded) {
+            Column(Modifier.padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                DetailLine(stringResource(R.string.plugins_full_name), entry.name)
+                val rawInstalled = entry.installed
+                val installed = when {
+                    rawInstalled != null -> stringResource(R.string.plugins_installed_version, rawInstalled)
+                    // 官方包不在 profile 的 node_modules 里，报「版本未知」会制造假警报。
+                    entry.state == STATE_RUNTIME_PROVIDED -> stringResource(R.string.plugins_version_runtime_provided)
+                    else -> stringResource(R.string.plugins_installed_version, stringResource(R.string.plugins_version_unknown))
+                }
+                DetailLine(stringResource(R.string.plugins_installed), installed)
+                entry.declared?.let { declared ->
+                    DetailLine(stringResource(R.string.plugins_declared_label), declared)
+                }
+                // 更新提示只在**确实有新版本**时出现；`updateAvailable == null`（没查）
+                // 什么都不显示 —— 显示「已是最新」是撒谎，显示「未知」是噪音。
+                if (entry.updateAvailable == true && entry.latestVersion != null) {
+                    Text(
+                        stringResource(R.string.plugins_update_available, entry.latestVersion),
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                entry.homepage?.takeIf { it.isNotBlank() }?.let { homepage ->
+                    Text(
+                        stringResource(R.string.plugins_homepage),
+                        modifier = Modifier.clickable { openUrl(context, homepage) },
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                // 不能启停的原因要说出来，否则用户会去找一个根本不存在的开关。
+                if (!entry.toggleable) {
+                    Text(
+                        when {
+                            entry.official -> stringResource(R.string.plugins_toggle_official_locked)
+                            entry.state == STATE_DECLARED_MISSING -> stringResource(R.string.plugins_toggle_missing_locked)
+                            else -> stringResource(R.string.plugins_toggle_not_installed_locked)
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
             }
         }
     }
 }
 
+/** 展开区的一条「标签： 值」细节行（官方 details 网格的简化版）。 */
+@Composable
+private fun DetailLine(label: String, value: String) {
+    Row {
+        Text(
+            label,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            value,
+            style = MaterialTheme.typography.bodySmall,
+            fontFamily = FontFamily.Monospace,
+        )
+    }
+}
 /**
  * 用系统浏览器打开插件主页。
  *

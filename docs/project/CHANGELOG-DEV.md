@@ -3,6 +3,52 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## v2.2.49（versionCode 10074）· 设置「模型 / 插件」对照官方 Web 对齐（2026-10-21）
+
+### 基于什么
+
+用户点名：APP 设置里的「模型」「插件」要与官方 Web 界面对齐。官方前端
+（`@deepseek-ai/dsh-client-ui-settings-models` / `-settings-plugin-inventory`，`lib/client.js` 是可读源码）
+的模型页有：目录/自定义双通道添加、协议下拉、凭据状态分档提示、结构化模型目录行、
+「恢复默认模型」、删除供应商、打开卡片时捕获 revision 防并发（409 `SETTINGS_CONFLICT` →
+「请关闭后重新打开，在当前值上编辑」）；插件清单页有搜索过滤与可展开详情卡。
+本 App 此前模型编辑是自由文本协议 + 纯 ID 列表，且没有删除供应商与保存反馈。
+
+服务端先行：`dsh-remote-bridge` 2.5.0 把内核 `listConfigurableProviders` 的目录元数据
+（`defaultBaseURL` / `baseURLEnv` / `nativeAuth` / `settingsNs`）透传到
+`GET /api/v1/settings/providers`，并让 `ProviderPatch.models` 支持 `null`（unset，恢复
+适配器默认目录）；五处同步（API.md / openapi / asyncapi / kotlin-sdk / 测试），`pnpm check` 全绿。
+
+### 干了什么
+
+- `data/Models.kt`：新增 `NativeAuthHint`；`ProviderView` 补 `settingsNs` / `defaultBaseURL` /
+  `baseURLEnv` / `nativeAuth`（全部带默认值，老 bridge 缺席不炸）。
+- `data/DshClient.kt`：新增 `deleteProvider`（DELETE + `?expectedRevision=`）与
+  `resetProviderModels`（手工拼 `{"models":null,...}`，绕开 kotlinx 不发 null 的限制）。
+- `data/ErrorMessages.kt`：`SETTINGS_CONFLICT` → `err_settings_conflict`。
+- `HarnessState.providerSaved`（成功才关卡片的反馈通道）；`HarnessPluginsViewModel` 的
+  update / create / delete / reset 扩展统一写该通道并提示「已保存 {供应商}。」。
+- `ui/ModelsScreen.kt` 重写：官方标题与简介、只读横幅、「添加模型提供商」双通道添加卡
+  （第三方目录 = 休眠 `llm-pi-ai` 条目下拉 / 自定义模型 API）。
+- `ui/ModelsEditorSheet.kt`（新）：编辑 / 目录 / 自定义三态共用表单 —— 协议下拉（默认
+  `protocols[0]`）、密钥 placeholder 按凭据状态分档 + 显隐切换、结构化模型行（ID / 名称 /
+  上下文窗口 / 最大输出，K/M 容量解析 + 逐行校验）、「恢复默认模型」、discover 候选面板
+  （搜索 / 全选 / 取消全选 / 添加所选）、删除供应商（文案按是否存有凭据分档）；
+  打开卡片捕获 revision 作 expectedRevision，失败留卡片、成功由 `providerSaved` 统一关闭。
+- `ui/PluginsScreen.kt`：清单加搜索过滤（无匹配空态），插件行改可展开详情卡
+  （完整名称 / 已安装 / 声明版本 / 主页 / 不可启停原因）。
+- 字符串中英双站同步（`values` / `values-en` 各 +52 键）。
+- 真机验证发现并修复：插件清单的搜索框原先直接放进 `SectionPanel` 的内容槽（Surface 内无
+  纵向排布），会盖住列表首行；改为 Column 包住搜索框与列表（`ui/PluginsScreen.kt`）。
+
+### 测了什么
+
+- `scripts/build.sh docsCheck :app:testDebugUnitTest :app:lintDebug assembleRelease` 四项门禁。
+- release 产物回填：`artifacts/DSH伴侣-companion-v2.2.49.apk`（3,142,644 字节，
+  SHA-256 `c06ec719…3ebd3`），`artifacts/SHA256SUMS.txt` 同步。
+- 真机（V2080A）安装 debug 包实测：模型页目录添加 / 编辑保存 / 恢复默认 / 删除供应商，
+  插件页搜索与展开详情。
+
 ## v2.2.46 · 后台任务面板（会话 ⋯ 菜单 →「后台任务」）
 
 ### 基于什么

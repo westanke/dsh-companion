@@ -240,6 +240,14 @@ data class HarnessState(
     val sessionModels: SessionModels? = null,
     val commands: List<CommandDescriptor> = emptyList(),
     val providerSettings: ProviderSettings? = null,
+    /**
+     * 最近一次**成功保存**的供应商 id（null = 没有）。
+     *
+     * 编辑卡要「成功才关闭、失败留在原值上」：错误走 [HarnessState.error] 通道
+     * （卡片保持打开），成功只能靠这里回传 —— UI 观察 `providerSaved == 正在编辑的 id`
+     * 就关卡片并消费掉（[HarnessViewModel.clearProviderSaved]）。
+     */
+    val providerSaved: String? = null,
     /** 插件清单；null 表示尚未读取（未连接、无 settings.read 权限或读取失败）。 */
     val pluginInventory: PluginInventory? = null,
     val discoveredModels: List<ProviderModel> = emptyList(),

@@ -329,6 +329,27 @@ data class CredentialState(
     val writable: Boolean,
 )
 
+/**
+ * 适配器原生认证回退提示（bridge 2.5.0 起随目录型供应商提供）。
+ *
+ * [env] 是适配器自己会尝试读取的环境变量（如 `DEEPSEEK_API_KEY`）；[oauth] 表示
+ * 支持浏览器 OAuth 登录。两者都缺席/为空时 UI 按「没有任何原生认证」渲染。
+ * 默认值兜底：老服务端不返回该对象。
+ */
+@Serializable
+data class NativeAuthHint(
+    val env: List<String> = emptyList(),
+    val oauth: Boolean = false,
+)
+
+/**
+ * `GET /settings/providers` 里的一行供应商。
+ *
+ * [defaultBaseURL] / [baseURLEnv] / [nativeAuth] 是目录供应商（含未配置的休眠条目）
+ * 的适配器元数据，bridge 2.5.0 起才提供 —— 全部带默认值，老服务端缺席时整行照常解码。
+ * 「已添加」（configured=true）的供应商服务端不一定回传它们；未配置的休眠目录条目
+ * 是「添加模型提供商」目录卡的候选来源。
+ */
 @Serializable
 data class ProviderView(
     val id: String,
@@ -338,6 +359,11 @@ data class ProviderView(
     val configurable: Boolean,
     val configured: Boolean,
     val removable: Boolean,
+    /** 该供应商的配置段所在命名空间（如 "llm-pi-ai"）；休眠目录条目也可能带。 */
+    val settingsNs: String? = null,
+    val defaultBaseURL: String? = null,
+    val baseURLEnv: List<String>? = null,
+    val nativeAuth: NativeAuthHint? = null,
     val credential: CredentialState,
     val config: ProviderConfig,
 )

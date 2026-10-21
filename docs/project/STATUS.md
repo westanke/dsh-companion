@@ -1,4 +1,26 @@
 - 日期：2026-10-21
+- **v2.2.49（versionCode 10074，2026-10-21，未发版）**：**模型/插件设置页对照官方 Web 界面对齐**（bridge 需 2.5.0，见其 CHANGELOG）。
+  - **模型页**（`ui/ModelsScreen.kt` 重写 + 新文件 `ui/ModelsEditorSheet.kt`）：
+    文案对齐官方（「模型」+ 简介「填入各提供商的 API 密钥即可使用其模型。」）；只读横幅
+    「当前部署的设置文档为只读。」；添加卡双 tab（「第三方模型提供商」目录下拉 = 休眠的
+    llm-pi-ai 条目 /「自定义模型 API」）；共用编辑器：API 协议**下拉**（原自由文本）、
+    API 密钥 placeholder 分档（已保存凭据/已检测到环境变量）、模型目录结构化行
+    （ID/显示名称/上下文窗口/最大输出 token 数，K/M 容量解析 + 逐行校验文案）、
+    「恢复默认模型」（wire `models:null`）、discover 候选面板（搜索/全选/取消全选/添加所选）、
+    **删除供应商**（确认框文案按凭据有无分档）；打开卡片捕获 revision 作 expectedRevision，
+    冲突 409 SETTINGS_CONFLICT →「这张卡片打开期间…」，成功才关卡片（providerSaved 反馈）。
+  - **插件页**（`ui/PluginsScreen.kt`）：官方清单页交互形态 —— 「搜索插件」过滤名称/描述、
+    无匹配空态「没有匹配的插件。」、行卡可展开（主行 = 名称 + 状态徽标 + 开关，
+    展开显示完整名称/已安装/声明版本/主页/不可启停原因）。
+  - 数据层：`ProviderView` +settingsNs/defaultBaseURL/baseURLEnv/nativeAuth（可选字段，老服务端兼容）、
+    `DshClient.deleteProvider/resetProviderModels`、`HarnessState.providerSaved`、
+    错误映射 +SETTINGS_CONFLICT；字符串 53 条中英同步。
+  兼容兜底：旧 bridge（无 `settingsNs` 目录元数据）不显示目录添加候选、不提供「恢复默认模型」，
+  目录 tab 改为提示「模型目录需要 bridge ≥ 2.5.0。」（数据驱动判定，不看版本号）。
+  门验：`docsCheck`（8 文档 / 46 任务 / 14 项根检查全过）+ `:app:testDebugUnitTest`
+  （62 类 / 575 用例 / 0 失败）+ `:app:lintDebug` + `assembleRelease` 全绿；
+  release 产物 3,142,644 字节，SHA-256 `c06ec719…3ebd3`（`artifacts/SHA256SUMS.txt` 同步）。
+
 - **v2.2.48（versionCode 10073，2026-10-21 发）**：三笔未发版合并随本版发布 ——
   ① **Markdown 表格贴行不渲染**（2026-10-20 完成、真机已复验）：org.intellij.markdown 对
   「表头紧贴上一行、无空行」的 GFM 表格不产出 TABLE 节点，整表并入上一段落显示成一串竖线文字；

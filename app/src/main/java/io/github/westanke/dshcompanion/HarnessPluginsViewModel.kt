@@ -144,13 +144,43 @@ internal fun HarnessViewModel.setPluginLoaded(name: String, loaded: Boolean) = w
     if (result.restartRequired) notify(appString(R.string.plugins_toggle_saved))
 }
 
-internal fun HarnessViewModel.updateProvider(providerId: String, patch: ProviderPatch) = withClient { api ->
-    update { copy(providerSettings = api.updateProvider(providerId, patch), discoveredModels = emptyList()) }
+/**
+ * 更新供应商并**在成功时回传保存反馈**。
+ *
+ * [expectedRevision] 是编辑卡打开那一刻捕获的 revision（`revisionByNamespace` 里
+ * 该供应商 settingsNs 的值）：写请求带上它，服务端发现文档已被别处改动会回
+ * 409 `SETTINGS_CONFLICT`，UI 把卡片留在原值上让用户重新打开 —— 与官方 Web
+ * 「conflict」文案的行为一致。成功则写 [HarnessState.providerSaved] 供 UI 关卡片，
+ * 并 `notify` 一条「已保存 {provider}。」。
+ */
+internal fun HarnessViewModel.updateProvider(providerId: String, patch: ProviderPatch, expectedRevision: Int? = null, displayLabel: String = providerId) = withClient { api ->
+    val settings = api.updateProvider(providerId, patch.copy(expectedRevision = expectedRevision ?: patch.expectedRevision))
+    update { copy(providerSettings = settings, discoveredModels = emptyList(), providerSaved = providerId) }
+    notify(appString(R.string.models_provider_saved, displayLabel))
 }
 
 internal fun HarnessViewModel.createCustomProvider(provider: CustomProviderCreate) = withClient { api ->
-    update { copy(providerSettings = api.createCustomProvider(provider), discoveredModels = emptyList()) }
+    val settings = api.createCustomProvider(provider)
+    update { copy(providerSettings = settings, discoveredModels = emptyList(), providerSaved = provider.id) }
+    notify(appString(R.string.models_provider_saved, provider.displayName?.takeIf { it.isNotBlank() } ?: provider.id))
 }
+
+/**
+ * 删除供应商：bridge 会 unset 其配置段（凭据若被别处引用则保留，删除确认框里说明）。
+ * 成功反馈同样走 providerSaved 通道（UI 关掉删除确认框并刷新）。
+ */
+internal fun HarnessViewModel.deleteProvider(providerId: String, expectedRevision: Int? = null) = withClient { api ->
+    api.deleteProvider(providerId, expectedRevision)
+    update { copy(providerSettings = api.providerSettings(), providerSaved = providerId) }
+    notify(appString(R.string.models_provider_deleted, providerId))
+}
+
+/** 恢复供应商的适配器默认模型目录（wire `models: null`）。 */
+internal fun HarnessViewModel.resetProviderModels(providerId: String, expectedRevision: Int? = null) = withClient { api ->
+    update { copy(providerSettings = api.resetProviderModels(providerId, expectedRevision), providerSaved = providerId) }
+}
+
+internal fun HarnessViewModel.clearProviderSaved() = update { copy(providerSaved = null) }
 
 internal fun HarnessViewModel.discoverModels(providerId: String, baseURL: String?, protocol: String?, apiKey: String?) = withClient { api ->
     update { copy(discoveredModels = api.discoverModels(providerId, baseURL, protocol, apiKey)) }

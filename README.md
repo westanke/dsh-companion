@@ -290,7 +290,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.48.apk
+DSH伴侣-companion-v2.2.49.apk
 ```
 
 安装要求：
@@ -536,26 +536,30 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.48`（`versionCode` 10073）
+- 当前版本：`v2.2.49`（`versionCode` 10074）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：62 个测试类 / 575 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.48.apk`，**3,085,852 字节**，
-  SHA-256 `e67f5362dafdefd23416fb3a7605bec3fc0c04a3d57541645799d8896576ef35`（`artifacts/SHA256SUMS.txt` 同步）。
-  **已发 Gitee + AtomGit**（tag `v2.2.48`）——
-  本版改动：三笔一起上。
-  **① 会话内联交付物卡片（对齐桌面端）**：模型 `present` 的文件现在和电脑端一样
-  钉在消息流里（每轮收尾处出卡；同轮同路径只留最后说明），点按直接进文件预览面板；
-  卡片数据来自交付物事件，不做路径嗅探。
-  **② 应用内更新检查**：设置 →「关于」→「检查更新」——渠道按界面语言分流
-  （中文 → Gitee，英文/其他 → GitHub），发现新版本后下载 APK、对照 SHA256SUMS 校验、
-  再拉起系统安装器；全程不引第三方库。
-  **③ Markdown 表格贴行修复**：表头紧贴上一行的 GFM 表格（模型常这么写）此前会
-  显示成一串竖线文字，渲染前自动补表格前空行修复；三列及以上表格的首列不再被窄列截断。
+- 当前 APK：`DSH伴侣-companion-v2.2.49.apk`，**3,142,644 字节**，
+  SHA-256 `c06ec71912753ead9cf4f20d143a2664ca6918117d6b389d0a3e655e05e3ebd3`（`artifacts/SHA256SUMS.txt` 同步）。
+  **本版未发版**（未推送、未打 tag；产物已在本地构建）——
+  本版改动：设置里的「模型」「插件」对照官方 Web 对齐。
+  **① 模型页**：标题与副标题改用官方文案；设置文档只读时给出横幅提示；「添加模型提供商」
+  支持两条通道——「第三方模型提供商」从内置目录挑还没配置的供应商（填入 API 密钥即可），
+  「自定义模型 API」手填 ID / 地址 / 协议 / 模型。编辑器里协议改成下拉（选项来自服务端
+  schema），密钥输入框按凭据状态换提示（留空使用已保存凭据 / 已检测到环境变量 / 输入密钥）
+  并可显隐；模型目录从「纯 ID 列表」升级为结构化行（ID / 显示名称 / 上下文窗口 /
+  最大输出 token 数，容量支持 131072、256K、1M 写法，逐行校验 ID 必填与重复）；
+  新增「恢复默认模型」、「获取可用模型」候选面板（搜索 / 全选 / 取消全选 / 添加所选）
+  与删除供应商（确认文案按是否存有凭据分档）。打开卡片会捕获设置 revision，
+  期间别处改动会提示「请关闭后重新打开，在当前值上编辑」；保存成功提示「已保存 {供应商}。」。
+  **② 插件页**：清单加搜索框（按名称与描述过滤，无匹配有明确空态）；每行可展开详情，
+  折叠时只留名称与状态徽标，展开后看完整名称 / 已安装版本 / 声明版本 / 主页 / 不可启停原因。
+  **③ 对齐前提**：目录元数据与「恢复默认模型」依赖 bridge 2.5.0（见下方服务端插件一栏）。
 - 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用。证书没变，但 **v2.2.41 起包名变了**，
   `v2.2.40` 及更早仍需先卸载）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)
 - 许可证：[GNU Affero General Public License v3.0](./LICENSE)
-- 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.7**（「加载更早消息」需要 2.3.1+；「插件」页清单与启停需要 2.3.2+ / 2.3.3+；**审批 / 问答卡片需要 2.3.7+**；**断档重同步 / 订阅基线 / 交付物实时卡片需要 2.3.8+**；「回答被截断」提示需 bridge **≥ 2.4.1**；后台任务面板需 bridge **≥ 2.4.3**）
+- 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.7**（「加载更早消息」需要 2.3.1+；「插件」页清单与启停需要 2.3.2+ / 2.3.3+；**审批 / 问答卡片需要 2.3.7+**；**断档重同步 / 订阅基线 / 交付物实时卡片需要 2.3.8+**；「回答被截断」提示需 bridge **≥ 2.4.1**；后台任务面板需 bridge **≥ 2.4.3**；模型页目录添加 / 恢复默认模型需 bridge **≥ 2.5.0**）
   （旧名 [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace)）

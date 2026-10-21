@@ -40,6 +40,9 @@ fun localizedErrorRes(code: String?): Int? = when (normalizeErrorCode(code)) {
     "SCOPE_REQUIRED", "SCOPE_INVALID", "FORBIDDEN" -> R.string.err_scope_missing
     "ADMIN_LOOPBACK_REQUIRED" -> R.string.err_admin_loopback
     "SETTINGS_READ_ONLY" -> R.string.err_settings_read_only
+    // 设置文档在卡片打开期间被别处改动（expectedRevision 不匹配）：
+    // 官方 Web 同场景的文案是「请关闭后重新打开，在当前值上编辑」。
+    "SETTINGS_CONFLICT" -> R.string.err_settings_conflict
 
     // ———— 路径 · 文件 ————
     "PATH_OUTSIDE_ROOT", "PATH_OUTSIDE_ROOTS" -> R.string.err_path_outside_root

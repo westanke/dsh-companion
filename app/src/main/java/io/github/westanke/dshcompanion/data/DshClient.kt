@@ -307,6 +307,35 @@ fun permissionPresets(): PermissionCatalog = get("chat/permission-presets", Perm
         DiscoveredModelsEnvelope.serializer(),
     ).models
 
+    /**
+     * 删除供应商（bridge 先 unset 其配置段；expectedRevision 防并发冲突）。
+     * 成功返回 204 空体，调用方应自行刷新 [providerSettings]。
+     */
+    fun deleteProvider(providerId: String, expectedRevision: Int?) {
+        val url = pathUrl("settings", "providers", providerId).newBuilder()
+            .apply { if (expectedRevision != null) addQueryParameter("expectedRevision", expectedRevision.toString()) }
+            .build()
+        execute(Request.Builder().url(url).delete()).use(::ensureSuccess)
+    }
+
+    /**
+     * 恢复供应商的适配器默认模型目录（wire `models: null`）。
+     *
+     * 不能走 [updateProvider]：kotlinx 默认不编码等于默认值的字段，`models = null`
+     * 会被整个省略，服务端无法区分「没改」和「恢复默认」。所以这里手工拼 body。
+     */
+    fun resetProviderModels(providerId: String, expectedRevision: Int?): ProviderSettings {
+        val body = buildString {
+            append("{\"models\":null")
+            if (expectedRevision != null) append(",\"expectedRevision\":").append(expectedRevision)
+            append('}')
+        }
+        val request = Request.Builder()
+            .url(pathUrl("settings", "providers", providerId))
+            .patch(body.toRequestBody("application/json".toMediaType()))
+        return executeJson(request, ProviderSettings.serializer())
+    }
+
     fun createSession(workspaceId: String, agentPreset: String? = null): CreatedSession = post(
         "chat/sessions",
         CreateSessionRequest(workspaceId, agentPreset, UUID.randomUUID().toString()),
