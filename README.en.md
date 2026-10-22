@@ -299,7 +299,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.51.apk
+DSH伴侣-companion-v2.2.52.apk
 ```
 
 Requirements:
@@ -589,27 +589,28 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.51` (`versionCode` 10076)
+- Version: `v2.2.52` (`versionCode` 10077)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
 - Unit tests: 67 test classes / 625 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.51.apk`, **3,146,456 bytes**, SHA-256
+- Current APK: `DSH伴侣-companion-v2.2.52.apk`, **3,146,456 bytes**, SHA-256
   `23321a39a5e55e93047a65318f5a5a3bb84366f0aa2009a7f1e02d0bf4ea026f` (kept in sync in
-  `artifacts/SHA256SUMS.txt`).   **Released on Gitee + AtomGit** (tag `v2.2.51`) —
-  what changed in this release: **four colour themes + tablet-safe items + bridge
-  2.5.1 security model sync**. **1. Colour themes** — Appearance gains a "Colour theme" row with four
-  options: Paper (default, field-for-field identical to the previous palette), Warm (lower blue light),
-  Mist (cool), High contrast (bright light). Each ships light and dark palettes and is orthogonal to the
-  existing "Interface style" (follow system / light / dark). Applies live, no restart; nothing changes
-  unless you switch. **2. Tablet items** — the 840dp magic number became named constants and four pure
-  tier functions (binary-identical to the old predicate, zero impact on phones); conversation and file
-  lists gained `contentType` (pure performance). **3. Legibility** — connection-state semantic colours
-  are now theme-paired; dark-mode contrast 3.47/3.16 → **9.90/7.79** (meets WCAG AA); the attachment
-  delete target went 30dp → 48dp. **4. Relation to bridge 2.5.1** — bridge tightened its admin
-  predicate (admin surface fully disabled while a tunnel runs). This app only consumes `/api/v1` and
-  never touches `/manage`, so the tightening has **zero impact here**.
+  `artifacts/SHA256SUMS.txt`).   **Released on Gitee + AtomGit** (tag `v2.2.52`) —
+  what changed in this release: **process groups are no longer shredded, images in
+  message bodies render, and loaded history is no longer wiped by a refresh** (all three driven by
+  on-device reports). **1. Process groups** — in a real session 45 of 46 assistant messages carry only
+  reasoning + tool-call and no prose at all; the old logic counted them as messages, splitting one
+  continuous tool run into dozens of group headers and pushing the prose off screen. Empty assistant
+  messages now fold into the process group. **2. Images** — Markdown images in the body (absolute path
+  with an image extension) go through the attachment path: thumbnail, tap for full size; anything else
+  (relative path, non-image, remote) degrades to a tappable link instead of leaving a blank block.
+  **3. History** — after "load older messages", a refresh used to replace history with the last page
+  only, wiping what had just been loaded and leaving an empty screen; it now merges by seq and anchors
+  the viewport by index. **4. Relation to bridge 2.6.0** — the settings page shows only the namespaces
+  that can actually take effect on this device (server says writable, not a WebUI-only appearance
+  namespace, and has an editable control), shrinking 22 namespaces to 2.
 - Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25). The key did not change, but the
   **package name did in v2.2.41**, so `v2.2.40` and earlier still require an uninstall first
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)
