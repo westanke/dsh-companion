@@ -133,9 +133,11 @@ internal fun stripMarkdownImages(part: String): String = MARKDOWN_IMAGE_PATTERN
         val target = markdownImageTarget(match.groupValues[2])
         when {
             target.startsWith("/") && handoffMediaType(target.substringAfterLast('/')).isNotEmpty() -> ""
-            target.startsWith("http://") || target.startsWith("https://") ->
-                "[" + alt.ifBlank { target } + "](" + target + ")"
-            else -> alt
+            // 剩下的一律降级成**链接**，绝不把 `![](…)` 原样留给 Markdown 渲染器。
+            // 渲染器会为图片语法预留一块「图片位」却画不出东西（没有图片加载器），
+            // 屏幕上就是一块说不清来历的空白 —— 真机 2026-10-22 反馈的「图片显示了寂寞」就是它。
+            // 变成链接至少让「这里原本有张图、图在哪」看得见、点得动。
+            else -> "[" + alt.ifBlank { target.substringAfterLast('/') } + "](" + target + ")"
         }
     }
     // 图被摘掉后会留下空行：连着的 3 个以上换行压成 1 个空行，正文别出现莫名的大段留白。

@@ -235,6 +235,24 @@ class ChatPresentationTest {
     }
 
     @Test
+    fun unknownImageTargetNeverLeavesABlankBlock() {
+        // 认不出来的图片（相对路径 / 非图片扩展名）以前会被摘成空串：正文里什么都不留，
+        // 而渲染器又不保证「没有语法就没有留白」，用户看到的就是一块来源不明的空白。
+        // 现在一律降级成链接，至少看得见「这里原本有张图」。
+        val history = ChatHistory(listOf(entry(
+            type = "assistant/message",
+            seq = 41,
+            data = """{"message":{"role":"assistant","content":[
+                {"type":"text","text":"甲\n\n![](shots/a.png)\n\n乙\n\n![](/media/x/report.pdf)"}]}}""",
+        )), hasMore = false)
+
+        val items = history.displayItems()
+        assertEquals(1, items.size)
+        assertEquals("甲\n\n[a.png](shots/a.png)\n\n乙\n\n[report.pdf](/media/x/report.pdf)", items[0].body)
+        assertTrue(items[0].attachments.isEmpty())
+    }
+
+    @Test
     fun remoteMarkdownImageDegradesToALink() {
         val history = ChatHistory(listOf(entry(
             type = "assistant/message",
