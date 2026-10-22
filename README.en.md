@@ -592,7 +592,7 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 - Version: `v2.2.51` (`versionCode` 10076)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
-- Unit tests: 67 test classes / 614 cases at the last run (0 failures). The counts move with the code, so
+- Unit tests: 67 test classes / 617 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
 - Current APK: `DSH伴侣-companion-v2.2.51.apk`, **3,146,456 bytes**, SHA-256

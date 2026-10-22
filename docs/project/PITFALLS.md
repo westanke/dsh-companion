@@ -951,6 +951,22 @@ GFM 允许这种紧凑写法，**这颗解析器比 GitHub 更严格**。
 - **写门禁时的语言差异要记牢**：Kotlin/Java 的 `^` 默认不 MULTILINE，JS 的 `/gm` 是。
   这类「解析器自己的 bug」与「文档格式变了」表现相同，所以下限断言的报错文案要能区分二者。
 
+### 空助手消息把过程组劈成几十个组头
+
+**症状**：会话页「不展开折叠」时，整屏只有一排「耗时 8 分 33 秒 · 42 次工具调用」，
+正文像丢了；用户原话「工具加载过多，当前页面只显示耗时 xxx x次工具调用」。
+
+**根因**：真实会话里 `assistant/message` 绝大多数**只有 reasoning + tool-call、没有 text**
+（某会话实测 46 条里 45 条）。这类消息仍映射成 `ASSISTANT` 展示项、`body` 为空串，
+而 `isProcessItem()` 曾经把 `ASSISTANT` 一律当消息 → 每两条过程项之间插一条零高度空消息 →
+`flushRun()` 反复触发 → 一整轮工具调用被劈成几十个单条过程组。
+
+**判据**：`chat/sessions/{id}/messages` 里数 `assistant/message` 的 `content` 类型；
+若 `text` 占比极低而 `tool-call` 很高，就是本坑。
+
+**修法**：`ASSISTANT` 只在**有正文或带图片**时算消息（`ChatDisplayGroups.hasVisibleBody`），
+空的折进过程组。回归用例见 `ChatDisplayGroupsTest.emptyAssistantMessageFoldsIntoTheGroup`。
+
 ### 内核 schema 是 schemastery，不是 JSON Schema
 
 **现象**：通用设置页能列出 22 个命名空间、能点进去，但**每个字段都是一行灰字**：

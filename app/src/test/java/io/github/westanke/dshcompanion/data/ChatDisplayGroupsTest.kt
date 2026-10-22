@@ -155,6 +155,57 @@ class ChatDisplayGroupsTest {
         assertEquals(listOf("3-tool"), groups(entries)[1].items.map { it.id })
     }
 
+    @Test
+    fun emptyAssistantMessageFoldsIntoTheGroup() {
+        // 真机实测的常态：assistant/message 只装 reasoning + tool-call，一个字都没有。
+        // 以前它算"消息"，会把连续工具调用劈成几十个单条组 —— 屏幕上只剩一排组头。
+        val entries = groupChatDisplay(
+            listOf(
+                item(ChatItemKind.TOOL, "1-tool", tools = listOf(tool("a"))),
+                item(ChatItemKind.ASSISTANT, "2-assistant", body = ""),
+                item(ChatItemKind.TOOL, "3-tool", tools = listOf(tool("b"))),
+            ),
+        )
+
+        assertEquals(1, entries.size)
+        val group = entries.single() as ChatDisplayEntry.ProcessGroup
+        assertEquals(3, group.items.size)
+        assertEquals(2, group.summary.toolCalls)
+    }
+
+    @Test
+    fun whitespaceOnlyAssistantMessageAlsoFoldsIntoTheGroup() {
+        // 纯换行渲染出来同样是零高度：算消息就等于凭空插一条看不见的分隔。
+        val entries = groupChatDisplay(
+            listOf(
+                item(ChatItemKind.TOOL, "1-tool"),
+                item(ChatItemKind.ASSISTANT, "2-assistant", body = " \n\n "),
+                item(ChatItemKind.TOOL, "3-tool"),
+            ),
+        )
+
+        assertEquals(1, entries.size)
+    }
+
+    @Test
+    fun assistantWithOnlyAnImageStaysMessage() {
+        // 只发图不发字的消息正是靠 attachments 才不会被丢掉（ChatDisplayItem 注释里的原话）。
+        val withImage = ChatDisplayItem(
+            id = "2-assistant",
+            seq = 2,
+            kind = ChatItemKind.ASSISTANT,
+            body = "",
+            attachments = listOf(ChatAttachment(attachmentId = "img-1", mediaType = "image/png")),
+        )
+
+        val entries = groupChatDisplay(
+            listOf(item(ChatItemKind.TOOL, "1-tool"), withImage),
+        )
+
+        assertEquals(2, entries.size)
+        assertTrue(entries[1] is ChatDisplayEntry.Message)
+    }
+
     // ── 计数 ──
 
     @Test
@@ -310,14 +361,24 @@ class ChatDisplayGroupsTest {
     // ── 夹具 ──
 
     /** 造一条展示项：id 形如 `"3-user"`，序号从 id 里取，方便回看顺序有没有乱。 */
+    /**
+     * 造一条展示项。
+     *
+     * [body] 默认给一句正文：**空正文的 ASSISTANT 现在算过程项**（见
+     * ChatDisplayGroups 文件头「空助手消息」），若默认空串，本文件里所有"消息类"
+     * 夹具都会悄悄变成过程项，断言就测不到原本想测的东西了。
+     * 要测"空助手消息"的用例显式传 `body = ""`。
+     */
     private fun item(
         kind: ChatItemKind,
         id: String,
         tools: List<ToolCallDetail> = emptyList(),
+        body: String = "正文",
     ) = ChatDisplayItem(
         id = id,
         seq = id.substringBefore('-').toIntOrNull() ?: 0,
         kind = kind,
+        body = body,
         tools = tools,
     )
 

@@ -20,12 +20,29 @@ package io.github.westanke.dshcompanion.data
  * | kind | 归哪类 | 理由 |
  * |---|---|---|
  * | `USER` | 消息 | 用户自己说的话，永远独立一行，折进去等于把提问藏了 |
- * | `ASSISTANT` | 消息 | 助手正文。**GenUi 卡片没有独立 kind** —— 它是正文里的 dsh-ui 围栏，由 `AssistantBody` 就地解析成原生组件，所以跟着 ASSISTANT 一起算消息 |
+ * | `ASSISTANT` | **看有没有正文** | 有正文（含 dsh-ui 围栏）或带图片才算消息；**空的算过程**。真实会话里绝大多数 `assistant/message` 只装 reasoning + tool-call、一个字都没有（本机某会话 46 条里 45 条），把它们当消息会把连续的工具调用劈成几十个单条过程组 —— 屏幕上就只剩一排「耗时 … · N 次工具调用」 |
  * | `FAILURE` | 消息 | 终局失败（限流 / 配额 / 密钥 / 登出停止）是用户唯一能看到「为什么失败」的地方，折进过程组等于把答案藏起来 |
  * | `CONTEXT` | 过程 | 上下文注入（记忆库、AGENTS.md、插件、技能唤起…）：用户想知道「注入了 N 项」，不是逐条读正文 |
  * | `REASONING` | 过程 | 思考。历史与流式两处都已把它挡在消息流外（改由思考条承载），漏进来也不该占正文的位置 |
  * | `TOOL` | 过程 | 工具调用**同时也承载工具结果**：`toolItem` 把 `tool/result` 的执行结果塞进 `tools[].result`，枚举里**没有**独立的 TOOL_RESULT —— 所以「工具调用 + 工具结果」在这里是同一个 kind |
  * | `DELIVERABLE` | 消息 | 交付物卡片（内核明说的显式交付）。折进过程组等于把「你给的东西」藏了 —— 桌面端也把它钉在轮次收尾的独立卡片上 |
+ *
+ * ## 空助手消息（2026-10-22 真机反馈补的一条）
+ *
+ * 用户原话：「对话窗口也存在 工具加载过多，不展开折叠的情况下，当前页面 只显示
+ * 耗时 xxx x次工具调用」。
+ *
+ * 根因不是折叠逻辑坏了，而是**折叠被劈碎了**：真实会话里 `assistant/message` 绝大多数
+ * 只装 `reasoning` + `tool-call`，`text` 一个字都没有（本机某会话实测 46 条里 45 条如此）。
+ * 这类消息照样映射成 `ASSISTANT` 展示项、`body` 是空串 —— 以前一律当"消息"，于是
+ * 每两条过程项之间就插进一条零高度的消息，`flushRun()` 被反复触发：
+ *
+ * > 组头 → （空消息，看不见）→ 组头 → （空消息）→ 组头 …
+ *
+ * 屏幕上就成了一整屏「耗时 8 分 33 秒 · 42 次工具调用」，用户以为对话内容丢了。
+ *
+ * 现在的判据是「**有没有读得出来的东西**」：有正文或带图片才算消息，空的折进过程组。
+ * 这样一整轮连续的工具调用重新合成**一个**组头，正文该在的位置就只剩真正的正文。
  *
  * 兜底是 `else -> 消息`：将来内核加了新 kind 而没人回来改这张表时，
  * **宁可少折叠一个，也不能把正文折进去**（折叠错了用户是真的看不到内容）。
@@ -168,10 +185,21 @@ private fun isProcessItem(item: ChatDisplayItem): Boolean {
     if (item.failure != null) return false
     return when (item.kind) {
         ChatItemKind.CONTEXT, ChatItemKind.REASONING, ChatItemKind.TOOL -> true
-        // USER / ASSISTANT / FAILURE，以及将来新增的任何 kind：默认消息。
+        // 空助手消息算**过程**，不是消息 —— 这条是真机实测补的，理由见文件头「空助手消息」一节。
+        ChatItemKind.ASSISTANT -> !item.hasVisibleBody()
+        // USER / FAILURE，以及将来新增的任何 kind：默认消息。
         else -> false
     }
 }
+
+/**
+ * 这一项是否**有可读的东西**：有正文，或带了图片。
+ *
+ * 判据只认「读得出来」：空白串、纯换行也算没有 —— 渲染出来就是一条零高度的行，
+ * 却会把过程组劈成两段。
+ */
+private fun ChatDisplayItem.hasVisibleBody(): Boolean =
+    body.isNotBlank() || attachments.isNotEmpty()
 
 /** 数一遍组内有什么，并把时间夹到最早/最晚。 */
 private fun summarizeProcessGroup(
