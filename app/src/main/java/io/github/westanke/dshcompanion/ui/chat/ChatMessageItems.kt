@@ -411,17 +411,19 @@ internal fun ChatItem(
 
         }
 
-        ChatItemKind.ASSISTANT -> AssistantBody(
-
-            body = item.body,
-
-            streaming = item.streaming,
-
-            onAnswer = onAnswer,
-
-            genUiDebug = genUiDebug,
-
-        )
+        // 助手正文里的 Markdown 图片（`![](/abs/path.png)`）会被映射成附件：正文里摘掉、
+        // 挂到这里渲染。原先这条分支只画正文，附件没有出口 —— 图上就只有一块空白。
+        ChatItemKind.ASSISTANT -> Column {
+            if (item.body.isNotBlank()) {
+                AssistantBody(
+                    body = item.body,
+                    streaming = item.streaming,
+                    onAnswer = onAnswer,
+                    genUiDebug = genUiDebug,
+                )
+            }
+            MessageAttachments(item.attachments, images, failures, onLoadImage)
+        }
 
         // 终局失败：宁可多一个分支，也不要让这条消息落进 else 变成一行空的活动行。
 

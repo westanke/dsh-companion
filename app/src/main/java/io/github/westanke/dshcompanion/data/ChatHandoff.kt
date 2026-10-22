@@ -83,6 +83,67 @@ internal fun stripHandoffLines(part: String): String = part
     .joinToString("\n")
     .trim()
 
+/**
+ * Markdown 图片：`![alt](target)`，允许 `![alt](target "title")` 这种带 title 的写法。
+ *
+ * 为什么需要这条：模型（和本项目的助手）在正文里贴图时用的是标准 Markdown 图片语法，
+ * 目标往往是**服务器上的绝对路径**（如 `/media/…/c1.png`）。渲染层不认这种图，
+ * 又不像交接说明那样有专用标记 —— 于是整段图被丢掉，正文里留一块**莫名空白**，
+ * 看起来像内容丢了。这里把它摘出来，复用交接图那条已经验证过的「绝对路径取字节」通路。
+ */
+internal val MARKDOWN_IMAGE_PATTERN = Regex("""!\[([^\]]*)]\(\s*([^)]+?)\s*\)""")
+
+/**
+ * 从括号内容里取真正的目标：去掉可选的 `"title"` 与 `<…>` 包裹。
+ *
+ * 目标里**允许有空格** —— 本项目的截图路径就长这样（`…/报告/截图 c1.png`）。
+ * 因此正则只能取到「右括号为止」，title 与尖括号在这里剥。
+ */
+internal fun markdownImageTarget(raw: String): String {
+    val trimmed = raw.trim().removeSurrounding("<", ">").trim()
+    if (!trimmed.endsWith("\"")) return trimmed
+    val cut = trimmed.lastIndexOf('"', trimmed.length - 2)
+    return if (cut > 0) trimmed.substring(0, cut).trim() else trimmed
+}
+
+/**
+ * 正文里**能显示**的图片路径：绝对路径，且扩展名是已知图片格式。
+ *
+ * 只认绝对路径是刻意的 —— 相对路径在会话里没有可信基座（工作区根、插件目录、当前文件所在目录
+ * 三种解释都说得通），猜错了等于去读一个不存在的文件。
+ */
+internal fun markdownImagePathsIn(part: String): List<String> = MARKDOWN_IMAGE_PATTERN
+    .findAll(part)
+    .mapNotNull { match ->
+        val target = markdownImageTarget(match.groupValues[2])
+        target.takeIf { it.startsWith("/") && handoffMediaType(it.substringAfterLast('/')).isNotEmpty() }
+    }
+    .toList()
+
+/**
+ * 把 Markdown 图片从正文里改写成「能在 App 里看到的东西」：
+ *
+ * - **本地绝对路径的图片** → 整段摘掉（它已经变成附件，由附件区渲染缩略图 + 点开大图）；
+ * - **http(s) 图片** → 降级成普通链接（App 不做远程图片加载，别留一块白洞）；
+ * - 其它（相对路径、非图片扩展名）→ 有 alt 就留 alt 文字，没有就摘掉。
+ */
+internal fun stripMarkdownImages(part: String): String = MARKDOWN_IMAGE_PATTERN
+    .replace(part) { match ->
+        val alt = match.groupValues[1].trim()
+        val target = markdownImageTarget(match.groupValues[2])
+        when {
+            target.startsWith("/") && handoffMediaType(target.substringAfterLast('/')).isNotEmpty() -> ""
+            target.startsWith("http://") || target.startsWith("https://") ->
+                "[" + alt.ifBlank { target } + "](" + target + ")"
+            else -> alt
+        }
+    }
+    // 图被摘掉后会留下空行：连着的 3 个以上换行压成 1 个空行，正文别出现莫名的大段留白。
+    .let { MULTI_BLANK_LINE_PATTERN.replace(it, "\n\n") }
+
+/** 三个及以上的连续换行 —— 摘完图片留下的空行由它压平。 */
+private val MULTI_BLANK_LINE_PATTERN = Regex("""\n{3,}""")
+
 /** 一条 text part 里出现的交接路径（正常是 0 或 1 条）。 */
 internal fun handoffPathsIn(part: String): List<String> = HANDOFF_SOURCE_PATTERN
     .findAll(part)

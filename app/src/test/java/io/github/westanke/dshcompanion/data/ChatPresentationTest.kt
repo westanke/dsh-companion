@@ -196,6 +196,61 @@ class ChatPresentationTest {
     }
 
     @Test
+    fun markdownImageInAssistantProseBecomesAnAttachment() {
+        // 真机反馈：助手正文里贴 `![](/media/…)`，App 不认这种图，正文里留一块莫名其妙的空白，
+        // 看着像内容丢了。现在它会被摘成附件，走交接图那条「绝对路径取字节」的通路。
+        val path = "/media/wangke/OFFICE/workspace/研究类/report/截图 c1.png"
+        val history = ChatHistory(listOf(entry(
+            type = "assistant/message",
+            seq = 40,
+            data = """{"message":{"role":"assistant","content":[
+                {"type":"text","text":"先看症状（修复前）：\n\n![修复前]($path)\n\n原因并不是没加载。"}]}}""",
+        )), hasMore = false)
+
+        val items = history.displayItems()
+        assertEquals(1, items.size)
+        assertEquals("先看症状（修复前）：\n\n原因并不是没加载。", items[0].body)
+        assertEquals(1, items[0].attachments.size)
+        assertEquals("handoff:$path", items[0].attachments[0].attachmentId)
+        assertEquals(path, items[0].attachments[0].handoffPath)
+        assertEquals("image/png", items[0].attachments[0].mediaType)
+    }
+
+    @Test
+    fun markdownImageOnlyAssistantMessageSurvives() {
+        // 只贴图、一个字都不写：正文摘干净后是空的，但附件不空 —— 消息必须留下。
+        val path = "/media/wangke/OFFICE/workspace/reports/only-image.png"
+        val history = ChatHistory(listOf(entry(
+            type = "assistant/message",
+            seq = 41,
+            data = """{"message":{"role":"assistant","content":[
+                {"type":"text","text":"![]($path)"}]}}""",
+        )), hasMore = false)
+
+        val items = history.displayItems()
+        assertEquals(1, items.size)
+        assertEquals("", items[0].body)
+        assertEquals(1, items[0].attachments.size)
+        assertEquals(path, items[0].attachments[0].handoffPath)
+    }
+
+    @Test
+    fun remoteMarkdownImageDegradesToALink() {
+        val history = ChatHistory(listOf(entry(
+            type = "assistant/message",
+            seq = 42,
+            data = """{"message":{"role":"assistant","content":[
+                {"type":"text","text":"看图：![示意图](https://example.test/a.png)"}]}}""",
+        )), hasMore = false)
+
+        val items = history.displayItems()
+        assertEquals(1, items.size)
+        // App 不做远程图片加载：降级成普通链接，不留白洞、也不假装能显示。
+        assertEquals("看图：[示意图](https://example.test/a.png)", items[0].body)
+        assertTrue(items[0].attachments.isEmpty())
+    }
+
+    @Test
     fun keepsAHandoffOnlyMessageAndLeavesNothingInTheBody() {
         // 只发图 + 纯文本模型：摘掉说明后正文是空的，但附件不空 —— 消息必须留下，
         // 否则又回到「App 里整条消息消失」那个老 bug。

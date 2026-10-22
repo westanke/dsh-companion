@@ -115,14 +115,21 @@ private fun userItems(event: SessionEvent): List<ChatDisplayItem> {
     val isUser = kind == "user"
     val parts = contentTextParts(data["content"])
     val handoffPaths = if (isUser) parts.flatMap(::handoffPathsIn).distinct() else emptyList()
+    // 用户手打的 Markdown 图片同理：绝对路径的变成附件，正文里摘掉（否则是一块空白）。
+    // 只对**用户原话**生效 —— 上下文注入的正文里全是路径示例（README、记忆库、上一轮工具输出），
+    // 真去解析会把它们切碎并凭空造出一堆读不到的附件，这条在交接说明那儿已经踩过一次。
+    val markdownImages = if (isUser) parts.flatMap(::markdownImagePathsIn).distinct() else emptyList()
     // 按**行**摘而不是整条 part 摘：实测插件把说明放在独立 part 里，但万一哪天和用户
     // 正文同处一条 part，整条摘掉会把用户自己打的话一起吞了。
     val body = if (isUser) {
-        parts.map(::stripHandoffLines).filter(String::isNotBlank).joinToString("\n\n")
+        parts.map(::stripHandoffLines).map(::stripMarkdownImages)
+            .filter(String::isNotBlank).joinToString("\n\n")
     } else {
         contentText(data["content"])
     }
-    val attachments = contentAttachments(data["content"]) + handoffPaths.map(::handoffAttachment)
+    val attachments = (contentAttachments(data["content"]) +
+        handoffPaths.map(::handoffAttachment) +
+        markdownImages.map(::handoffAttachment)).distinctBy { it.attachmentId }
     if (isUser) {
         // 判据是「有文字**或**有附件」。旧代码只判文字，于是「只发一张图、不打字」
         // 的消息会整条消失 —— 用户看到的正是"App 里看不见图片"。
@@ -155,21 +162,30 @@ private fun assistantItems(event: SessionEvent): List<ChatDisplayItem> {
     }.orEmpty()
     val result = mutableListOf<ChatDisplayItem>()
     val prose = mutableListOf<String>()
+    // 与正文同批出现的 Markdown 图片：flushProse 时一起挂到那条 ASSISTANT 上。
+    // 只有图、没有字的正文很常见（助手贴完图就结束），所以判空要算上它。
+    val proseImages = mutableListOf<String>()
     fun flushProse() {
-        if (prose.isEmpty()) return
+        if (prose.isEmpty() && proseImages.isEmpty()) return
         result += ChatDisplayItem(
             id = "${event.seq}-assistant-${result.size}",
             seq = event.seq,
             kind = ChatItemKind.ASSISTANT,
             time = event.time,
             body = prose.joinToString("\n\n"),
+            attachments = proseImages.distinct().map(::handoffAttachment),
         )
         prose.clear()
+        proseImages.clear()
     }
     for (block in blocks) {
         val value = block as? JsonObject ?: continue
         when (value.stringValue("type")) {
-            "text" -> value.stringValue("text")?.takeIf(String::isNotBlank)?.let(prose::add)
+            "text" -> value.stringValue("text")?.takeIf(String::isNotBlank)?.let { raw ->
+                // 先认图再清正文：本地绝对路径的图变成附件，正文里不留空括号。
+                markdownImagePathsIn(raw).forEach(proseImages::add)
+                stripMarkdownImages(raw).trim().takeIf(String::isNotBlank)?.let(prose::add)
+            }
             "reasoning" -> {
                 flushProse()
                 value.stringValue("text")?.takeIf(String::isNotBlank)?.let { reasoning ->
