@@ -1043,3 +1043,22 @@ GFM 允许这种紧凑写法，**这颗解析器比 GitHub 更严格**。
 **修法**：入口按 scope 二段门控（`data/SettingsNamespaces.kt` 的 `canWriteSettingsNamespaces()`）：
 没有 `settings.read` 说「需要 settings.read」；有读没写说「需要 settings.write 权限才能在这里修改
 （在电脑端「已配对设备」里勾选）」；两者都有才画表单。
+
+### 刷新历史把「加载更早」的成果抹掉，屏幕上只剩一片空白
+
+真机实测（2026-10-22，用户报「还是不显示」）：点「加载更早消息」→ 内容出现 →
+一秒后整屏变空白，只剩一个「耗时 … · N 次工具调用」组头。
+
+`DiagLog` 的 SCROLL 行是决定性证据：`totalItemsCount` 在 5 与 2 之间反复回退 ——
+**加载出来的旧页被下一次刷新替换掉了**，而视口还停在原来的像素偏移上，
+于是落在没有内容的区域里，看起来就是"什么都没显示"。
+
+根因：`refreshHistory()` 拿回的是**最后一页**，赋值时用新页整体替换；
+用户此前翻出来的更早几页随之消失。
+
+修法：`mergeRefreshedHistory(previous, fresh)` 保留「新页第一条 seq 之前」的历史，
+再拼上新页；`hasMore` 延续上一页的结论（更早的确实还没读完）。
+4 个单测在 `HistoryMergeTest`。
+
+判据：以后遇到「加载更早之后空白」，先看 `grep SCROLL files/diag.log` 里的
+`totalItemsCount` 有没有回退，再看 `history.events` 的条数，别先怀疑渲染。

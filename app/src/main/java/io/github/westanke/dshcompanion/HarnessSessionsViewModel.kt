@@ -158,12 +158,34 @@ internal fun HarnessViewModel.selectSession(id: String?) {
 
 internal fun HarnessViewModel.refreshHistory() = withClient { api ->
     val id = mutableState.value.selectedSessionId ?: return@withClient
-    val history = api.history(id)
-    update { copy(history = history) }
+    val fresh = api.history(id)
+    val previous = mutableState.value.history
+    update { copy(history = mergeRefreshedHistory(previous, fresh)) }
     // 顺手把待答问题也拉一次。这个函数只有两个调用点（切会话、顶栏那个刷新按钮），
     // 而顶栏刷新正是用户遇到「卡片该出现却没出现」时**唯一**的自救入口 ——
     // 把问答挂在它上面，就不必再教用户「去哪里重试」。
     refreshPendingQuestions()
+}
+
+/**
+ * 刷新（`refreshHistory`）拿回来的只是**最后一页**。如果用户此前已经点过
+ * 「加载更早消息」，直接用新的一页替换会让列表中已经加载出来的历史凭空消失 ——
+ * 真机实测表现为「点加载更早 → 内容出现 → 一秒后整屏变空白」：列表条目从 5 条
+ * 缩回 2 条，视口还停在原来的像素偏移上，落进了空白区。
+ *
+ * 所以刷新时把「新一页之前」的历史保留下来，只替换/追加新一页覆盖的区间。
+ * 纯函数，便于单测（见 `HistoryMergeTest`）。
+ */
+internal fun mergeRefreshedHistory(previous: ChatHistory?, fresh: ChatHistory): ChatHistory {
+    if (previous == null || previous.events.isEmpty()) return fresh
+    val freshFirst = fresh.events.minOfOrNull { it.event.seq } ?: return fresh
+    val keptOlder = previous.events.filter { it.event.seq < freshFirst }
+    if (keptOlder.isEmpty()) return fresh
+    return fresh.copy(
+        events = keptOlder + fresh.events,
+        // 之前还有更早的没读完，就别把「还能往前翻」的结论丢掉。
+        hasMore = previous.hasMore,
+    )
 }
 
 internal fun HarnessViewModel.loadOlderHistory() = withClient { api ->
