@@ -161,6 +161,16 @@ else
   run git tag -a "$TAG" -m "dsh-companion ${VER}"
   ok "已创建 $TAG"
 fi
+# tag 指向的树必须包含**当前这份** SHA256SUMS.txt：否则「tag 里的校验值」与
+# 「Release 附件 / README 上的校验值」会悄悄分叉（桥仓 v2.6.0 就踩过，那边已改成
+# 「先提交校验值、后打 tag」）。这里做同一道闸：不一致就中止，tag 不推送。
+if [ "$DRY_RUN" != "1" ] && ! git show "$TAG:artifacts/SHA256SUMS.txt" 2>/dev/null \
+     | cmp -s - artifacts/SHA256SUMS.txt; then
+  bad "$TAG 里的 artifacts/SHA256SUMS.txt 与产物不一致 —— 中止（tag 未推送）"
+  bad "  修法：git tag -d $TAG，重跑阶段 A 回填并提交，再跑 --publish"
+  exit 1
+fi
+[ "$DRY_RUN" = "1" ] || ok "tag 内容校验通过（SHA256SUMS.txt 与产物一致）"
 say ""
 
 say "2) git 双推（Gitee 主站 + AtomGit 备站，复用 push-all.sh）"
