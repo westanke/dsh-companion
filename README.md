@@ -541,8 +541,8 @@ keyPassword=...
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：67 个测试类 / 625 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.52.apk`，**3,146,456 字节**，
-  SHA-256 `23321a39a5e55e93047a65318f5a5a3bb84366f0aa2009a7f1e02d0bf4ea026f`（`artifacts/SHA256SUMS.txt` 同步）。
+- 当前 APK：`DSH伴侣-companion-v2.2.52.apk`，**3,187,808 字节**，
+  SHA-256 `45bd5dc5cabd3ded79024bfd470b500309f76e4cebeb8f2be30584d64510bf67`（`artifacts/SHA256SUMS.txt` 同步）。
   **已发 Gitee + AtomGit**（tag `v2.2.52`）——
   本版改动：**过程组不再被劈碎 + 正文图片能看 + 历史不再被刷新抹掉**（三条真机反馈驱动）。
   **① 过程组不再被劈碎**：真实会话里 46 条助手消息有 45 条只有 reasoning + tool-call、一个字正文都没有，

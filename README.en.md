@@ -595,8 +595,8 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 - Unit tests: 67 test classes / 625 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.52.apk`, **3,146,456 bytes**, SHA-256
-  `23321a39a5e55e93047a65318f5a5a3bb84366f0aa2009a7f1e02d0bf4ea026f` (kept in sync in
+- Current APK: `DSH伴侣-companion-v2.2.52.apk`, **3,187,808 bytes**, SHA-256
+  `45bd5dc5cabd3ded79024bfd470b500309f76e4cebeb8f2be30584d64510bf67` (kept in sync in
   `artifacts/SHA256SUMS.txt`).   **Released on Gitee + AtomGit** (tag `v2.2.52`) —
   what changed in this release: **process groups are no longer shredded, images in
   message bodies render, and loaded history is no longer wiped by a refresh** (all three driven by
