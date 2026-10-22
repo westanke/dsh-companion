@@ -950,3 +950,80 @@ GFM 允许这种紧凑写法，**这颗解析器比 GitHub 更严格**。
   在「新增文件」与「格式变更」这两个真实场景下都会静默放行 —— 本仓这两类都真发生过。
 - **写门禁时的语言差异要记牢**：Kotlin/Java 的 `^` 默认不 MULTILINE，JS 的 `/gm` 是。
   这类「解析器自己的 bug」与「文档格式变了」表现相同，所以下限断言的报错文案要能区分二者。
+
+### 内核 schema 是 schemastery，不是 JSON Schema
+
+**现象**：通用设置页能列出 22 个命名空间、能点进去，但**每个字段都是一行灰字**：
+字号那栏孤零零显示「14」，点不动、没有输入框、没有下拉，「保存」永远是灰的。
+看起来像「后端不让写」，实际是**前端一个字段都没认出来**，于是全走了只读兜底。
+
+**根因**：`settingsController.describe()` 的 `schema` 不是 JSON Schema，而是 cordis 的
+**schemastery 引用图**：
+
+```json
+{"uid":12427,"refs":{
+  "12411":{"type":"const","value":"compact"},
+  "12412":{"type":"const","value":"standard"},
+  "12417":{"type":"union","meta":{"loose":true},"list":[12411,12412]},
+  "12427":{"type":"object","dict":{"transcriptView":12417}}
+}}
+```
+
+于是 `schema.properties` 是 `undefined` —— 只认 JSON Schema 的解析器**必然**全字段只读。
+枚举在 schemastery 里是 `union` 指向若干 `const`，不是 `enum` 数组；数字的边界在
+`meta.min/meta.max`，不是 `minimum/maximum`；密钥位是 `meta.role == "secret"`。
+
+**修法**：`SettingsSchema.propertiesOf()` 先按 JSON Schema 取，取不到再调
+`Schemastery.expand()` 把引用图摊平成 JSON Schema 子集（`type/enum/minimum/maximum/default/x-secret`），
+两者任一命中都能渲染出正确控件。摊不出来时**必须**回退只读，不许猜类型。
+
+**教训**：
+- 「能列出东西」不等于「能操作」。验收时要**真的去改一个值并看到落库**，
+  只看列表渲染成功会把只读页面判成通过。
+- 桥把内核对象**原样透传**时，等于把内核的私有格式变成了 wire 契约。
+  要么在桥上归一化，要么消费端做兼容层 —— 两边都不做，就是这次的「看起来有、其实没有」。
+
+### 设置页照抄 WebUI 命名空间：一排拨不动的开关
+
+**现象**：通用设置页把内核的 22 个命名空间全列出来，其中 `ui-theme`、`ui-chat` 这些
+点进去改完保存也「成功」了 —— 但**手机 App 的界面一点没变**（聊天正文是 Compose 自绘，
+字体的缩放走 App 自己的字号设置）。用户的原话是「对无法设置的内核没必要显示；
+不能在 App 上起到作用的都没必要显示」。
+
+**根因**：内核的设置命名空间是**按消费者**划分的。`ui-*` 那批的消费者是浏览器端 WebUI
+（`@deepseek-ai/dsh-client-ui-*`），原生 App 一个字都不读。把它们照抄进 App 的设置页，
+等于给用户一排「拨了没反应」的开关 —— 比不给更糟，因为用户会先怀疑 App 坏了。
+
+**修法**：`SettingsNamespaces.kt` 的 `List<SettingsNamespace>.forNativeApp()` 两道过滤：
+1. 命中 `WEBUI_ONLY_NAMESPACES`（`ui-theme` / `ui-chat` / `ui-conversation` /
+   `ui-settings` / `ui-settings-general`）的整段隐藏；
+2. `hasEditableField()` 为假的隐藏（全是只读：对象、数组、摊平失败退化的行）——
+   「看得到、改不了」的页面同样没有存在价值。
+入口的计数、列表、详情查找三处**都走同一份过滤结果**，否则会出现「计数 22、
+列表 17、点进去 404」的错位。
+
+**教训**：
+- 设置项的价值判据不是「服务端有」，而是「**改了会在这台设备上产生可见效果**」。
+  搬渠道时照抄列表最容易犯这个错（WebUI 的清单天然包含只给 WebUI 用的键）。
+- 过滤规则写成**纯函数**（`forNativeApp()`）而不是散在 Composable 里，
+  才能被 JVM 单测覆盖 —— 否则这类「少显示一行」的 bug 没人会写测试。
+
+### 设置页「能看不能存」：配对默认没有 settings.write
+
+**症状**：设置页能列出命名空间，点进去控件都能拨、保存键也是黑的，点保存后什么都没发生
+（真机 2026-10-22 实测：表单停在脏状态，用户判定「这个 App 改不动」）。
+
+**根因**：桥对 `PATCH /api/v1/settings/namespaces/{ns}` 要求 `settings.write` scope，
+而配对默认给的五档是 `chat.read / chat.write / files.read / files.write / settings.read`
+—— **没有** `settings.write`。所以 curl 直接返回：
+
+```
+403 {"error":{"code":"SCOPE_REQUIRED","message":"The settings.write scope is required."}}
+```
+
+**判据**：`GET /api/v1/devices/self` 的 `scopes` 里有没有 `settings.write`。
+**不许按桥版本号猜** —— 这是授权问题，不是版本问题。
+
+**修法**：入口按 scope 二段门控（`data/SettingsNamespaces.kt` 的 `canWriteSettingsNamespaces()`）：
+没有 `settings.read` 说「需要 settings.read」；有读没写说「需要 settings.write 权限才能在这里修改
+（在电脑端「已配对设备」里勾选）」；两者都有才画表单。

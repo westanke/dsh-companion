@@ -33,6 +33,7 @@
     <string name="message_hint_running_steer">Running… sends as steer</string>
     <string name="message_hint_running_queue">Running… sends as queue</string>
     <string name="older_messages">Load earlier messages</string>
+    <string name="older_messages_loading">Loading earlier messages…</string>
     <string name="no_readable_messages">No readable message content</string>
     <string name="context_injection">Context injection</string>
     <string name="tool_call">Tool call</string>
@@ -642,6 +643,7 @@
     <string name="settings_ns_entry_title">Workspace settings (from kernel)</string>
     <string name="settings_ns_entry_count">%1$d settings namespaces</string>
     <string name="settings_ns_permission_required">Needs settings.read permission on this device</string>
+    <string name="settings_ns_write_permission_required">Needs the settings.write permission to edit here (grant it under Paired devices on the computer)</string>
     <string name="settings_ns_sheet_title">Workspace settings</string>
     <string name="settings_ns_sheet_intro">These come from plugins inside the kernel. Changes apply to the web client immediately.</string>
     <string name="settings_ns_loading">Loading…</string>

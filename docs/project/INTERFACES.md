@@ -322,4 +322,7 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `enum class SettingsControl` | `app/src/main/java/io/github/westanke/dshcompanion/data/SettingsNamespaces.kt` | enum |
 | `fun humanizeFieldName` | `app/src/main/java/io/github/westanke/dshcompanion/data/SettingsNamespaces.kt` | function |
 | `fun clampSettingsNumber` | `app/src/main/java/io/github/westanke/dshcompanion/data/SettingsNamespaces.kt` | function |
+| `fun List<SettingsNamespace>.forNativeApp` | `app/src/main/java/io/github/westanke/dshcompanion/data/SettingsNamespaces.kt` | function |
+| `fun SettingsNamespace.hasEditableField` | `app/src/main/java/io/github/westanke/dshcompanion/data/SettingsNamespaces.kt` | function |
+| `fun List<String>.canWriteSettingsNamespaces` | `app/src/main/java/io/github/westanke/dshcompanion/data/SettingsNamespaces.kt` | function |
 <!-- interfaces-check:end -->

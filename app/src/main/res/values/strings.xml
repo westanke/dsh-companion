@@ -33,6 +33,7 @@
     <string name="message_hint_running_steer">运行中… 发送即插话</string>
     <string name="message_hint_running_queue">运行中… 发送即排队</string>
     <string name="older_messages">加载更早消息</string>
+    <string name="older_messages_loading">正在加载更早消息…</string>
     <string name="no_readable_messages">暂无可显示的正文</string>
     <string name="context_injection">上下文注入</string>
     <string name="tool_call">工具调用</string>
@@ -650,6 +651,7 @@
     <string name="settings_ns_entry_title">工作区设置（来自内核）</string>
     <string name="settings_ns_entry_count">%1$d 个设置命名空间</string>
     <string name="settings_ns_permission_required">需要本设备授权 settings.read 才能查看</string>
+    <string name="settings_ns_write_permission_required">需要 settings.write 权限才能在这里修改（在电脑端「已配对设备」里勾选）</string>
     <string name="settings_ns_sheet_title">工作区设置</string>
     <string name="settings_ns_sheet_intro">这些设置来自内核里的各个插件；改完立即对 Web 端生效。</string>
     <string name="settings_ns_loading">正在读取…</string>

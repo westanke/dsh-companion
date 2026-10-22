@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -55,6 +56,8 @@ import io.github.westanke.dshcompanion.data.SettingsNamespace
 import io.github.westanke.dshcompanion.data.SettingsOp
 import io.github.westanke.dshcompanion.data.SettingsSchema
 import io.github.westanke.dshcompanion.data.clampSettingsNumber
+import io.github.westanke.dshcompanion.data.forNativeApp
+import io.github.westanke.dshcompanion.data.canWriteSettingsNamespaces
 import io.github.westanke.dshcompanion.data.humanizeFieldName
 import io.github.westanke.dshcompanion.data.prettySettingsJson
 import kotlinx.serialization.json.JsonElement
@@ -107,18 +110,29 @@ internal fun SettingsNamespacesSection(
         return
     }
 
+    // 能看不能存：配对默认拿到的五档 scope 里没有 settings.write，保存必 403 SCOPE_REQUIRED。
+    // 与其摆一排「点进去改完点保存没反应」的表单，不如明说缺哪个权限（真机实测，2026-10-22）。
+    if (!scopes.canWriteSettingsNamespaces()) {
+        SettingsHeading(stringResource(R.string.settings_ns_heading))
+        NamespacesEntry(
+            subtitle = stringResource(R.string.settings_ns_write_permission_required),
+            enabled = false,
+            onClick = {},
+            modifier = modifier,
+        )
+        return
+    }
+
     // null = 未读取 / 老桥 404 / 读取失败：入口不显示，也不报错。
     if (list == null) return
-    // 文档在、但一个命名空间都没有：没有可改的东西，不占位置。
-    if (list.namespaces.isEmpty() && list.hasDocument) return
+    // 只留「在 App 里真起作用」的命名空间：纯 WebUI 外观键与纯只读页不上屏（判据见 data 层）。
+    val namespaces = remember(list) { list.namespaces.forNativeApp() }
+    // 过滤后一个不剩：没有可改的东西，不占位置。
+    if (namespaces.isEmpty()) return
 
     SettingsHeading(stringResource(R.string.settings_ns_heading))
     NamespacesEntry(
-        subtitle = if (list.namespaces.isEmpty()) {
-            stringResource(R.string.settings_ns_no_document)
-        } else {
-            stringResource(R.string.settings_ns_entry_count, list.namespaces.size)
-        },
+        subtitle = stringResource(R.string.settings_ns_entry_count, namespaces.size),
         enabled = true,
         onClick = { open = true },
         modifier = modifier,
@@ -191,11 +205,14 @@ private fun SettingsNamespacesSheet(
                 .fillMaxHeight(0.92f)
                 .verticalScroll(rememberScrollState())
                 .imePadding()
+                // 三键导航/手势条会盖住最后一行：底部保存键曾落在系统栏下，点击全被系统吃掉。
+                .navigationBarsPadding()
                 .padding(horizontal = 22.dp)
                 .padding(bottom = 30.dp),
             verticalArrangement = Arrangement.spacedBy(13.dp),
         ) {
-            val detail = state.settingsNamespaces?.namespaces?.firstOrNull { it.ns == detailNs }
+            val visible = state.settingsNamespaces?.namespaces?.forNativeApp().orEmpty()
+            val detail = visible.firstOrNull { it.ns == detailNs }
             if (detail != null) {
                 NamespaceDetail(state, viewModel, detail) { detailNs = null }
             } else {
@@ -214,12 +231,13 @@ private fun NamespaceList(state: HarnessState, onPick: (String) -> Unit) {
         style = MaterialTheme.typography.bodySmall,
     )
     val list = state.settingsNamespaces
+    val visible = remember(list) { list?.namespaces?.forNativeApp().orEmpty() }
     when {
         list == null -> Row(verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(Modifier.padding(end = 10.dp), strokeWidth = 2.dp)
             Text(stringResource(R.string.settings_ns_loading), style = MaterialTheme.typography.bodyMedium)
         }
-        list.namespaces.isEmpty() -> Text(
+        visible.isEmpty() -> Text(
             stringResource(if (list.hasDocument) R.string.settings_ns_empty else R.string.settings_ns_no_document),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium,
@@ -232,9 +250,9 @@ private fun NamespaceList(state: HarnessState, onPick: (String) -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            list.namespaces.forEachIndexed { index, namespace ->
+            visible.forEachIndexed { index, namespace ->
                 NamespaceRow(namespace, list.writable, onClick = { onPick(namespace.ns) })
-                if (index != list.namespaces.lastIndex) {
+                if (index != visible.lastIndex) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
             }

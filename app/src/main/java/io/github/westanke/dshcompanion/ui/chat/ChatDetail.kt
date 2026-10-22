@@ -617,9 +617,14 @@ internal fun ChatDetail(
         ) {
             if (state.history?.hasMore == true) {
                 item {
-                    TextButton(onClick = viewModel::loadOlderHistory, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.older_messages))
-                    }
+                    // 视口锚定 + 加载态都在 OlderMessagesButton 里（见该文件顶部长注释）：
+                    // 往前面插入内容会让 LazyColumn 按 index 定位、整体错位，用户以为「没加载出来」。
+                    OlderMessagesButton(
+                        listState = listState,
+                        entryCount = displayEntries.size,
+                        sessionId = selected.id,
+                        onLoad = viewModel::loadOlderHistory,
+                    )
                 }
             }
             if (state.history != null && displayItems.isEmpty()) {
@@ -792,4 +797,3 @@ internal fun ChatDetail(
         }
     }
 }
-

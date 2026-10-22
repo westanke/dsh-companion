@@ -328,6 +328,7 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatPermissionPresetPicker.kt` | file | 创建会话时的权限档位选择器 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatPickers.kt` | file | 通用选择小部件（分组标题、选择行） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatProcessGroup.kt` | file | 过程组折叠与 LazyColumn 稳定 key |
+| `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/OlderMessagesButton.kt` | file | 「加载更早消息」的加载态与视口锚定 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatScrollDiag.kt` | file | 滚动诊断探针与「等内容」拍数 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatScrollFreeze.kt` | file | 滚动期间冻结流式快照 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatSessionFiles.kt` | file | 「本会话的文件」面板 |

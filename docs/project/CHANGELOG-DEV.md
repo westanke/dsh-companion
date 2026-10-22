@@ -3,6 +3,36 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## 未发布 · 「加载更早消息」视口锚定与加载态（2026-10-22）
+
+### 基于什么
+
+真机反馈（用户原话）：「点击 加载更早消息 如果历史消息中有过多的 工具调用，导致历史对话消息
+加载不出来，历史工具调用加载了，但是观看感知差了」。
+
+### 根因
+
+不是没加载，而是**加载完视口跳走**。`LazyColumn` 的滚动位置按 index 记账，往列表**前面**
+插入 N 条之后，同一个 index 现在指向更早的内容 —— 于是整屏被顶走，用户落地在一排折叠的
+过程组（「耗时 … · N 次工具调用」）上，正文在屏幕之外。会话里工具调用越密，错位越明显，
+看起来就像「只加载了工具调用，对话没加载出来」。
+
+### 干了什么
+
+- 新增 `ui/chat/OlderMessagesButton.kt`：点击时记下当前第一条可见项的 index / 像素偏移 /
+  渲染条目数；数据变长后把 index 加回增量再 `scrollToItem` —— 视线原地不动，新增内容出现在
+  上方（Telegram / Twitter 载入更早内容的行为）。没拉到新内容（到底 / 失败）则不动。
+- 同一处补**加载态**：加载期间按钮显示「正在加载更早消息…」并禁用，连点不会重复发请求。
+  用随会话重置的局部标志而不是全局 `state.busy` —— 后者会让文案在别处操作时乱闪。
+- `ChatDetail.kt` 从 837 行回到 799 行（800 行预算内）：把这套 state 抽到上面的新文件，
+  `ArchitectureGuardTest` 的行数预算断言重新变绿。
+
+### 测了什么
+
+- `:app:testDebugUnitTest` 614 例全绿。
+- `docsCheck` 绿（新文件已登记进 STRUCTURE.md 机检锚点）。
+- 真机：在工具调用密集的历史会话上点「加载更早消息」，视口不跳、按钮随内容上移、可继续往上读。
+
 ## 未发布 · 通用设置命名空间：schema 驱动的插件设置表单（2026-10-22）
 
 ### 基于什么
@@ -42,10 +72,40 @@
 
 ### 测了什么
 
-- `scripts/build.sh :app:testDebugUnitTest`：**67 类 / 605 用例 / 0 失败**（新增 17 例）。
-- `scripts/build.sh docsCheck`：目录锚点（+4 行）与接口锚点（+8 行）双向一致。
+- `scripts/build.sh :app:testDebugUnitTest`：**67 类 / 614 用例 / 0 失败**（新增 21 例，
+  其中 3 例专测「只显示在 App 里起作用的命名空间」）。
+- `scripts/build.sh docsCheck`：目录锚点（+4 行）与接口锚点（+10 行）双向一致。
 - `scripts/build.sh`：`assembleDebug` 通过。
 - 真机验收由用户完成；老桥降级路径由 404/403 分支 + 快照内 `runCatching` 共同保证。
+
+### 后续修正：只显示「在 App 里真起作用」的命名空间（同日）
+
+真机第一轮发现两件事，都不是渲染错误而是**取舍错误**：
+
+1. 内核对设置发的 schema 是 cordis 的 **schemastery 引用图**，不是 JSON Schema ——
+   只认 JSON Schema 的解析器把每个字段都退化成只读行（字号那栏孤零零显示「14」，
+   点不动、保存永远灰）。修法：`SettingsSchema.propertiesOf()` 先取 `properties`，
+   取不到再调 `Schemastery.expand()` 摊平引用图（`union`→`enum`、`meta.min/max`→`minimum/maximum`、
+   `meta.role == "secret"` → `x-secret`）；摊不出来**必须**回退只读，不许猜类型。
+2. 用户原话：「对无法设置的内核没必要显示出来，其实如果不能在 APP 上起到作用的都没必要显示。」
+
+4. **真机第二轮：保存键点得动，但存不进去。** 点「保存」后表单停在脏状态、界面无提示；
+   curl 复现是 `403 SCOPE_REQUIRED`——桥要求 `settings.write`，而配对默认那五档
+   （`chat.read/chat.write/files.read/files.write/settings.read`）里**没有**它。
+   修法：入口按 scope 二段门控（`List<String>.canWriteSettingsNamespaces()`）——
+   有读没写就明说「需要 settings.write 权限才能在这里修改（在电脑端『已配对设备』里勾选）」，
+   不再画一排点完没反应的控件。判据只认 `devices/self` 的 `scopes`，不按桥版本号猜。
+   于是新增纯函数 `List<SettingsNamespace>.forNativeApp()`：命中原生 App **不消费**的纯 WebUI
+   外观键（`ui-theme` / `ui-chat` / `ui-conversation` / `ui-settings` / `ui-settings-general`）整段隐藏，
+   另外「没有任何可编辑字段」的命名空间也隐藏（看得到、改不了等于噪音）。
+   入口计数、列表、详情查找三处走同一份过滤结果，避免「计数 22 / 列表 17 / 点进去空」的错位。
+
+### 测了什么（修正）
+
+- `SettingsSchemaTest` 新增 3 例：ui-* 全部过滤而 `llm-*` 保留、纯只读命名空间被过滤、
+  只有密钥位的命名空间**算可改**（密钥可以重新输入覆盖）。共 612 用例 / 0 失败。
+- `docsCheck` 仍绿；`PITFALLS.md` 新增两条坑位（schemastery、照抄 WebUI 命名空间）并登记进 AGENTS §7。
+
 
 ## v2.2.51（versionCode 10076）· 配色主题四套 + 平板零风险项 + bridge 2.5.1 安全模型同步（2026-10-21）
 

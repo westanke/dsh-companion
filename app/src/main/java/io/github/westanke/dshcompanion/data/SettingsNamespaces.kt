@@ -6,8 +6,13 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.put
 
 /*
  * ============================================================================
@@ -120,13 +125,29 @@ object SettingsSchema {
      * 桥的 schema 可能是 `{}`（老内核），但用户至少该看到「这个命名空间里现在有什么」。
      */
     fun fields(namespace: SettingsNamespace): List<SettingsFieldSpec> {
-        val properties = (namespace.schema?.get("properties") as? JsonObject)
-            ?.takeIf { it.isNotEmpty() } ?: return fallbackFields(namespace)
+        val properties = propertiesOf(namespace.schema) ?: return fallbackFields(namespace)
         val values = namespace.value as? JsonObject
         return properties.keys.map { key ->
             field(namespace, key, properties[key] as? JsonObject, values?.get(key))
         }
     }
+
+    /**
+     * 取出这次要渲染的字段 schema。
+     *
+     * 两代格式都得认：
+     * - **JSON Schema**：`{"type":"object","properties":{…}}`；
+     * - **schemastery**：`{"uid":12427,"refs":{"12427":{"type":"object","dict":{…}}}}` ——
+     *   内核 `settingsController.describe()` **实际发的就是后者**，`enum` 不是数组，
+     *   而是一个 `union` 节点指向若干 `const` 节点。
+     *
+     * 只认前者的后果是真机上撞到的：所有字段退化成只读行，字号那栏孤零零显示「14」，
+     * 点不动、改不了、保存键永远灰。所以这里先按 JSON Schema 取，取不到再现场把
+     * schemastery 的引用图摊平成 JSON Schema 子集。
+     */
+    private fun propertiesOf(schema: JsonObject?): JsonObject? =
+        (schema?.get("properties") as? JsonObject)?.takeIf { it.isNotEmpty() }
+            ?: Schemastery.expand(schema)
 
     /** 没有 schema 时按 `value` 的键兜底，全部只读（不猜类型、不提供写入）。 */
     fun fallbackFields(namespace: SettingsNamespace): List<SettingsFieldSpec> {
@@ -156,9 +177,12 @@ object SettingsSchema {
             ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
             .orEmpty()
         val type = schema.string("type")
+        // schemastery 的密钥位长这样：`{"type":"string","meta":{"role":"secret"}}`。
+        // 摊平后落成 `x-secret`，与 `secrets[]` 两条判据任一命中都按密钥处理。
+        val declaredInSchema = schema.boolean("x-secret") == true
         val control = when {
             // 密钥优先：即使 schema 说它是 string，也不能给输入框（那会出现「填了但不落库」或回显风险）。
-            secret != null || masked -> SettingsControl.Secret
+            secret != null || masked || declaredInSchema -> SettingsControl.Secret
             enumValues.isNotEmpty() -> SettingsControl.Enum
             type == "boolean" -> SettingsControl.Boolean
             type == "number" || type == "integer" -> SettingsControl.Number
@@ -177,7 +201,7 @@ object SettingsSchema {
             minimum = schema.number("minimum") ?: schema.number("min"),
             maximum = schema.number("maximum") ?: schema.number("max"),
             integer = type == "integer",
-            declaredSecret = secret != null,
+            declaredSecret = secret != null || declaredInSchema,
             secretSet = secret?.set == true || masked,
         )
     }
@@ -188,6 +212,156 @@ object SettingsSchema {
 
     private fun isMasked(value: JsonElement?): Boolean =
         (value as? JsonPrimitive)?.takeIf { it.isString }?.content == SETTINGS_MASKED_VALUE
+}
+
+/**
+ * 只影响**浏览器端 WebUI** 外观与交互的命名空间。
+ *
+ * 它们的消费者是 `@deepseek-ai/dsh-client-ui-*` 那几个前端包（字号、工作步骤展示方式、
+ * 性能与用量明细、链接打开方式……），而本 App 的聊天界面是 Compose 自绘，
+ * **一个字都不读这些键**。在 App 里给用户看它们，等于给了一排拨了没反应的开关 ——
+ * 比不给更糟（用户会以为 App 坏了）。因此整段隐藏，等哪天真要被 App 消费了再从名单里摘。
+ *
+ * 新增插件自带 `ui-*` 命名空间时，若它确实是原生 App 不消费的纯前端键，加进这个 Set 即可。
+ */
+internal val WEBUI_ONLY_NAMESPACES: Set<String> = setOf(
+    "ui-theme",
+    "ui-chat",
+    "ui-conversation",
+    "ui-settings",
+    "ui-settings-general",
+)
+
+/**
+ * 这个命名空间有没有**用户能改**的字段。
+ *
+ * 全是 `ReadOnly`（对象、数组、以及摊平失败退化的行）时不算 —— 那种页面只有一行灰字，
+ * 保存键永远点不亮，属于「看得到、改不了、也没必要看」。
+ * `Secret` 算可改：密钥位允许重新输入覆盖。
+ */
+fun SettingsNamespace.hasEditableField(): Boolean =
+    SettingsSchema.fields(this).any { it.control != SettingsControl.ReadOnly }
+
+/**
+ * 过滤出**在 App 里真起作用**的命名空间。
+ *
+ * 三条判据（用户原话：「对无法设置的内核没必要显示；不能在 App 上起到作用的都没必要显示」）：
+ * 1. 不是 [WEBUI_ONLY_NAMESPACES] 里那批纯 WebUI 键；
+ * 2. 至少有一个可编辑字段（见 [hasEditableField]）；
+ * 3. **服务端说它可写**（`writable`）—— 桥的写策略默认只放行 `ui-*` 与 `locale` 一类，
+ *    剩下 13 个内核命名空间是 `writable: false`：页面能打开、控件全是灰的、保存键永远点不亮。
+ *    这种「只读展览」正是用户点名不要的，所以在入口处就筛掉，而不是让用户点进去才知道。
+ *
+ * 纯函数，JVM 单测可喂样本，不依赖 Android。
+ */
+fun List<SettingsNamespace>.forNativeApp(): List<SettingsNamespace> =
+    filter { it.ns !in WEBUI_ONLY_NAMESPACES && it.writable && it.hasEditableField() }
+
+/**
+ * 这个设备令牌能不能**存**设置。
+ *
+ * 桥对 `PATCH /settings/namespaces/{ns}` 要求 `settings.write`；配对默认那五档
+ * （chat.read/chat.write/files.read/files.write/settings.read）里**没有**它，所以
+ * 「能看不能存」是配对的默认状态，不是故障 —— 真机实测：点保存后 403 `SCOPE_REQUIRED`，
+ * 表单还停在脏状态，用户只会觉得「这个 App 改不动」。
+ *
+ * 判据只能来自设备自己的 `scopes`（`GET devices/self`），不能按桥版本号猜。
+ */
+fun List<String>.canWriteSettingsNamespaces(): Boolean = "settings.write" in this
+
+/**
+ * `schemastery`（cordis 的设置 schema 格式）→ JSON Schema 子集的摊平器。
+ *
+ * 形状是一张**引用图**：`{uid: 12427, refs: {"12427": {type:"object", dict:{key: <refId>}}}}`，
+ * `union` 节点的 `list` 里放的是 `const` 节点的 id —— 这正是「下拉框的选项」。
+ *
+ * 成败判据：**摊不出来就返回 null**，让上层走只读兜底；绝不猜类型造出半吊子控件
+ * （把密钥猜成输入框、把对象猜成字符串，都是比只读更坏的结果）。
+ */
+private object Schemastery {
+
+    /** 只展开三层：本项目只渲染顶层字段，嵌套再深也只是给人看个结构。 */
+    private const val MAX_DEPTH = 3
+
+    fun expand(schema: JsonObject?): JsonObject? {
+        val refs = schema?.get("refs") as? JsonObject ?: return null
+        val uid = (schema["uid"] as? JsonPrimitive)?.contentOrNull ?: return null
+        val dict = (refs[uid] as? JsonObject)?.get("dict") as? JsonObject ?: return null
+        if (dict.isEmpty()) return null
+        return buildJsonObject {
+            dict.forEach { (key, ref) -> resolve(refs, ref, 0)?.let { put(key, it) } }
+        }.takeIf { it.isNotEmpty() }
+    }
+
+    private fun resolve(refs: JsonObject, ref: JsonElement?, depth: Int): JsonObject? {
+        if (ref == null || depth > MAX_DEPTH) return null
+        val id = (ref as? JsonPrimitive)?.contentOrNull ?: return null
+        val node = refs[id] as? JsonObject ?: return null
+        val meta = node["meta"] as? JsonObject
+        val description = meta.string("description")
+        return when (node.string("type")) {
+            "object", "dict" -> {
+                val dict = node["dict"] as? JsonObject ?: return null
+                buildJsonObject {
+                    put("type", JsonPrimitive("object"))
+                    put("properties", buildJsonObject {
+                        dict.forEach { (key, child) -> resolve(refs, child, depth + 1)?.let { put(key, it) } }
+                    })
+                    description?.let { put("description", JsonPrimitive(it)) }
+                }
+            }
+            // 全是 const 的 union = 枚举；混了别的类型就摊不成下拉框，交给上层只读。
+            "union" -> {
+                val options = (node["list"] as? JsonArray)
+                    ?.mapNotNull { constValue(refs, it) }
+                    ?: return null
+                if (options.isEmpty()) return null
+                buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("enum", buildJsonArray { options.forEach { add(JsonPrimitive(it)) } })
+                    put("default", JsonPrimitive(meta.string("default") ?: options.first()))
+                    description?.let { put("description", JsonPrimitive(it)) }
+                }
+            }
+            "const" -> (node["value"] as? JsonPrimitive)?.contentOrNull?.let { value ->
+                buildJsonObject {
+                    put("type", JsonPrimitive("string"))
+                    put("enum", buildJsonArray { add(JsonPrimitive(value)) })
+                }
+            }
+            "number", "integer" -> buildJsonObject {
+                put("type", JsonPrimitive(if (node.string("type") == "integer") "integer" else "number"))
+                meta.number("min")?.let { put("minimum", JsonPrimitive(it)) }
+                meta.number("max")?.let { put("maximum", JsonPrimitive(it)) }
+                meta.number("default")?.let { put("default", JsonPrimitive(it)) }
+                description?.let { put("description", JsonPrimitive(it)) }
+            }
+            "boolean" -> buildJsonObject {
+                put("type", JsonPrimitive("boolean"))
+                meta.boolean("default")?.let { put("default", JsonPrimitive(it)) }
+                description?.let { put("description", JsonPrimitive(it)) }
+            }
+            "string" -> buildJsonObject {
+                put("type", JsonPrimitive("string"))
+                if (meta.string("role") == "secret") put("x-secret", JsonPrimitive(true))
+                meta.string("default")?.let { put("default", JsonPrimitive(it)) }
+                description?.let { put("description", JsonPrimitive(it)) }
+            }
+            "array" -> buildJsonObject {
+                put("type", JsonPrimitive("array"))
+                description?.let { put("description", JsonPrimitive(it)) }
+            }
+            // any / 未知类型：不给控件，让上层按只读展示原值。
+            else -> null
+        }
+    }
+
+    private fun constValue(refs: JsonObject, ref: JsonElement?): String? {
+        val id = (ref as? JsonPrimitive)?.contentOrNull ?: return null
+        val node = refs[id] as? JsonObject ?: return null
+        if (node.string("type") != "const") return null
+        return (node["value"] as? JsonPrimitive)?.contentOrNull
+    }
 }
 
 /** 数字输入/步进的夹取；min > max 这种脏 schema 原样返回，不抛异常。 */
@@ -222,3 +396,6 @@ private fun JsonObject?.string(key: String): String? =
 
 private fun JsonObject?.number(key: String): Double? =
     (this?.get(key) as? JsonPrimitive)?.doubleOrNull
+
+private fun JsonObject?.boolean(key: String): Boolean? =
+    (this?.get(key) as? JsonPrimitive)?.booleanOrNull
