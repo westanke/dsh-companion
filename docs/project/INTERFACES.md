@@ -104,6 +104,8 @@ class DshClient(
 | GET | `settings/models` | — | 模型目录（插件页面用） |
 | GET | `settings/plugins` | `pluginInventory()` / `pluginInventoryWithUpdates()` | 插件清单 |
 | PATCH | `settings/plugins` | `setPluginLoaded(name, loaded)` | 插件启停 |
+| GET | `settings/namespaces` | `settingsNamespaces()` | 按插件划分的设置命名空间（含 schema；**老桥 404 按不可用降级**） |
+| PATCH | `settings/namespaces/{ns}` | `updateSettingsNamespace(ns, ops, expectedRevision)` | 按路径改设置（revision → 409 冲突） |
 
 > 路径的机器真值在 bridge 仓的 `docs/api/openapi.yaml`。**改路径先改 bridge**，本表随后跟上。
 
@@ -312,4 +314,12 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `object ActiveChatBridge` | `app/src/main/java/io/github/westanke/dshcompanion/web/ActiveChatBridge.kt` | object |
 | `object DiagLog` | `app/src/main/java/io/github/westanke/dshcompanion/debug/DiagLog.kt` | object |
 | `fun DiagProbe` | `app/src/main/java/io/github/westanke/dshcompanion/debug/DiagProbe.kt` | function |
+| `fun settingsNamespaces` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClient.kt` | function |
+| `fun updateSettingsNamespace` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClient.kt` | function |
+| `data class SettingsNamespaceList` | `app/src/main/java/io/github/westanke/dshcompanion/data/SettingsNamespaces.kt` | class |
+| `data class SettingsNamespace` | `app/src/main/java/io/github/westanke/dshcompanion/data/SettingsNamespaces.kt` | class |
+| `object SettingsSchema` | `app/src/main/java/io/github/westanke/dshcompanion/data/SettingsNamespaces.kt` | object |
+| `enum class SettingsControl` | `app/src/main/java/io/github/westanke/dshcompanion/data/SettingsNamespaces.kt` | enum |
+| `fun humanizeFieldName` | `app/src/main/java/io/github/westanke/dshcompanion/data/SettingsNamespaces.kt` | function |
+| `fun clampSettingsNumber` | `app/src/main/java/io/github/westanke/dshcompanion/data/SettingsNamespaces.kt` | function |
 <!-- interfaces-check:end -->

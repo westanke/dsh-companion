@@ -273,6 +273,36 @@ fun permissionPresets(): PermissionCatalog = get("chat/permission-presets", Perm
         get("settings/plugins?checkUpdates=1", PluginInventory.serializer())
 
     /**
+     * 拉「按插件划分的设置命名空间」（每项含 schema 与当前值）。
+     *
+     * 响应用 `JsonElement` 承接 schema/value，见 `data/SettingsNamespaces.kt` 顶部：
+     * 命名空间是动态的，强类型化就等于把插件名单焊死在 App 里。
+     *
+     * **桥与 App 分批发版**：老桥没有这条路由时回 404，属于正常降级而不是故障，
+     * 调用方（`HarnessNamespacesViewModel.refreshSettingsNamespaces`）自己拦下 404/403，
+     * 让入口消失/置灰即可 —— 详情见那里的注释。
+     */
+    fun settingsNamespaces(): SettingsNamespaceList =
+        get("settings/namespaces", SettingsNamespaceList.serializer())
+
+    /**
+     * 按路径改一个命名空间；[expectedRevision] 是乐观并发闸门（桥发现文档被别处改过回 409）。
+     *
+     * 命名空间名走 [pathUrl] 而不是拼字符串：`addPathSegment` 会做 URL 编码，
+     * 名字里带点、斜杠、空格都不会把路径拆坏。
+     */
+    fun updateSettingsNamespace(
+        ns: String,
+        ops: List<SettingsOp>,
+        expectedRevision: Int? = null,
+    ): SettingsNamespace = patch(
+        pathUrl("settings", "namespaces", ns),
+        SettingsNamespaceUpdate(ops, expectedRevision),
+        SettingsNamespaceUpdate.serializer(),
+        SettingsNamespace.serializer(),
+    )
+
+    /**
      * 启用 / 停用一个插件。
      *
      * 服务端只改写 profile 的 `dsh.profile.bundles`（加载清单），**不碰依赖、不装包**，

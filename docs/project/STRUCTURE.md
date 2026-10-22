@@ -115,6 +115,7 @@ dsh-companion/
 | `HarnessAttachmentsViewModel.kt` | 附件域：待发附件与历史图片按需取回 |
 | `HarnessJobsViewModel.kt` | 后台任务面板的动作集 |
 | `HarnessPluginsViewModel.kt` | 设置域：插件清单/启停、提供商增改查与模型发现 |
+| `HarnessNamespacesViewModel.kt` | 通用设置命名空间：加载与按路径提交（老桥 404/403 静默降级） |
 | `HarnessDiagViewModel.kt` | 把偏好开关同步给 `DiagLog` |
 | `HarnessTruncationViewModel.kt` | 一轮边界事件：落「回答被截断」提示或清上一轮的 |
 
@@ -239,6 +240,7 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessModels.kt` | file | UI 状态（HarnessState）与跨层数据载体 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessOperations.kt` | file | 拿活跃连接跑请求；无连接时给明确提示而不是静默返回 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessPluginsViewModel.kt` | file | 设置域：插件清单/启停与模型提供商增改查 |
+| `app/src/main/java/io/github/westanke/dshcompanion/HarnessNamespacesViewModel.kt` | file | 通用设置命名空间：加载、按路径提交与 404/403 降级 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessSessionsViewModel.kt` | file | 会话域：会话增删改查、工作区、发消息、会话文件与模型选择 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessTruncationViewModel.kt` | file | 一轮边界事件：落「回答被截断」提示或清掉上一轮的 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessViewModel.kt` | file | 唯一 ViewModel：持有 HarnessState 与跨域共用基础设施 |
@@ -268,6 +270,7 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ConnectionModels.kt` | file | 连接层数据模型（地基契约） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ConnectionShare.kt` | file | 配置导入编解码：连接信息 ↔ 可粘贴短文本 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClient.kt` | file | 唯一网络边界：bridge REST 强类型客户端 + SSE 订阅 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/SettingsNamespaces.kt` | file | 设置命名空间 wire 模型 + schema→控件纯函数映射（不强类型化） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ErrorMessages.kt` | file | 按错误码查的本地化出错文案 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/EventDebouncer.kt` | file | 事件驱动副作用闸门（安静一段时间再干一次） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/GenUiBlocks.kt` | file | 正文切分为普通文字或 dsh-ui 卡片 |
@@ -300,6 +303,7 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/ModelsScreen.kt` | file | 模型与提供商设置页 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/PluginsScreen.kt` | file | 插件清单与启停页 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/SettingsScreen.kt` | file | 设置页（外观/诊断/关于/检查更新） |
+| `app/src/main/java/io/github/westanke/dshcompanion/ui/SettingsNamespacesScreen.kt` | file | 通用设置表单：命名空间列表 → 按 schema 自动渲染的详情 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/UnsavedChangesDialog.kt` | file | 未保存改动的三个出口：留下、丢弃、保存 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/UpdateCheckSection.kt` | file | 检查更新的一次性流程状态与 UI |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatActivityRows.kt` | file | 消息流里的非气泡两行：终局失败与折叠活动行 |

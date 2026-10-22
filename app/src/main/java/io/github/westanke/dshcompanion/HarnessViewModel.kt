@@ -677,6 +677,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
             agentPresets = agentPresets,
             providerSettings = if (canReadSettings) api.providerSettings() else null,
             pluginInventory = if (canReadSettings) api.pluginInventory() else null,
+            settingsNamespaces = if (canReadSettings) loadSettingsNamespaces(api) else null,
             selectedRootId = selectedRoot,
             directory = directory,
             trash = if ("files.read" in device.scopes) api.trash() else emptyList(),

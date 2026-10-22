@@ -32,6 +32,7 @@ import io.github.westanke.dshcompanion.data.PluginInventory
 import io.github.westanke.dshcompanion.data.ProviderModel
 import io.github.westanke.dshcompanion.data.ProviderPatch
 import io.github.westanke.dshcompanion.data.ProviderSettings
+import io.github.westanke.dshcompanion.data.SettingsNamespaceList
 import io.github.westanke.dshcompanion.data.PromptPart
 import io.github.westanke.dshcompanion.data.QuestionAnswer
 import io.github.westanke.dshcompanion.data.ResolvedPath
@@ -251,6 +252,14 @@ data class HarnessState(
     val providerSaved: String? = null,
     /** 插件清单；null 表示尚未读取（未连接、无 settings.read 权限或读取失败）。 */
     val pluginInventory: PluginInventory? = null,
+    /**
+     * 按插件划分的设置命名空间（通用设置表单的数据源）。
+     *
+     * null 的三种含义：尚未读取 / 没有 `settings.read` / 桥还是老版本（404）。
+     * 界面据此决定「入口不显示」，而不是弹错误 —— 桥与 App 分批发版时这是常态，
+     * 老桥没有这条路由不代表出故障。
+     */
+    val settingsNamespaces: SettingsNamespaceList? = null,
     val discoveredModels: List<ProviderModel> = emptyList(),
     val selectedSessionId: String? = null,
     val history: ChatHistory? = null,

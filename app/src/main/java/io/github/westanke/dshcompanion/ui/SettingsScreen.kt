@@ -346,6 +346,12 @@ fun SettingsScreen(state: HarnessState, viewModel: HarnessViewModel) {
                 style = MaterialTheme.typography.bodySmall,
             )
 
+            // 「工作区设置（来自内核）」：一整页由桥返回的 schema 驱动，本文件对它零了解。
+            // 放在「繁忙时的发送行为」之后，是因为它同属「一次性定下、长期生效」的习惯类设置；
+            // 它自带分节标题，这里不再重复 heading。只有桥给了命名空间才出现（老桥 404 时消失）。
+            SettingsNamespacesSection(state, viewModel)
+            Spacer(Modifier.height(28.dp))
+
             // dsh-ui 诊断开关。放在「关于」正上方，因为它服务的正是「关于版本」那一类问题：
             // 用户报「卡片没出来」时，让他自己打开就能拿到证据，不必等我们出新包。
             // 默认关 —— 诊断行是灰字噪音，不该打扰正常使用。
@@ -490,7 +496,7 @@ fun SettingsScreen(state: HarnessState, viewModel: HarnessViewModel) {
 }
 
 @Composable
-private fun SettingsHeading(title: String, modifier: Modifier = Modifier) {
+internal fun SettingsHeading(title: String, modifier: Modifier = Modifier) {
     Text(
         title,
         modifier = modifier.fillMaxWidth().padding(bottom = 8.dp),

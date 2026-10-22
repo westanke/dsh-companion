@@ -43,6 +43,12 @@ fun localizedErrorRes(code: String?): Int? = when (normalizeErrorCode(code)) {
     // 设置文档在卡片打开期间被别处改动（expectedRevision 不匹配）：
     // 官方 Web 同场景的文案是「请关闭后重新打开，在当前值上编辑」。
     "SETTINGS_CONFLICT" -> R.string.err_settings_conflict
+    // 通用命名空间通道（`settings/namespaces`）的三个码：只读、操作不合法、服务不可用。
+    // 桥与 App 分批发版，这三个码可能先于 App 出现，也可能永远不出现（老桥），
+    // 但用户真碰到时必须看到人话而不是英文原文。
+    "SETTINGS_NAMESPACE_READONLY" -> R.string.err_settings_namespace_readonly
+    "SETTINGS_OPS_INVALID" -> R.string.err_settings_ops_invalid
+    "SETTINGS_UNAVAILABLE" -> R.string.err_settings_unavailable
 
     // ———— 路径 · 文件 ————
     "PATH_OUTSIDE_ROOT", "PATH_OUTSIDE_ROOTS" -> R.string.err_path_outside_root

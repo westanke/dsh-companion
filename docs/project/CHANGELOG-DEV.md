@@ -3,6 +3,50 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## 未发布 · 通用设置命名空间：schema 驱动的插件设置表单（2026-10-22）
+
+### 基于什么
+
+用户要求：App「设置」里要能改**各插件自己的设置**（ui-chat 的工作步骤展示、ui-theme 的字号等），
+且**不得为某个插件硬编码页面** —— 新装插件不改 App 代码。对端契约由 `dsh-remote-bridge` 并行实现：
+`GET settings/namespaces` 返回「命名空间 + JSON Schema + 当前值 + 用户覆盖 + 可写位」，
+`PATCH settings/namespaces/{ns}` 按 `{"op":"set","path":[…],"value":…}` + `expectedRevision` 局部写入。
+桥与 App **分批发版**，所以老桥（无此路由）与新 App 的共存是必须处理的第一类场景。
+
+### 干了什么
+
+- **数据层（新增）** `data/SettingsNamespaces.kt`：`SettingsNamespaceList` / `SettingsNamespace`
+  （`schema`/`value`/`user` 用 `JsonObject`/`JsonElement` 承接，**不强类型化**，命名空间是动态的）、
+  `SettingsSecret`（`secrets[].path` 是密钥位的权威信号）、`SettingsOp` / `SettingsNamespaceUpdate`。
+  纯函数 `SettingsSchema.fields()` 把 schema 映射成控件描述（`SettingsControl`：Enum / Boolean / Number /
+  Text / Secret / ReadOnly）：`enum` → 枚举选择、`boolean` → 开关、`number|integer` → 数字输入（min/max 夹取）、
+  其余（object/array/无 type）→ **只读折叠 JSON**，避免半吊子写入；`properties` 缺失时用 `value` 的键兜底成只读行。
+  另有 `humanizeFieldName()`（`transcriptView` → `Transcript view`）与 `clampSettingsNumber()`。
+- **网络层** `data/DshClient.kt`：`settingsNamespaces()` 与 `updateSettingsNamespace(ns, ops, expectedRevision)`
+  （PATCH，路径段经 `pathUrl` 编码），沿用既有 `get`/`patch` 辅助。
+- **错误文案** `data/ErrorMessages.kt` 新增 `SETTINGS_NAMESPACE_READONLY` / `SETTINGS_OPS_INVALID` /
+  `SETTINGS_UNAVAILABLE` 三条映射（`SETTINGS_CONFLICT` 已有，改为**就地重拉 + 提示已刷新**）。
+- **状态与 VM**：`HarnessState.settingsNamespaces`；新增 `HarnessNamespacesViewModel.kt`
+  （加载 404/403 静默、写入按 code 分支、冲突重拉）。快照加载里单独 `runCatching`，
+  **新端点失败不拖垮整条快照**（这是老桥共存的关键）。
+- **UI（新增）** `ui/SettingsNamespacesScreen.kt`：设置页「工作区设置（来自内核）」入口 → bottom sheet
+  列表 → 命名空间详情表单。`writable=false` 的命名空间可看不可编辑并显示原因；
+  密钥位（声明在 `secrets` 或值为 `***`）只读显示「已设置/未设置」、**永不提交**；
+  标题优先 schema `title`，其次已知项文案表，最后字段名人类化。
+- **设置页接入** `ui/SettingsScreen.kt`：入口只在拿到非空命名空间时出现，放在「繁忙时的发送行为」之后、
+  Web 对话之前；无 `settings.read` 时置灰并说明。
+- **字符串**：中英各 50 条 `settings_ns_*` / `err_settings_*`，Compose 里零硬编码中文。
+- **测试**：`SettingsSchemaTest`（17 例）覆盖 enum / boolean / number / string / 缺 schema 退化 /
+  密钥位 / 保序 / 夹取 / 人类化。`ArchitectureGuardTest` 的 800 行预算触发后，
+  把 `loadSettingsNamespaces` 从 `HarnessViewModel.kt` 迁到新 VM 文件（814 → 791 行）。
+
+### 测了什么
+
+- `scripts/build.sh :app:testDebugUnitTest`：**67 类 / 605 用例 / 0 失败**（新增 17 例）。
+- `scripts/build.sh docsCheck`：目录锚点（+4 行）与接口锚点（+8 行）双向一致。
+- `scripts/build.sh`：`assembleDebug` 通过。
+- 真机验收由用户完成；老桥降级路径由 404/403 分支 + 快照内 `runCatching` 共同保证。
+
 ## v2.2.51（versionCode 10076）· 配色主题四套 + 平板零风险项 + bridge 2.5.1 安全模型同步（2026-10-21）
 
 ### 基于什么
