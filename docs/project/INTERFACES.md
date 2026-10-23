@@ -44,6 +44,18 @@ class DshClient(
 - `defaultHttpClient` 是共享实例（`internal`）—— 更新检查等后续网络功能**复用它**，不要另起。
 - 未知字段一律 `ignoreUnknownKeys = true`：bridge 加可选字段不会让旧 App 崩。
 
+**出站请求头**（全部在 `DshClient.authenticated(builder)` 一处加，WS 建连也走它）：
+
+| 头 | 值 | 为什么 |
+| --- | --- | --- |
+| `Accept` | `application/json` | 固定 |
+| `Authorization` | `Bearer <token>` | 固定 |
+| `X-Dsh-Device` | `android/${Build.MODEL}` | 桥 2.6.1 起据此把配对占位名换成「Android · 机型」。**必须显式上报**：OkHttp 默认 UA 是 `okhttp/x.y.z`，不含平台与机型，桥的 UA 兜底对本 App 完全失效 |
+| `Accept-Language` | `AppCompatDelegate` 的 BCP-47 标签 | 服务端图片交接说明要说用户看得懂的语言 |
+
+> 新增头时想清楚「删了会不会静默退化」—— `X-Dsh-Device` 就是那种删了不报错、
+> 只让设备表悄悄退回占位名的头，所以 `DshClientTest` 里钉了回归。
+
 ---
 
 ## 3. 对外接口（消费 bridge）
@@ -56,7 +68,7 @@ class DshClient(
 | --- | --- | --- | --- |
 | GET | `healthz` | `health()` | 存活探针（**不带鉴权**） |
 | POST | `pairings/exchange` | `pair(code, deviceName)` | 配对码换 token |
-| GET | `devices/self` | `currentDevice()` | 当前设备身份与 scope |
+| GET | `devices/self` | `currentDevice()` | 当前设备身份与 scope（桥 2.6.1 起另有可选的 `platform` / `model` / `nameSource`） |
 | GET | `roots` | `roots()` | 授权根列表（**不含绝对路径**） |
 | GET | `roots/resolve?path=` | `resolvePath(absolutePath)` | 绝对路径 → 授权根 + 相对路径（失败返回 null） |
 | GET | `roots/{rootId}/entries?path=&cursor=` | `entries(rootId, path, cursor)` | 列目录（分页） |

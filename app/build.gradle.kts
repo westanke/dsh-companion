@@ -868,8 +868,23 @@ android {
         //   测了什么：67 类 / 625 用例 / 0 失败（新增 HistoryMergeTest 4 例、ChatDisplayGroupsTest 3 例、
         //     ChatPresentationTest 3 例 + 1 例不可识别图片目标）；docsCheck 双向一致；assembleRelease 成功。
         //   真机验了什么：过程组不再被劈碎、图片位置出现缩略图、加载更早后内容留住（用户 2026-10-22 确认「显示出来了」）。
-        versionCode = 10077
-        versionName = "2.2.52"
+        // v2.2.53（versionCode 10078）：**设备身份上报：让桥知道这是哪台设备**（2026-10-23，配套桥 v2.6.1）。
+        //   基于什么：用户在桥的设备表里看到 8 条一模一样的「Android 设备」，认不出谁是谁。
+        //     根因在桥（配对生成配置文本时硬编码占位名），但桥侧无法从请求里推断机型 ——
+        //     本 App 用 OkHttp，默认 UA 是 `okhttp/x.y.z`，既没有平台也没有型号，
+        //     所以桥的 UA 兜底对本 App 完全失效。必须由客户端显式上报。
+        //   干了什么：①`DshClient.authenticated(builder)` 统一加 `X-Dsh-Device: android/${Build.MODEL}`
+        //     —— HTTP 与 WebSocket 建连走的是同一个 builder，一处加两处生效；
+        //   ②`DeviceView` 增加三个可选字段 `platform` / `model` / `nameSource`，
+        //     桥 v2.6.1 起会回填，老桥不返回时为 null（`ignoreUnknownKeys` + 默认值，不会崩）。
+        //   为什么用结构化头而不是改 User-Agent：UA 是给整个 HTTP 栈看的公共字段，
+        //     拿它塞业务信息会和代理、CDN、日志系统打架；专用头能表达「平台/型号」两段，
+        //     且桥侧有平台白名单，认不出就整条丢弃，不会猜。
+        //   测了什么：68 类 / 627 用例 / 0 失败（新增 2 例：身份头存在性与老桥缺字段兼容）；
+        //     docsCheck 双向一致；lintDebug 0 error；assembleDebug 成功。
+        //   真机验了什么：未验 —— 需要桥 v2.6.1 部署后，设备表里出现「Android · <机型>」。
+        versionCode = 10078
+        versionName = "2.2.53"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。

@@ -375,7 +375,48 @@ class DshClientTest {
         assertEquals("file", resolved?.kind)
     }
 
+    /**
+     * 设备身份必须显式上报：OkHttp 的默认 UA 是 `okhttp/x.y.z`，桥的 UA 兜底
+     * 对它完全失效 —— 不上报这个头，桥永远只能看到配对时的占位名「Mobile device」。
+     * 这是桥 2.6.1 起「先有连接、再有身份」方案的客户端一半，删了不会报错，
+     * 只会让设备表悄悄退回占位名，所以钉一条回归。
+     */
+    @Test
+    fun authenticatedRequestsReportDeviceIdentity() {
+        server.enqueue(MockResponse().setBody(DEVICE_SELF_RESPONSE).setHeader("Content-Type", "application/json"))
+        val client = DshClient(server.url("/").toString(), "device-token")
+
+        val device = client.currentDevice()
+
+        val request = server.takeRequest()
+        assertEquals("/api/v1/devices/self", request.path)
+        assertEquals("android/${android.os.Build.MODEL}", request.getHeader("X-Dsh-Device"))
+        // 新桥返回三字段时要能读到。
+        assertEquals("harmonyos", device.platform)
+        assertEquals("ICL-AL10", device.model)
+        assertEquals("detected", device.nameSource)
+    }
+
+    /** 老桥（< 2.6.1）不返回身份三字段，解析不能炸 —— 全部可空带默认值。 */
+    @Test
+    fun deviceIdentityFieldsAreOptionalForOlderBridges() {
+        server.enqueue(
+            MockResponse()
+                .setBody("""{"id":"device-1","name":"Mobile device","scopes":["files.read"],"rootIds":["root-1"]}""")
+                .setHeader("Content-Type", "application/json"),
+        )
+        val client = DshClient(server.url("/").toString(), "device-token")
+
+        val device = client.currentDevice()
+
+        assertEquals("Mobile device", device.name)
+        assertEquals(null, device.platform)
+        assertEquals(null, device.model)
+        assertEquals(null, device.nameSource)
+    }
+
     private companion object {
+        const val DEVICE_SELF_RESPONSE = """{"id":"device-1","name":"HarmonyOS · ICL-AL10","scopes":["files.read"],"rootIds":["root-1"],"platform":"harmonyos","model":"ICL-AL10","nameSource":"detected"}"""
         const val PAIRING_RESPONSE = """{"token":"secret-token","device":{"id":"device-1","name":"Pixel","scopes":["files.read"],"rootIds":["root-1"]}}"""
         const val ENTRIES_RESPONSE = """{"path":"目录","entries":[{"name":"file name.txt","path":"目录/file name.txt","kind":"file","size":5,"modifiedAt":1,"writable":true}]}"""
         const val WORKSPACES_RESPONSE = """{"items":[{"id":"workspace-1","title":"WebUI Workspace","rootId":"root-1","path":"project","createdAt":"2026-08-14T00:00:00.000Z","updatedAt":"2026-08-14T00:00:00.000Z"}]}"""

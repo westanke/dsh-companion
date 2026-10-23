@@ -1,3 +1,11 @@
+- 日期：2026-10-23
+- **v2.2.53（versionCode 10078，2026-10-23，发）**：**设备身份上报：让桥知道这是哪台设备**。
+  配套桥 v2.6.1。`DshClient.authenticated()` 统一加 `X-Dsh-Device: android/${Build.MODEL}`，
+  HTTP 与 WS 建连同一 builder、一处生效两处；`DeviceView` 加三个可选字段
+  `platform` / `model` / `nameSource`（老桥不返回时为 null）。为什么必须客户端做：
+  OkHttp 默认 UA 是 `okhttp/x.y.z`，没有平台也没有型号，桥的 UA 兜底对本 App 完全失效。
+  门禁 68 类 / 627 用例、docsCheck、lintDebug 0 error、assembleDebug 全绿。
+  **未真机验** —— 需桥 v2.6.1 部署后设备表出现「Android · <机型>」才算闭环。
 - 日期：2026-10-22
 - **v2.2.52（versionCode 10077，2026-10-22，发）**：**过程组不再被劈碎 + 正文图片能看 + 历史不再被刷新抹掉**。
   三条真机反馈连着来，逐条用证据收口：①「加载更早消息后只剩一排『耗时 xxx · N 次工具调用』」——

@@ -290,7 +290,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.52.apk
+DSH伴侣-companion-v2.2.53.apk
 ```
 
 安装要求：
@@ -536,28 +536,28 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.52`（`versionCode` 10077）
+- 当前版本：`v2.2.53`（`versionCode` 10078）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
-- 单元测试：67 个测试类 / 625 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
+- 单元测试：68 个测试类 / 627 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.52.apk`，**3,187,808 字节**，
-  SHA-256 `45bd5dc5cabd3ded79024bfd470b500309f76e4cebeb8f2be30584d64510bf67`（`artifacts/SHA256SUMS.txt` 同步）。
-  **已发 Gitee + AtomGit**（tag `v2.2.52`）——
-  本版改动：**过程组不再被劈碎 + 正文图片能看 + 历史不再被刷新抹掉**（三条真机反馈驱动）。
-  **① 过程组不再被劈碎**：真实会话里 46 条助手消息有 45 条只有 reasoning + tool-call、一个字正文都没有，
-  旧逻辑把它们一律当成「消息」，于是把一条连续的工具流水劈成几十个组头，正文被顶到屏幕外。
-  现在空助手消息折进过程组，一屏只剩一个组头。
-  **② 正文图片能看**：助手正文里的 Markdown 图片（绝对路径 + 图片扩展名）走附件通路，显示缩略图、
-  点开看大图；其余目标（相对路径 / 非图片 / 远程）一律降级成可点链接，不再留一块空白。
-  **③ 历史不再被刷新抹掉**：点「加载更早消息」后，刷新会用最后一页整体替换历史、把刚加载出来的旧页
-  抹掉，屏幕变成一片空白 —— 现在按 seq 合并保留，视口也按 index 锚定，「加载更早」的位置不再跳走。
-  **④ 与 bridge 2.6.0 的关系**：本版配合 bridge 2.6.0「通用设置命名空间面」——
-  设置页只显示**真能在 App 里起作用**的命名空间（服务端说可写 + 非纯 WebUI 外观 + 有可编辑控件），
-  22 个命名空间收敛为 2 个，不再出现「一排点进去只读的展览品」。
+- 当前 APK：`DSH伴侣-companion-v2.2.53.apk`，**3,187,812 字节**，
+  SHA-256 `a30e35950178c34365eb796882bf3f824b322012adb752baf30ca55d413aef39`（`artifacts/SHA256SUMS.txt` 同步）。
+  **已发 Gitee + GitHub**（tag `v2.2.53`）——
+  本版改动：**设备身份上报 —— 让桥知道这是哪台设备**（配套 bridge v2.6.1）。
+  **问题**：桥的设备表里躺着 8 条一模一样的「Android 设备」，谁也认不出谁。根因在桥
+  （配对生成配置文本时硬编码占位名，而那一刻桥并不知道将来谁来用），但**桥侧没法从请求里推断机型** ——
+  本 App 用 OkHttp，默认 `User-Agent` 是 `okhttp/x.y.z`，既没有平台也没有型号。
+  **做法**：`DshClient.authenticated()` 统一加一行 `X-Dsh-Device: android/<机型>`；
+  HTTP 与 WebSocket 建连走同一个 builder，一处加、两处生效。`DeviceView` 同时增加
+  `platform` / `model` / `nameSource` 三个可选字段（老桥不返回时为 null，不会崩）。
+  **效果**：桥 v2.6.1 起会把占位名自动换成「Android · <机型>」；你在 WebUI 里手动改过的名字
+  **永远不会**被自动覆盖。设备名只用于显示与排查，**不参与任何授权判断**。
+  **为什么用专用头而不是改 UA**：UA 是给整个 HTTP 栈看的公共字段，塞业务信息会和代理、CDN、
+  日志系统打架；专用头能干净表达「平台/型号」，且桥侧有平台白名单，认不出就整条丢弃、绝不猜。
 - 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用。证书没变，但 **v2.2.41 起包名变了**，
   `v2.2.40` 及更早仍需先卸载）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)
 - 许可证：[GNU Affero General Public License v3.0](./LICENSE)
-- 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.7**（「加载更早消息」需要 2.3.1+；「插件」页清单与启停需要 2.3.2+ / 2.3.3+；**审批 / 问答卡片需要 2.3.7+**；**断档重同步 / 订阅基线 / 交付物实时卡片需要 2.3.8+**；「回答被截断」提示需 bridge **≥ 2.4.1**；后台任务面板需 bridge **≥ 2.4.3**；模型页目录添加 / 恢复默认模型需 bridge **≥ 2.5.0**）
+- 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.7**（「加载更早消息」需要 2.3.1+；「插件」页清单与启停需要 2.3.2+ / 2.3.3+；**审批 / 问答卡片需要 2.3.7+**；**断档重同步 / 订阅基线 / 交付物实时卡片需要 2.3.8+**；「回答被截断」提示需 bridge **≥ 2.4.1**；后台任务面板需 bridge **≥ 2.4.3**；模型页目录添加 / 恢复默认模型需 bridge **≥ 2.5.0**；**设备名显示为「平台 · 机型」需 bridge ≥ 2.6.1**（低于此版本时 App 照样能用，只是设备表里仍是占位名））
   （旧名 [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace)）

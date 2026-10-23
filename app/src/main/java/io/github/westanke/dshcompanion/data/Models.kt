@@ -16,6 +16,13 @@ data class DeviceView(
     val name: String,
     val scopes: List<String>,
     val rootIds: List<String>,
+    // 桥 2.6.1 起回传的设备身份三字段。老桥不返回，所以全部可空带默认值。
+    // platform/model 是**客户端自称**的，桥只用于显示与排查，不参与任何授权判断；
+    // nameSource 说明当前名字是配对占位（default）、自动识别（detected）
+    // 还是用户手改（declared，永不再被自动覆盖）。
+    val platform: String? = null,
+    val model: String? = null,
+    val nameSource: String? = null,
 )
 
 @Serializable

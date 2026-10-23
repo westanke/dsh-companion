@@ -3,6 +3,43 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## v2.2.53 · 设备身份上报：让桥知道这是哪台设备（2026-10-23）
+
+### 基于什么
+
+用户在桥的设备表里看到 8 条一模一样的「Android 设备」，认不出哪台是哪台。根因在桥
+（`buildConfigText` 生成配对配置文本时硬编码占位名，而配对那一刻桥并不知道将来谁来用），
+但**桥侧无法从请求里推断机型**：本 App 用 OkHttp，默认 `User-Agent` 是 `okhttp/x.y.z`，
+既没有平台也没有型号 —— 桥的 UA 兜底对本 App 完全失效。所以这件事必须客户端配合。
+
+### 干了什么
+
+- `data/DshClient.kt` 的 `authenticated(builder)` 统一加一行
+  `X-Dsh-Device: android/${Build.MODEL}`。HTTP 与 WebSocket 建连走的是同一个 builder
+  （`events()` 里 `authenticated(Request.Builder()…)`），**一处加、两处生效**。
+- `data/Models.kt` 的 `DeviceView` 增加三个可选字段 `platform` / `model` / `nameSource`。
+  桥 v2.6.1 起会在 `devices/self` 与设备列表里回填；老桥不返回时是 `null`，
+  有默认值 + `ignoreUnknownKeys`，不会崩。
+
+### 为什么用结构化头而不是改 User-Agent
+
+UA 是给整个 HTTP 栈看的公共字段，拿它塞业务信息会和代理、CDN、日志系统打架；
+专用头能干净地表达「平台/型号」两段，且桥侧有平台白名单 —— 认不出就整条丢弃，绝不猜。
+
+### 测了什么
+
+- 新增 2 例：`authenticatedRequestsReportDeviceIdentity`（断言头值就是
+  `android/${Build.MODEL}`、且 `/api/v1/devices/self` 能读到三个新字段）与
+  `deviceIdentityFieldsAreOptionalForOlderBridges`（老桥不返回三字段时全为 null 不炸）。
+- 门禁：**68 类 / 627 用例 / 0 失败**、`docsCheck` 双向一致、`lintDebug` 0 error、
+  `assembleDebug` 成功。
+- **未真机验**：要等桥 v2.6.1 部署后，设备表里出现「Android · <机型>」才算闭环。
+
+### 配套
+
+桥侧需求单见 `docs/project/INTERFACES.md` §2「出站请求头」；桥仓的对应改动是
+`2c5893b feat(devices): 设备身份自动识别与改名通道`（v2.6.1 发布）。
+
 ## v2.2.52 · 过程组不再被劈碎 + 正文图片能看 + 历史不再被刷新抹掉（2026-10-22）
 
 ### 基于什么

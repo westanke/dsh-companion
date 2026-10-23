@@ -299,7 +299,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.52.apk
+DSH伴侣-companion-v2.2.53.apk
 ```
 
 Requirements:
@@ -589,31 +589,34 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.52` (`versionCode` 10077)
+- Version: `v2.2.53` (`versionCode` 10078)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
-- Unit tests: 67 test classes / 625 cases at the last run (0 failures). The counts move with the code, so
+- Unit tests: 68 test classes / 627 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.52.apk`, **3,187,808 bytes**, SHA-256
-  `45bd5dc5cabd3ded79024bfd470b500309f76e4cebeb8f2be30584d64510bf67` (kept in sync in
-  `artifacts/SHA256SUMS.txt`).   **Released on Gitee + AtomGit** (tag `v2.2.52`) —
-  what changed in this release: **process groups are no longer shredded, images in
-  message bodies render, and loaded history is no longer wiped by a refresh** (all three driven by
-  on-device reports). **1. Process groups** — in a real session 45 of 46 assistant messages carry only
-  reasoning + tool-call and no prose at all; the old logic counted them as messages, splitting one
-  continuous tool run into dozens of group headers and pushing the prose off screen. Empty assistant
-  messages now fold into the process group. **2. Images** — Markdown images in the body (absolute path
-  with an image extension) go through the attachment path: thumbnail, tap for full size; anything else
-  (relative path, non-image, remote) degrades to a tappable link instead of leaving a blank block.
-  **3. History** — after "load older messages", a refresh used to replace history with the last page
-  only, wiping what had just been loaded and leaving an empty screen; it now merges by seq and anchors
-  the viewport by index. **4. Relation to bridge 2.6.0** — the settings page shows only the namespaces
-  that can actually take effect on this device (server says writable, not a WebUI-only appearance
-  namespace, and has an editable control), shrinking 22 namespaces to 2.
+- Current APK: `DSH伴侣-companion-v2.2.53.apk`, **3,187,812 bytes**, SHA-256
+  `a30e35950178c34365eb796882bf3f824b322012adb752baf30ca55d413aef39` (kept in sync in
+  `artifacts/SHA256SUMS.txt`).   **Released on Gitee + GitHub** (tag `v2.2.53`) —
+  what changed in this release: **device identity reporting — so the bridge knows which device this is**
+  (pairs with bridge v2.6.1). **The problem**: the bridge's device table held eight identical entries all
+  named "Android device", and nobody could tell them apart. The root cause was on the bridge (the pairing
+  config text hard-coded a placeholder name, because at that moment the bridge has no idea who will use
+  the token), but **the bridge cannot infer the model from the request** — this app uses OkHttp, whose
+  default `User-Agent` is `okhttp/x.y.z`, carrying neither platform nor model.
+  **What this does**: `DshClient.authenticated()` adds `X-Dsh-Device: android/<model>`; HTTP and the
+  WebSocket handshake share the same builder, so one line covers both. `DeviceView` gains the optional
+  `platform` / `model` / `nameSource` fields (null on older bridges; nothing crashes).
+  **The effect**: from bridge v2.6.1 on, the placeholder is replaced with "Android · <model>", and a name
+  you edited by hand in the WebUI is **never** overwritten automatically. The device name is used only for
+  display and troubleshooting and **plays no part in authorization**.
+  **Why a dedicated header instead of the User-Agent**: the UA is a public field read by the whole HTTP
+  stack, so business data in it collides with proxies, CDNs, and log pipelines; a dedicated header
+  expresses "platform/model" cleanly, and the bridge applies a platform allow-list — anything it does not
+  recognize is dropped whole rather than guessed at.
 - Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25). The key did not change, but the
   **package name did in v2.2.41**, so `v2.2.40` and earlier still require an uninstall first
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)
 - License: [GNU Affero General Public License v3.0](./LICENSE)
-- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.7** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+; **approval and question cards need 2.3.7+**; gap resync / subscription baseline / live deliverable cards need 2.3.8+; the "response truncated" notice needs bridge **≥ 2.4.1**; the background-jobs panel needs bridge **≥ 2.4.3**; the model page's catalog add and restore-default-models need bridge **≥ 2.5.0**)
+- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.7** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+; **approval and question cards need 2.3.7+**; gap resync / subscription baseline / live deliverable cards need 2.3.8+; the "response truncated" notice needs bridge **≥ 2.4.1**; the background-jobs panel needs bridge **≥ 2.4.3**; the model page's catalog add and restore-default-models need bridge **≥ 2.5.0**; **showing the device name as "platform · model" needs bridge ≥ 2.6.1** (below that the app still works — the device table just keeps the placeholder name))
   (formerly [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace))

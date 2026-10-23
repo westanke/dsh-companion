@@ -9,6 +9,7 @@ import java.util.UUID
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import android.os.Build
 import androidx.appcompat.app.AppCompatDelegate
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
@@ -625,6 +626,12 @@ fun permissionPresets(): PermissionCatalog = get("chat/permission-presets", Perm
         builder
             .header("Accept", "application/json")
             .header("Authorization", "Bearer ${requireNotNull(token)}")
+            // 设备身份随每个请求出海：桥在认证路径上据此把配对时的占位名
+            // 「Mobile device」换成「Android · Pixel 9」。**必须显式上报** ——
+            // OkHttp 的默认 UA 是 `okhttp/x.y.z`，里面既没有平台也没有机型，
+            // 桥的 UA 兜底对本 App 完全失效，不上报就永远只有占位名。
+            // Build.MODEL 可能含空格（`Pixel 9`），HTTP 头允许，桥只做清洗与截断。
+            .header("X-Dsh-Device", "android/${Build.MODEL}")
             // 界面语言随每个请求出海：服务端的图片交接说明要说**用户看得懂**的语言
             // （拿不到就按中文，那是插件原本的口径）。App 的语言由设置页经
             // AppCompatDelegate 管理，这里如实转达，不在客户端另做翻译。

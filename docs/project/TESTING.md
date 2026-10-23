@@ -145,6 +145,16 @@ export ANDROID_HOME=/media/wangke/OFFICE/workspace/android-toolchain/sdk
 apksigner verify --verbose app\build\outputs\apk\release\app-release.apk
 ```
 
+- **2026-10-23 `v2.2.53` 设备身份上报**（配套桥 v2.6.1）：
+  `:app:testDebugUnitTest` **68 类 / 627 用例 / 0 失败**；`docsCheck` 双向一致
+  （10 文档 / 46 任务 / STRUCTURE 136 anchors / INTERFACES 54 anchors）；
+  `lintDebug` **0 error**；`assembleDebug` BUILD SUCCESSFUL。
+  新增 2 例：`authenticatedRequestsReportDeviceIdentity`（断言 `X-Dsh-Device` 头存在且值形如
+  `android/<机型>`，并验证 `/api/v1/devices/self` 的三个新字段能读到）、
+  `deviceIdentityFieldsAreOptionalForOlderBridges`（老桥不返回 `platform`/`model`/`nameSource`
+  时三者均为 null、不抛异常）。
+  - **未真机验**：需桥 v2.6.1 部署后，设备表里出现「Android · <机型>」才算闭环。
+
 ## 上游 v1.0.0 时期（2026-08-14/15）
 
 - 2026-08-15 README 六图复验：中英文 README 均引用 6 张存在的 JPG；新增图片与用户原始真机截图 SHA-256 一致，截图来源说明已删除。
