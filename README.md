@@ -290,7 +290,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.53.apk
+DSH伴侣-companion-v2.2.54.apk
 ```
 
 安装要求：
@@ -536,25 +536,27 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.53`（`versionCode` 10078）
+- 当前版本：`v2.2.54`（`versionCode` 10079）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：68 个测试类 / 627 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.53.apk`，**3,187,812 字节**，
-  SHA-256 `a30e35950178c34365eb796882bf3f824b322012adb752baf30ca55d413aef39`（`artifacts/SHA256SUMS.txt` 同步）。
-  **已发 Gitee + GitHub**（tag `v2.2.53`）——
-  本版改动：**设备身份上报 —— 让桥知道这是哪台设备**（配套 bridge v2.6.1）。
-  **问题**：桥的设备表里躺着 8 条一模一样的「Android 设备」，谁也认不出谁。根因在桥
-  （配对生成配置文本时硬编码占位名，而那一刻桥并不知道将来谁来用），但**桥侧没法从请求里推断机型** ——
-  本 App 用 OkHttp，默认 `User-Agent` 是 `okhttp/x.y.z`，既没有平台也没有型号。
-  **做法**：`DshClient.authenticated()` 统一加一行 `X-Dsh-Device: android/<机型>`；
-  HTTP 与 WebSocket 建连走同一个 builder，一处加、两处生效。`DeviceView` 同时增加
-  `platform` / `model` / `nameSource` 三个可选字段（老桥不返回时为 null，不会崩）。
-  **效果**：桥 v2.6.1 起会把占位名自动换成「Android · <机型>」；你在 WebUI 里手动改过的名字
-  **永远不会**被自动覆盖。设备名只用于显示与排查，**不参与任何授权判断**。
-  **为什么用专用头而不是改 UA**：UA 是给整个 HTTP 栈看的公共字段，塞业务信息会和代理、CDN、
-  日志系统打架；专用头能干净表达「平台/型号」，且桥侧有平台白名单，认不出就整条丢弃、绝不猜。
+- 当前 APK：`DSH伴侣-companion-v2.2.54.apk`，**3,187,812 字节**，
+  SHA-256 `5039996759e60de8ac18233d7f010718c70c34ded3cc37da90364ed2d44e8c13`（`artifacts/SHA256SUMS.txt` 同步）。
+  **已发 Gitee + GitHub**（tag `v2.2.54`）——
+  本版改动：**连接页顶栏归位 —— DSH 图标与「语言 / 诊断」按钮落在同一条中线**。
+  **问题**：登录页右上角那两个按钮贴着顶部，单手够不到、看着也不整齐，而且和 DSH 图标
+  根本不在一条线上。根因是两个：① App 全屏绘制（`enableEdgeToEdge()`），但连接页没吃状态栏
+  内边距，顶栏其实画在状态栏正下方；② DSH 图标长在**滚动区**里、前面还垫着 18dp 空白，
+  跟顶栏隔着一层层级差。
+  **做法**：整页加 `statusBarsPadding()`；把 DSH 图标从滚动区提到顶栏行首，与两个按钮
+  `Alignment.CenterVertically` 同轴、`Arrangement.SpaceBetween` 把按钮推到右端；
+  滚动区删掉原来的 18dp 空白与图标，标题上边距 20→24dp。
+  **顺带的好处**：标题区不再被 40dp 图标 + 18dp 空白顶下去，首屏能多露出一张电脑卡片。
+  **为什么图标在左、按钮在右且左边距刻意大 4dp**：`IconButton` 自带 12dp 内边距，
+  按钮侧 8dp + 内距 12dp = 20dp，正好让按钮图标的视觉左缘与下面 24dp 的文字边距对齐。
+  **验证**：真机 V2080A 逐像素核对，DSH 图标方块、诊断图标、语言图标三者**水平中线完全重合**；
+  触控区 144px = 48dp（设计系统下限）；中/英 × 浅/深四组截图无裁切。
 - 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用。证书没变，但 **v2.2.41 起包名变了**，
   `v2.2.40` 及更早仍需先卸载）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)

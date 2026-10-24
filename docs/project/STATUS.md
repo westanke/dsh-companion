@@ -1,3 +1,17 @@
+- 日期：2026-10-24
+- **v2.2.54（versionCode 10079，2026-10-24，发）**：**连接页顶栏归位：DSH 图标与语言/诊断按钮同一条中线**。
+  用户截图反馈「语言 调试两个按钮距离顶部太靠近，操作不便，美观没有，挪到与 DSH 图标一条线」，
+  拆成两个根因：①「太靠近顶部」是 `enableEdgeToEdge()` 全屏绘制而整页无状态栏 inset ——
+  顶栏实际画在状态栏正下方；②「不在一条线」是 `BrandMark()` 长在滚动区里、前面垫着
+  `Spacer(18.dp)`，与顶栏隔一层层级差。改法：根容器加 `statusBarsPadding()`；`BrandMark()`
+  提到顶栏行首，与两个 `IconButton` 走 `Alignment.CenterVertically` 同轴，
+  `Arrangement.SpaceBetween` 把按钮推右；滚动区删 `Spacer` + 图标，标题 `top` 20→24dp。
+  图标侧 20dp / 按钮侧 8dp **刻意不等**（IconButton 自带 12dp 内边距，8+12=20 才让图标视觉
+  左缘与 24dp 文字边距同一竖线）。门禁：docsCheck 双向一致（136 锚点 / 117 源文件）、
+  lintDebug 0 error、assembleDebug 成功；单测数量不变（68 类 / 627 用例，纯布局无逻辑改动）。
+  **真机已验**（V2080A 1080×2400）：brand 方块、诊断图标、语言图标**水平中线完全重合于
+  y=179.5**；触控区 144px = 48dp；中/英 × 浅/深四组截图无裁切。
+  遗留：诊断浮层打开时压住 BrandMark 左下角（按 PITFALLS「浮层不调死坐标」不改，浮层可拖动）。
 - 日期：2026-10-23
 - **v2.2.53（versionCode 10078，2026-10-23，发）**：**设备身份上报：让桥知道这是哪台设备**。
   配套桥 v2.6.1。`DshClient.authenticated()` 统一加 `X-Dsh-Device: android/${Build.MODEL}`，

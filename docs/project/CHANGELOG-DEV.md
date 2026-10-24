@@ -3,6 +3,68 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## v2.2.54 · 连接页顶栏归位：DSH 图标与语言/诊断按钮同一条中线（2026-10-24）
+
+### 基于什么
+
+用户截图反馈（原话）：「语言 调试两个按钮距离顶部太靠近，操作不便，美观没有，
+挪到与 DSH 图标一条线。」—— 这是两个独立毛病，不是一句「间距调大点」能一起治的，
+所以先把根因分开找。
+
+### 根因
+
+1. **太靠近顶部**：`MainActivity` 调了 `enableEdgeToEdge()`（全屏绘制），
+   但连接页整页**没有任何状态栏 inset 处理** —— 顶栏那一行（`vertical = 4.dp`）
+   实际画在状态栏正下方，两个 48dp 触控区上缘几乎贴着系统图标。单手拇指够不到，
+   也谈不上留白。（全仓此前只有 `debug/DiagProbe.kt` 用过 `statusBarsPadding()`。）
+2. **不在一条线**：`BrandMark()` 长在**滚动区**里，前面还垫着 `Spacer(18.dp)`；
+   顶栏与它之间隔着一层「滚动区起点」的层级差 + 18dp 空白。两者各在各的坐标系里，
+   永远不会同轴。
+
+### 干了什么
+
+- `ui/ConnectScreen.kt` 根容器：`Column(Modifier.fillMaxSize().imePadding())`
+  → `Column(Modifier.fillMaxSize().statusBarsPadding().imePadding())`。
+- 顶栏 `Row`：`padding(horizontal = 8.dp, vertical = 4.dp)` + `Arrangement.End`
+  → `padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 4.dp)` +
+  `Arrangement.SpaceBetween` + `verticalAlignment = Alignment.CenterVertically`；
+  行首放 `BrandMark()`，右侧内嵌一个 `Row` 装原来的两个 `IconButton`。
+- 滚动区：删掉 `Spacer(Modifier.height(18.dp))` 与 `BrandMark()`；
+  标题 `R.string.connect_title` 的 `padding(top = 20.dp)` 改为 `24.dp`（补回一点呼吸感）。
+
+### 为什么敢把图标从滚动区拿走
+
+它本来就是**常驻装饰**，不是可滚内容的一部分 —— 滚上去看不见它没有任何信息损失
+（标题与副标题仍在滚动区顶部）。顺带的好处：标题区不再被 40dp 图标 + 18dp 空白顶下去，
+首屏能多露出一张电脑卡片。
+
+### 为什么图标侧 20dp、按钮侧 8dp 刻意不等
+
+`IconButton` 自带 12dp 内边距，8dp 外距 + 12dp 内距 = 20dp，正好让按钮图标的**视觉**左缘
+与滚动区 24dp 文字边距落在同一条竖线上（差 4dp 在 40dp 圆角方块上肉眼看不出）。
+写成两边都 20dp 反而会让按钮图标整体右移 12dp、和文字边线错开。
+
+### 测了什么
+
+- `docsCheck` 双向一致（136 锚点 / 117 源文件全登记、54 条接口锚点）；
+  `:app:lintDebug` **0 error**；`assembleDebug` 成功。
+- 单测数量不变（**68 类 / 627 用例 / 0 失败**）—— 本版纯布局，无逻辑改动，
+  没有新增用例；`androidTest/ConnectScreenTest.kt` 只断言标题文本与语言切换，
+  不依赖图标位置，无需改。
+- **真机验了**（V2080A，1080×2400）：
+  - 逐像素核对（PIL 算包围盒）：brand 方块 120×120px 中心 y=179.5、诊断图标中心 y=179.5、
+    语言图标中心 y=179.5 —— **三者水平中线完全重合**。
+  - `uiautomator dump` 层级确认：brand `bounds=[60,120][180,240]`、诊断按钮
+    `[768,108][912,252]`、语言按钮 `[912,108][1056,252]`（144px = **48dp**，
+    符合设计系统「图标控件至少 48dp 触控区」），滚动区从 y=264 起。
+  - 中/英 × 浅色/深色四组截图均正常，无裁切、无重叠。
+
+### 已知遗留
+
+诊断浮层（`DiagProbe`，固定 TopStart）打开时会压住 BrandMark 左下角。
+按 `PITFALLS.md`「浮层定位不靠死坐标」的既有教训**不改坐标** —— 浮层本来就可拖动，
+而且它在各页同一位置放着不同控件，改一处必撞别处。
+
 ## v2.2.53 · 设备身份上报：让桥知道这是哪台设备（2026-10-23）
 
 ### 基于什么

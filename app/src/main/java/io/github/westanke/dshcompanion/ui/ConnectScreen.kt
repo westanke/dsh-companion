@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -160,27 +161,52 @@ fun ConnectScreen(
     // 结论不是去修命中，而是**把按钮搬出滚动层**：现在是
     // `Column { 顶栏(按钮) ; 滚动内容 }`，按钮与滚动内容上下分家，
     // 各自都拥有独立的命中区，不再有任何交叠。
-    Column(Modifier.fillMaxSize().imePadding()) {
-        // 顶栏：诊断开关 + 语言切换。不放滚动区、不放 Box 覆盖层 ——
-        // 连接页是**每一台**设备的必经入口，而设置页在连接门闩之后，
-        // 连不上服务端时这两个开关是唯一进得去的诊断/语言入口
-        // （真机验证过：右上角摆法反复点不到，见上面 KDoc）。
+    //
+    // ## 顶栏的第二轮调整（用户 2026-10-24 反馈）
+    //
+    // 原话：「语言 调试两个按钮距离顶部太靠近，操作不便，美观没有，挪到与 DSH 图标一条线。」
+    // 拆成两个独立毛病，分别对应下面两处改动：
+    //
+    // 1. **太靠近顶部**是 `enableEdgeToEdge()` 的直接后果：整页没有吃状态栏 inset，
+    //    顶栏那一行（`vertical = 4.dp`）实际画在状态栏正下方，两个 48dp 触控区上缘
+    //    几乎贴着系统图标，单手拇指够不到，也谈不上留白。→ 整页加 `statusBarsPadding()`。
+    // 2. **不在一条线上**是因为 DSH 图标长在滚动区里（`Spacer(18.dp)` + `BrandMark()`），
+    //    跟顶栏隔着一次「滚动区起点」的层级差，中间还夹着 18dp 空白。→ 把 `BrandMark`
+    //    从滚动区提到顶栏行首，与两个按钮 `Alignment.CenterVertically` 同轴。
+    //
+    // 为什么敢把图标从滚动区拿走：它本来就是**常驻装饰**，不是可滚内容的一部分；
+    // 滚上去看不见它没有任何信息损失（标题与副标题仍在滚动区顶部）。
+    // 顺带的好处是标题区不再被 40dp 图标 + 18dp 空白顶下去，首屏能多露出一张电脑卡片。
+    Column(Modifier.fillMaxSize().statusBarsPadding().imePadding()) {
+        // 顶栏：DSH 图标 + 诊断开关 + 语言切换，三者**同一条水平中线**。
+        // 不放滚动区、不放 Box 覆盖层 —— 连接页是**每一台**设备的必经入口，
+        // 而设置页在连接门闩之后，连不上服务端时这两个开关是唯一进得去的
+        // 诊断/语言入口（真机验证过：右上角摆法反复点不到，见上面 KDoc）。
+        //
+        // 图标侧 20dp、按钮侧 8dp 是**刻意不等**：IconButton 自带 12dp 内边距，
+        // 8dp 外距 + 12dp 内距正好让图标视觉左缘落在 20dp 的页边距上，
+        // 与下面滚动区的 24dp 文字边距同一条竖线（差 4dp 在 40dp 圆角方块上肉眼看不出）。
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.End,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = { viewModel.setDiagLog(!state.diagLog) }) {
-                Icon(
-                    // 开着的时候换个实心图标，关着用空心 —— 一眼看出状态，
-                    // 不用点进去确认（连接页上诊断浮层可能被键盘或滚动挡住）。
-                    if (state.diagLog) Icons.Outlined.Terminal else Icons.Outlined.BugReport,
-                    stringResource(R.string.diag_log_title),
-                )
+            BrandMark()
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { viewModel.setDiagLog(!state.diagLog) }) {
+                    Icon(
+                        // 开着的时候换个实心图标，关着用空心 —— 一眼看出状态，
+                        // 不用点进去确认（连接页上诊断浮层可能被键盘或滚动挡住）。
+                        if (state.diagLog) Icons.Outlined.Terminal else Icons.Outlined.BugReport,
+                        stringResource(R.string.diag_log_title),
+                    )
+                }
+                IconButton(
+                    onClick = ::toggleLanguage,
+                ) { Icon(Icons.Outlined.Language, stringResource(R.string.language)) }
             }
-            IconButton(
-                onClick = ::toggleLanguage,
-            ) { Icon(Icons.Outlined.Language, stringResource(R.string.language)) }
         }
 
         Column(
@@ -191,11 +217,9 @@ fun ConnectScreen(
                 .padding(horizontal = 24.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.height(18.dp))
-            BrandMark()
             Text(
                 stringResource(R.string.connect_title),
-                modifier = Modifier.padding(top = 20.dp),
+                modifier = Modifier.padding(top = 24.dp),
                 style = MaterialTheme.typography.displaySmall,
             )
             Text(

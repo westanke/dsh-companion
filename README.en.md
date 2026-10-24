@@ -299,7 +299,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.53.apk
+DSH伴侣-companion-v2.2.54.apk
 ```
 
 Requirements:
@@ -589,31 +589,35 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.53` (`versionCode` 10078)
+- Version: `v2.2.54` (`versionCode` 10079)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
 - Unit tests: 68 test classes / 627 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.53.apk`, **3,187,812 bytes**, SHA-256
-  `a30e35950178c34365eb796882bf3f824b322012adb752baf30ca55d413aef39` (kept in sync in
-  `artifacts/SHA256SUMS.txt`).   **Released on Gitee + GitHub** (tag `v2.2.53`) —
-  what changed in this release: **device identity reporting — so the bridge knows which device this is**
-  (pairs with bridge v2.6.1). **The problem**: the bridge's device table held eight identical entries all
-  named "Android device", and nobody could tell them apart. The root cause was on the bridge (the pairing
-  config text hard-coded a placeholder name, because at that moment the bridge has no idea who will use
-  the token), but **the bridge cannot infer the model from the request** — this app uses OkHttp, whose
-  default `User-Agent` is `okhttp/x.y.z`, carrying neither platform nor model.
-  **What this does**: `DshClient.authenticated()` adds `X-Dsh-Device: android/<model>`; HTTP and the
-  WebSocket handshake share the same builder, so one line covers both. `DeviceView` gains the optional
-  `platform` / `model` / `nameSource` fields (null on older bridges; nothing crashes).
-  **The effect**: from bridge v2.6.1 on, the placeholder is replaced with "Android · <model>", and a name
-  you edited by hand in the WebUI is **never** overwritten automatically. The device name is used only for
-  display and troubleshooting and **plays no part in authorization**.
-  **Why a dedicated header instead of the User-Agent**: the UA is a public field read by the whole HTTP
-  stack, so business data in it collides with proxies, CDNs, and log pipelines; a dedicated header
-  expresses "platform/model" cleanly, and the bridge applies a platform allow-list — anything it does not
-  recognize is dropped whole rather than guessed at.
+- Current APK: `DSH伴侣-companion-v2.2.54.apk`, **3,187,812 bytes**, SHA-256
+  `5039996759e60de8ac18233d7f010718c70c34ded3cc37da90364ed2d44e8c13` (kept in sync in
+  `artifacts/SHA256SUMS.txt`).   **Released on Gitee + GitHub** (tag `v2.2.54`) —
+  what changed in this release: **the connect screen's top bar is now properly aligned — the DSH mark
+  and the language / diagnostics buttons share one centre line**.
+  **The problem**: those two buttons in the top-right corner of the login screen sat right against the
+  top edge — out of thumb reach, visually cramped, and not on the same line as the DSH mark at all.
+  Two separate root causes: ① the app draws edge-to-edge (`enableEdgeToEdge()`) but the connect screen
+  applied no status-bar inset, so the bar was actually painted directly under the status bar;
+  ② the DSH mark lived inside the **scrollable** column with an 18dp spacer in front of it, so a layer
+  boundary plus that gap stood between it and the top bar.
+  **What this does**: the whole page gets `statusBarsPadding()`; the DSH mark moves out of the scroll
+  area up into the leading slot of the top bar, sharing `Alignment.CenterVertically` with the two
+  buttons, with `Arrangement.SpaceBetween` pushing the buttons to the right; the scroll area drops the
+  18dp spacer and the mark, and the title's top padding goes 20 → 24dp.
+  **A side benefit**: the title block is no longer pushed down by a 40dp mark plus an 18dp gap, so one
+  more computer card fits on the first screen.
+  **Why the leading inset is deliberately 4dp larger on the icon side**: an `IconButton` carries 12dp of
+  its own padding, so 8dp outer + 12dp inner = 20dp — which puts the *visual* left edge of the button
+  icons on the same vertical line as the 24dp text margin below.
+  **Verified**: pixel-level check on a real V2080A — the DSH mark square, the diagnostics icon, and the
+  language icon share an **exactly identical horizontal centre line**; touch targets measure 144px = 48dp
+  (the design-system minimum); four screenshots (zh/en × light/dark) show no clipping.
 - Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25). The key did not change, but the
   **package name did in v2.2.41**, so `v2.2.40` and earlier still require an uninstall first
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)

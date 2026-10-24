@@ -145,6 +145,17 @@ export ANDROID_HOME=/media/wangke/OFFICE/workspace/android-toolchain/sdk
 apksigner verify --verbose app\build\outputs\apk\release\app-release.apk
 ```
 
+- **2026-10-24 `v2.2.54` 连接页顶栏归位**：纯布局改动，**单测数量不变**（`68 类 / 627 用例 / 0 失败`，
+  没有新增用例 —— 逻辑零改动，且 `androidTest/ConnectScreenTest.kt` 只断言标题文本与语言切换、
+  不依赖图标位置）；`docsCheck` 双向一致（10 文档 / 46 任务 / STRUCTURE 136 anchors /
+  INTERFACES 54 anchors）；`lintDebug` **0 error**；`assembleDebug` BUILD SUCCESSFUL。
+  - **真机验了**（V2080A / Android，1080×2400 截图）：PIL 算包围盒，brand 方块 120×120px、
+    诊断图标、语言图标**水平中线完全重合于 y=179.5**；`uiautomator dump` 层级
+    brand `[60,120][180,240]` / 诊断 `[768,108][912,252]` / 语言 `[912,108][1056,252]`
+    （144px = 48dp 触控区下限），滚动区起点 y=264。中/英 × 浅/深四组截图无裁切。
+  - 遗留：诊断浮层打开时压住 BrandMark 左下角（`DiagProbe` 固定 TopStart，可拖动；
+    按 PITFALLS「浮层不调死坐标」不改）。
+
 - **2026-10-23 `v2.2.53` 设备身份上报**（配套桥 v2.6.1）：
   `:app:testDebugUnitTest` **68 类 / 627 用例 / 0 失败**；`docsCheck` 双向一致
   （10 文档 / 46 任务 / STRUCTURE 136 anchors / INTERFACES 54 anchors）；
