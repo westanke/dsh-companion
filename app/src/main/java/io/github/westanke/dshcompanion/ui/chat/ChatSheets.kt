@@ -207,6 +207,7 @@ import io.github.westanke.dshcompanion.data.SessionFileRefs
 import io.github.westanke.dshcompanion.data.deliverables
 import io.github.westanke.dshcompanion.data.TodoItem
 import io.github.westanke.dshcompanion.data.displayItems
+import io.github.westanke.dshcompanion.data.formatContextWindow
 import io.github.westanke.dshcompanion.data.permissionSelect
 import io.github.westanke.dshcompanion.data.todoItems
 import java.io.InputStream
@@ -381,6 +382,14 @@ internal fun ModelRow(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                model.contextWindow?.let {
+                    Text(
+                        stringResource(R.string.model_context_window, formatContextWindow(it)),
+                        modifier = Modifier.padding(top = 2.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelSmall,
                     )
                 }
             }

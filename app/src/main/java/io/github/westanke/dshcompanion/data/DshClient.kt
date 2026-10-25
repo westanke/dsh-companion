@@ -367,9 +367,10 @@ fun permissionPresets(): PermissionCatalog = get("chat/permission-presets", Perm
         return executeJson(request, ProviderSettings.serializer())
     }
 
-    fun createSession(workspaceId: String, agentPreset: String? = null): CreatedSession = post(
+    // `reuseBlank` 是桥 v2.7.0 的可选字段：省略即不编码，老 bridge 收到的请求体逐字节不变。
+    fun createSession(workspaceId: String, agentPreset: String? = null, reuseBlank: Boolean? = null): CreatedSession = post(
         "chat/sessions",
-        CreateSessionRequest(workspaceId, agentPreset, UUID.randomUUID().toString()),
+        CreateSessionRequest(workspaceId, agentPreset, UUID.randomUUID().toString(), reuseBlank),
         CreateSessionRequest.serializer(),
         CreatedSessionEnvelope.serializer(),
     ).session
@@ -790,6 +791,7 @@ private class ReconnectingEvents(
     val workspaceId: String,
     val agentPreset: String? = null,
     val clientRequestId: String,
+    val reuseBlank: Boolean? = null,
 )
 @Serializable private data class CreatedSessionEnvelope(val session: CreatedSession)
 @Serializable private data class ErrorEnvelope(val error: ApiErrorBody)

@@ -169,7 +169,7 @@ dsh-companion/
 
 | 文件 | 量级 | 改它会影响 |
 | --- | --- | --- |
-| `data/DshClient.kt` | ≈760 行 | **全部网络行为**；改它要同步 INTERFACES 与回归用例 |
+| `data/DshClient.kt` | ≈800 行 | **全部网络行为**；改它要同步 INTERFACES 与回归用例 |
 | `ui/chat/ChatDetail.kt` | ≈790 行 | 会话页骨架与挂载顺序（已贴 800 预算） |
 | `ui/ChatScreen.kt` | ≈360 行 | 窄/宽屏布局选择与会话页容器 |
 | `HarnessViewModel.kt` | ≈770 行 | 全 App 状态与跨域基础设施 |
@@ -278,6 +278,7 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/data/HtmlPreview.kt` | file | 从 HTML 抽结构供 Compose 画原生控件 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/JobViews.kt` | file | 后台任务视图模型（bridge ≥ 2.4.3） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/MentionQuery.kt` | file | 输入框 @ 提及的识别与替换 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/ModelCapacityLabel.kt` | file | 模型上下文窗口的短标签（1024 进制，1M/1.5K） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/Models.kt` | file | bridge 响应/请求的序列化模型合集 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/PreviewKind.kt` | file | 会话文件预览该走哪条显示路径 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/RequestGate.kt` | file | 请求代际闸门：过期结果写不回状态 |

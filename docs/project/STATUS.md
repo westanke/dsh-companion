@@ -1,4 +1,12 @@
-- 日期：2026-10-24
+- 日期：2026-10-25
+- **v2.2.55（versionCode 10080，2026-10-25，发）**：**对齐桥 v2.7.0：模型上下文容量显示 + 空白会话复用**。
+  `ModelRow` 开始渲染 `model.contextWindow`（新增 `data/ModelCapacityLabel.kt`，
+  1024 进制，`1048576 → 1.0M`）；`DshClient.createSession` 加可选 `reuseBlank`，
+  省略即不编码故老桥请求体逐字节不变，新桥则走「复用空白会话」的桌面语义。
+  门禁：docsCheck 双向一致（137 锚点 / 118 源文件）、lintDebug 0 error、
+  **69 类 / 634 用例 / 0 失败**（新增 `ModelCapacityLabelTest` 7 例）。
+  行数全部在 800 以内（`DshClient.kt` 799 / `ChatSheets.kt` 781）。
+  **未真机验、未推送、未发版**；`reuseBlank` 的实际效果需桥 v2.7.0 部署后才闭环。
 - **v2.2.54（versionCode 10079，2026-10-24，发）**：**连接页顶栏归位：DSH 图标与语言/诊断按钮同一条中线**。
   用户截图反馈「语言 调试两个按钮距离顶部太靠近，操作不便，美观没有，挪到与 DSH 图标一条线」，
   拆成两个根因：①「太靠近顶部」是 `enableEdgeToEdge()` 全屏绘制而整页无状态栏 inset ——

@@ -273,6 +273,7 @@
     <string name="agent_locked_after_start">会话开始后 Agent 配置由 DSH 锁定；模型和思考强度仍可按宿主能力切换。</string>
     <string name="agent_preset_locked">该会话已经开始，无法再切换 Agent 配置。</string>
     <string name="reasoning_effort">思考强度</string>
+    <string name="model_context_window">上下文 %1$s tokens</string>
     <string name="settings_subtitle">管理连接、模型供应商、设备权限和语言</string>
     <string name="about">关于</string>
     <string name="author">作者</string>

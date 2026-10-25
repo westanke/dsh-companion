@@ -299,7 +299,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.54.apk
+DSH伴侣-companion-v2.2.55.apk
 ```
 
 Requirements:
@@ -589,38 +589,41 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.54` (`versionCode` 10079)
+- Version: `v2.2.55` (`versionCode` 10080)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
-- Unit tests: 68 test classes / 627 cases at the last run (0 failures). The counts move with the code, so
+- Unit tests: 69 test classes / 634 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.54.apk`, **3,187,812 bytes**, SHA-256
-  `5039996759e60de8ac18233d7f010718c70c34ded3cc37da90364ed2d44e8c13` (kept in sync in
-  `artifacts/SHA256SUMS.txt`).   **Released on Gitee + GitHub** (tag `v2.2.54`) —
-  what changed in this release: **the connect screen's top bar is now properly aligned — the DSH mark
-  and the language / diagnostics buttons share one centre line**.
-  **The problem**: those two buttons in the top-right corner of the login screen sat right against the
-  top edge — out of thumb reach, visually cramped, and not on the same line as the DSH mark at all.
-  Two separate root causes: ① the app draws edge-to-edge (`enableEdgeToEdge()`) but the connect screen
-  applied no status-bar inset, so the bar was actually painted directly under the status bar;
-  ② the DSH mark lived inside the **scrollable** column with an 18dp spacer in front of it, so a layer
-  boundary plus that gap stood between it and the top bar.
-  **What this does**: the whole page gets `statusBarsPadding()`; the DSH mark moves out of the scroll
-  area up into the leading slot of the top bar, sharing `Alignment.CenterVertically` with the two
-  buttons, with `Arrangement.SpaceBetween` pushing the buttons to the right; the scroll area drops the
-  18dp spacer and the mark, and the title's top padding goes 20 → 24dp.
-  **A side benefit**: the title block is no longer pushed down by a 40dp mark plus an 18dp gap, so one
-  more computer card fits on the first screen.
-  **Why the leading inset is deliberately 4dp larger on the icon side**: an `IconButton` carries 12dp of
-  its own padding, so 8dp outer + 12dp inner = 20dp — which puts the *visual* left edge of the button
-  icons on the same vertical line as the 24dp text margin below.
-  **Verified**: pixel-level check on a real V2080A — the DSH mark square, the diagnostics icon, and the
-  language icon share an **exactly identical horizontal centre line**; touch targets measure 144px = 48dp
-  (the design-system minimum); four screenshots (zh/en × light/dark) show no clipping.
+- Current APK: `DSH伴侣-companion-v2.2.55.apk`, **3,188,276 bytes**, SHA-256
+  `7afe646f2c8f76cb825268e984784fbe09d10bca8ed9bad0f6bf39a782703c90` (kept in sync in
+  `artifacts/SHA256SUMS.txt`).   **Released on Gitee + GitHub** (tag `v2.2.55`) —
+  what changed in this release: **aligns with bridge v2.7.0 — the model picker shows context
+  capacity, and New Session reuses the blank session**.
+  **Why**: bridge v2.7.0 filled in `contextWindow` / `maxTokens` in the model catalog and added an
+  optional `reuseBlank` to `POST /chat/sessions`. The app had both slots reserved but unwired:
+  ① the model data class has deserialised `contextWindow` since v2.2.49, yet only the "edit provider"
+  form consumed it — **the model picker never showed it**, so you could not see how much room a
+  model has; ② `createSession` never sends `sessionId`, so under bridge v2.6.x every tap on New
+  Session minted another blank session and one workspace accumulated several of them.
+  **What changed**: ① each model row now renders a small line with the context capacity (only when
+  present), formatted by the new `data/ModelCapacityLabel.kt` (base 1024, `1048576 → 1.0M`,
+  `131072 → 128K`); ② `CreateSessionRequest` gains a `reuseBlank` field and `createSession` a
+  matching optional parameter, **defaulting to `null`** — kotlinx omits nulls, so an older bridge
+  receives a byte-identical request body.
+  **Why `null` rather than `true`**: it lets the bridge decide whether it supports the semantics —
+  bridge v2.7.0 treats an omission as `true` (matching DSH 0.2.1 desktop behaviour), while older
+  bridges simply ignore the field. Hard-coding `true` would put a field an old bridge does not know
+  into the body; `ignoreUnknownKeys` would absorb it, but that is leaning on the other side's
+  tolerance, not on a contract.
+  **Verified**: 69 test classes / 634 cases green (the new `ModelCapacityLabelTest` adds 7,
+  including `1024 → 1.0K` but `1000 → 1000` to pin the radix); `docsCheck` consistent in both
+  directions; `lintDebug` reports 0 errors.
+  **Not verified on a device**: the capacity line's layout still needs a look once installed (model
+  name + two description lines + capacity line may feel cramped).
 - Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25). The key did not change, but the
   **package name did in v2.2.41**, so `v2.2.40` and earlier still require an uninstall first
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)
 - License: [GNU Affero General Public License v3.0](./LICENSE)
-- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.7** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+; **approval and question cards need 2.3.7+**; gap resync / subscription baseline / live deliverable cards need 2.3.8+; the "response truncated" notice needs bridge **≥ 2.4.1**; the background-jobs panel needs bridge **≥ 2.4.3**; the model page's catalog add and restore-default-models need bridge **≥ 2.5.0**; **showing the device name as "platform · model" needs bridge ≥ 2.6.1** (below that the app still works — the device table just keeps the placeholder name))
+- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.7** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+; **approval and question cards need 2.3.7+**; gap resync / subscription baseline / live deliverable cards need 2.3.8+; the "response truncated" notice needs bridge **≥ 2.4.1**; the background-jobs panel needs bridge **≥ 2.4.3**; the model page's catalog add and restore-default-models need bridge **≥ 2.5.0**; **showing the device name as "platform · model" needs bridge ≥ 2.6.1** (below that the app still works — the device table just keeps the placeholder name); **the model context capacity needs bridge ≥ 2.7.0** (below that the model row omits it); **"New Session reuses the blank session" needs bridge ≥ 2.7.0** (below that every new session adds another blank one))
   (formerly [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace))

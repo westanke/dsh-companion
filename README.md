@@ -290,7 +290,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.54.apk
+DSH伴侣-companion-v2.2.55.apk
 ```
 
 安装要求：
@@ -536,30 +536,35 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.54`（`versionCode` 10079）
+- 当前版本：`v2.2.55`（`versionCode` 10080）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
-- 单元测试：68 个测试类 / 627 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
+- 单元测试：69 个测试类 / 634 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.54.apk`，**3,187,812 字节**，
-  SHA-256 `5039996759e60de8ac18233d7f010718c70c34ded3cc37da90364ed2d44e8c13`（`artifacts/SHA256SUMS.txt` 同步）。
-  **已发 Gitee + GitHub**（tag `v2.2.54`）——
-  本版改动：**连接页顶栏归位 —— DSH 图标与「语言 / 诊断」按钮落在同一条中线**。
-  **问题**：登录页右上角那两个按钮贴着顶部，单手够不到、看着也不整齐，而且和 DSH 图标
-  根本不在一条线上。根因是两个：① App 全屏绘制（`enableEdgeToEdge()`），但连接页没吃状态栏
-  内边距，顶栏其实画在状态栏正下方；② DSH 图标长在**滚动区**里、前面还垫着 18dp 空白，
-  跟顶栏隔着一层层级差。
-  **做法**：整页加 `statusBarsPadding()`；把 DSH 图标从滚动区提到顶栏行首，与两个按钮
-  `Alignment.CenterVertically` 同轴、`Arrangement.SpaceBetween` 把按钮推到右端；
-  滚动区删掉原来的 18dp 空白与图标，标题上边距 20→24dp。
-  **顺带的好处**：标题区不再被 40dp 图标 + 18dp 空白顶下去，首屏能多露出一张电脑卡片。
-  **为什么图标在左、按钮在右且左边距刻意大 4dp**：`IconButton` 自带 12dp 内边距，
-  按钮侧 8dp + 内距 12dp = 20dp，正好让按钮图标的视觉左缘与下面 24dp 的文字边距对齐。
-  **验证**：真机 V2080A 逐像素核对，DSH 图标方块、诊断图标、语言图标三者**水平中线完全重合**；
-  触控区 144px = 48dp（设计系统下限）；中/英 × 浅/深四组截图无裁切。
+- 当前 APK：`DSH伴侣-companion-v2.2.55.apk`，**3,188,276 字节**，
+  SHA-256 `7afe646f2c8f76cb825268e984784fbe09d10bca8ed9bad0f6bf39a782703c90`（`artifacts/SHA256SUMS.txt` 同步）。
+  **已发 Gitee + GitHub**（tag `v2.2.55`）——
+  本版改动：**对齐桥 v2.7.0 —— 模型选择器显示上下文容量，新会话复用空白会话**。
+  **为什么要做**：桥 v2.7.0 补上了模型目录的 `contextWindow` / `maxTokens`，并给
+  `POST /chat/sessions` 加了可选的 `reuseBlank`。安卓端两处都早就留了位却没接：
+  ① 模型数据类从 v2.2.49 起就反序列化 `contextWindow`，但 UI 里只有「编辑供应商」的表单
+  用它，**模型选择器一行都没显示** —— 选模型时看不到「这个模型能装多少」；
+  ② `createSession` 从不传 `sessionId`，于是在桥 v2.6.x 下每点一次「新会话」都新建一个
+  空白会话，同一工作区里会堆出好几个空会话。
+  **做法**：① 模型行在描述下面加一行小字显示上下文容量（只在非空时出现），格式化走新增的
+  `data/ModelCapacityLabel.kt`（1024 进制，`1048576 → 1.0M`、`131072 → 128K`）；
+  ② `CreateSessionRequest` 加 `reuseBlank` 字段、`createSession` 加同名可选参数，
+  **默认 `null`** —— kotlinx 不编码 null，所以老桥收到的请求体逐字节不变。
+  **为什么默认 `null` 而不是 `true`**：让「谁支持这个语义」由桥决定 —— 桥 v2.7.0 省略即
+  `true`（对齐 DSH 0.2.1 桌面行为），更老的桥不认识这个字段就维持原样。写死 `true` 会让
+  请求体多出一个老桥不认识的字段，虽然被 `ignoreUnknownKeys` 忽略，但那是「靠对方的宽容
+  工作」，不是契约。
+  **验证**：单测 69 类 / 634 用例全绿（新增 `ModelCapacityLabelTest` 7 例，含
+  `1024 → 1.0K` 但 `1000 → 1000` 钉住进制）；`docsCheck` 双向一致；`lintDebug` 0 error。
+  **真机未验**：容量小字的排版要装包看一眼（模型名 + 两行描述 + 容量行可能偏挤）。
 - 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用。证书没变，但 **v2.2.41 起包名变了**，
   `v2.2.40` 及更早仍需先卸载）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)
 - 许可证：[GNU Affero General Public License v3.0](./LICENSE)
-- 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.7**（「加载更早消息」需要 2.3.1+；「插件」页清单与启停需要 2.3.2+ / 2.3.3+；**审批 / 问答卡片需要 2.3.7+**；**断档重同步 / 订阅基线 / 交付物实时卡片需要 2.3.8+**；「回答被截断」提示需 bridge **≥ 2.4.1**；后台任务面板需 bridge **≥ 2.4.3**；模型页目录添加 / 恢复默认模型需 bridge **≥ 2.5.0**；**设备名显示为「平台 · 机型」需 bridge ≥ 2.6.1**（低于此版本时 App 照样能用，只是设备表里仍是占位名））
+- 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.7**（「加载更早消息」需要 2.3.1+；「插件」页清单与启停需要 2.3.2+ / 2.3.3+；**审批 / 问答卡片需要 2.3.7+**；**断档重同步 / 订阅基线 / 交付物实时卡片需要 2.3.8+**；「回答被截断」提示需 bridge **≥ 2.4.1**；后台任务面板需 bridge **≥ 2.4.3**；模型页目录添加 / 恢复默认模型需 bridge **≥ 2.5.0**；**设备名显示为「平台 · 机型」需 bridge ≥ 2.6.1**（低于此版本时 App 照样能用，只是设备表里仍是占位名）；**模型上下文容量显示需 bridge ≥ 2.7.0**（低于此版本时模型行不显示容量）；**「新会话复用空白会话」需 bridge ≥ 2.7.0**（低于此版本时每次新建都会多一个空会话））
   （旧名 [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace)）

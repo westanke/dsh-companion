@@ -3,6 +3,63 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## v2.2.55 · 对齐桥 v2.7.0：模型上下文容量显示 + 空白会话复用（2026-10-25）
+
+> **状态：v2.2.55 已发版。** 真机未验 —— 需要桥 v2.7.0 部署后，模型选择器里应出现「上下文 1.0M tokens」。
+
+### 基于什么
+
+桥 `dsh-remote-bridge` v2.7.0（本地工作树，配套 DSH 0.2.1-rc.3）新增了两项本 App 能直接受益的能力：
+
+1. `GET /chat/sessions/{sessionId}/models` 的每个模型现在带 `contextWindow` / `maxTokens`；
+2. `POST /chat/sessions` 新增可选 `reuseBlank`，语义对齐 DSH 0.2.1 桌面端的「新会话回到那个空白会话」。
+
+本 App 的 `ModelView` **早就有** `contextWindow` / `maxTokens` 两个字段（v2.2.49 加 bridge 2.5.0
+目录元数据时就声明了），但 `ModelRow` 从来没渲染过 —— 数据一直在，界面上看不见。
+
+### 干了什么
+
+- `data/DshClient.kt`：`createSession(workspaceId, agentPreset, reuseBlank)`，
+  `CreateSessionRequest` 加 `reuseBlank: Boolean? = null`。
+- `ui/chat/ChatSheets.kt` 的 `ModelRow`：在描述文案下面加一行小字
+  `R.string.model_context_window`（`上下文 %1$s tokens` / `%1$s tokens of context`），
+  只在 `model.contextWindow != null` 时出现。
+- 新增 `data/ModelCapacityLabel.kt`：`formatContextWindow(tokens)`，1024 进制，
+  `1048576 → 1.0M`、`131072 → 128K`、`512 → 512`。
+- 双语 `strings.xml` 各加一条；`STRUCTURE.md` 锚点表 + 行数提示、
+  `INTERFACES.md` 的 `createSession` 签名同步。
+
+### 为什么 `reuseBlank` 默认传 `null`（省略）而不是 `false`
+
+省略时 kotlinx 不编码该字段（`Json { ignoreUnknownKeys = true }` 用默认 `encodeDefaults = false`），
+**发给老 bridge 的请求体与改动前逐字节相同** —— 这是它能安全加进来的前提。
+而省略又正好让**新** bridge 走它自己的默认语义（复用空白会话），与桌面端一致。
+一个值同时满足「向后兼容」和「向前对齐」，不需要版本探测。
+
+反过来，如果默认 `false`（继续每次新建），同一个工作区会攒出一串空壳会话 ——
+那正是 DSH 0.2.1 想修掉的行为。
+
+### 为什么格式化函数放 data 层而不是留在 ChatSheets
+
+`ChatSheets.kt` 本来 772 行、贴 800 预算；塞进去会到 808。按 AGENTS.md §4.2
+「新增超预算文件必须先入台账再写码」，与其开一条债务，不如把纯函数拆出去 ——
+它是 `ModelView` 的展示语义，放 `data/` 比放 `ui/chat/` 更贴切，还能顺带单测。
+
+### 测了什么
+
+- 新增 `ModelCapacityLabelTest`（7 例）：M/K/原值三档的进位点与小数位，
+  其中一条专门钉「进制是 1024 不是 1000」（`1024 → 1.0K` 而 `1000 → 1000`）——
+  这个退化在界面上看着「还挺正常」，没人会报 bug。
+- 门禁：`docsCheck` 双向一致（137 锚点 / 118 源文件全登记、54 条接口锚点）；
+  `:app:lintDebug` **0 error**；`:app:testDebugUnitTest` **69 类 / 634 用例 / 0 失败**。
+- 行数：`DshClient.kt` 799、`ChatSheets.kt` 781、`ModelCapacityLabel.kt` 30 —— 全部在 800 以内。
+
+### 未做
+
+- **未真机验**：模型行那行小字要装包看一眼排版（模型名 + 两行描述 + 容量行可能偏挤）。
+- `reuseBlank` 的实际效果需桥 v2.7.0 部署后连一次才知道（本地只有 v2.6.1 在跑）。
+- 未推送、未发版。
+
 ## v2.2.54 · 连接页顶栏归位：DSH 图标与语言/诊断按钮同一条中线（2026-10-24）
 
 ### 基于什么

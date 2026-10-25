@@ -266,6 +266,7 @@
     <string name="agent_locked_after_start">DSH locks the Agent preset after the session starts. Models and reasoning effort remain selectable when supported.</string>
     <string name="agent_preset_locked">This session has already started, so its Agent preset cannot be changed.</string>
     <string name="reasoning_effort">Reasoning effort</string>
+    <string name="model_context_window">%1$s tokens of context</string>
     <string name="settings_subtitle">Manage connection, model providers, device permissions, and language</string>
     <string name="about">About</string>
     <string name="author">Author</string>

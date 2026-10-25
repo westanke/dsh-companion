@@ -907,8 +907,29 @@ android {
         //     （144px = 48dp，符合设计系统触控区下限）；中/英 × 浅/深四组截图均无裁切。
         //   已知遗留：诊断浮层打开时压住 BrandMark 左下角（`DiagProbe` 固定在 TopStart）。
         //     按 PITFALLS.md「浮层不调死坐标」的既有教训不改坐标 —— 浮层本就可拖动。
-        versionCode = 10079
-        versionName = "2.2.54"
+        // v2.2.55（versionCode 10080）：**对齐桥 v2.7.0：模型上下文容量显示 + 空白会话复用**（2026-10-25）。
+        //   基于什么：桥 v2.7.0 补上了模型目录的 contextWindow / maxTokens，并给
+        //     POST /chat/sessions 加了可选的 reuseBlank。安卓端两处都早就留了位却没接：
+        //     ①ModelView 从 v2.2.49 起就反序列化 contextWindow，但 ui/ 里只有编辑供应商的
+        //       表单用它，模型选择器一行都没显示 —— 用户选模型时看不到「这个模型能装多少」；
+        //     ②createSession 从不传 sessionId，桥 v2.6.x 下每点一次「新会话」都新建一个空白，
+        //       于是同一工作区里堆出好几个空会话。
+        //   干了什么：①ModelRow 在描述下面加一行小字显示上下文容量（只在 contextWindow 非空时
+        //       出现），格式化走新增的 data/ModelCapacityLabel.kt（1024 进制，1M/1.5K）；
+        //     ②CreateSessionRequest 加 reuseBlank 字段、createSession 加同名可选参数，
+        //       默认 null —— kotlinx 不编码 null，所以老桥收到的请求体逐字节不变。
+        //   为什么 reuseBlank 默认 null 而不是 true：null 让「谁支持这个语义」由桥决定 ——
+        //     桥 v2.7.0 省略即 true（对齐 DSH 0.2.1 桌面行为），更老的桥不认识这个字段就
+        //     维持原样。写死 true 会让请求体多出一个老桥不认识的字段，虽然被 ignoreUnknownKeys
+        //     忽略，但那是「靠对方的宽容工作」，不是契约。
+        //   为什么格式化函数放在 data/ 而不是 UI 层：它是纯数字→字符串，值得单测；放在
+        //     ChatSheets.kt 里既超 800 行预算又没法单测。
+        //   测了什么：新增 ModelCapacityLabelTest 7 例（1.0M/1.5M/16M/128K/1.5K/512，以及
+        //     1024→1.0K 但 1000→1000 钉住进制）；单测 69 类 / 634 用例全绿；docsCheck
+        //     137 锚点 / 118 源文件双向一致；lintDebug 0 error。
+        //   真机验了什么：未验 —— 需要桥 v2.7.0 部署后，模型选择器里应出现「上下文 1.0M tokens」。
+        versionCode = 10080
+        versionName = "2.2.55"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。

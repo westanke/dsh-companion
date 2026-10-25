@@ -145,6 +145,13 @@ export ANDROID_HOME=/media/wangke/OFFICE/workspace/android-toolchain/sdk
 apksigner verify --verbose app\build\outputs\apk\release\app-release.apk
 ```
 
+- **2026-10-25 `v2.2.55` 对齐桥 v2.7.0（模型容量 + 空白会话复用）**：**单测从 68 类 / 627 用例
+  增加到 69 类 / 634 用例**（新增 `data/ModelCapacityLabelTest.kt` 7 例，钉住 1024 进制与
+  小数规则）；`docsCheck` 双向一致（10 文档 / 46 任务 / STRUCTURE 137 anchors /
+  INTERFACES 54 anchors）；`lintDebug` **0 error**；行数 `DshClient.kt` 799 / `ChatSheets.kt` 781 /
+  `ModelCapacityLabel.kt` 30，全部在 800 预算内。
+  - **真机未验**：模型行那行容量小字要装包看一眼排版（模型名 + 两行描述 + 容量行可能偏挤）；
+    `reuseBlank` 的实际效果也要等桥 v2.7.0 部署后连一次才知道。
 - **2026-10-24 `v2.2.54` 连接页顶栏归位**：纯布局改动，**单测数量不变**（`68 类 / 627 用例 / 0 失败`，
   没有新增用例 —— 逻辑零改动，且 `androidTest/ConnectScreenTest.kt` 只断言标题文本与语言切换、
   不依赖图标位置）；`docsCheck` 双向一致（10 文档 / 46 任务 / STRUCTURE 136 anchors /

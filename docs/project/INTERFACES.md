@@ -87,7 +87,7 @@ class DshClient(
 | GET | `chat/agent-presets` | `agentPresets()` | 智能体预设 |
 | GET | `chat/permission-presets` | `permissionPresets()` | 权限档位（bridge ≥ 2.4.2） |
 | GET | `chat/sessions?archived=` | `sessions(archived)` | 会话列表（归档需能力位） |
-| POST | `chat/sessions` | `createSession(workspaceId, agentPreset)` | 新建会话 |
+| POST | `chat/sessions` | `createSession(workspaceId, agentPreset, reuseBlank)` | 新建会话（`reuseBlank` 桥 ≥ 2.7.0，省略即不编码） |
 | PATCH | `chat/sessions/{sessionId}` | `renameSession(...)` | 改名 |
 | POST | `chat/sessions/{sessionId}/fork` | `forkSession(sessionId, atSeq)` | 分叉 |
 | POST | `chat/sessions/{sessionId}/archive` | `archiveSession(...)` | 归档 |
