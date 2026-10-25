@@ -1,4 +1,10 @@
 - 日期：2026-10-25
+- **运维（2026-10-25，未发版）**：**删除 `upstream` 远端**。原 `Hakunm/dsh-android-app`
+  原作者早已停止更新，该远端从建仓起就没再 fetch 过，留着只是让 `git remote -v` 多一行噪音。
+  删的是 **git 远端**，不是署名 —— 代码血缘与 AGPL 归属仍在 README 双站、`NOTICE`、
+  `AGENTS.md` 与 `docs/project/CHANGELOG-DEV.md` 里写明。现远端为 `origin`（GitHub 从站）/
+  `gitee`（主站）/ `atomgit`（备站）三个。同步改了 `scripts/setup-remotes.sh` 的注释与
+  末尾远端清单。产品代码零改动，不发新版。
 - **v2.2.55（versionCode 10080，2026-10-25，发）**：**对齐桥 v2.7.0：模型上下文容量显示 + 空白会话复用**。
   `ModelRow` 开始渲染 `model.contextWindow`（新增 `data/ModelCapacityLabel.kt`，
   1024 进制，`1048576 → 1.0M`）；`DshClient.createSession` 加可选 `reuseBlank`，

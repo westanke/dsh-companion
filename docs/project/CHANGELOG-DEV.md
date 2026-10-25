@@ -2329,7 +2329,9 @@ GitHub 重建后 CI 第一次真正跑通，暴露出 `lintDebug` 有 16 个历�
      显式声明 `platform-tools platforms;android-36 build-tools;36.0.0`。
 4. **本地推送工具**：`scripts/push-all.sh`（默认只推 Gitee + AtomGit，`PUSH_TAGS=1` 推标签，
    `INCLUDE_GITHUB=1` 才试 GitHub，`FORCE=1` 才走 `--force-with-lease`）；
-   `scripts/setup-remotes.sh` 幂等整理远端命名（origin=GitHub / gitee / atomgit，upstream 只读不动）。
+   `scripts/setup-remotes.sh` 幂等整理远端命名（origin=GitHub / gitee / atomgit）。
+   （原文此处写「upstream 只读不动」；2026-10-25 已删除 `upstream` 远端，见
+   `docs/project/STATUS.md` 顶部该日条目。）
 
 ### 测什么
 
