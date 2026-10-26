@@ -91,7 +91,7 @@ fun WarningBanner(message: String, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.tertiaryContainer, MaterialTheme.shapes.small)
+            .background(SemanticWarnContainer, MaterialTheme.shapes.small)
             .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.Top,
     ) {
@@ -99,12 +99,12 @@ fun WarningBanner(message: String, modifier: Modifier = Modifier) {
             Icons.Outlined.WarningAmber,
             contentDescription = null,
             modifier = Modifier.size(20.dp),
-            tint = MaterialTheme.colorScheme.onTertiaryContainer,
+            tint = OnSemanticWarnContainer,
         )
         Text(
             message,
             modifier = Modifier.padding(start = 10.dp),
-            color = MaterialTheme.colorScheme.onTertiaryContainer,
+            color = OnSemanticWarnContainer,
             style = MaterialTheme.typography.bodySmall,
         )
     }
@@ -132,6 +132,58 @@ val ConnectionOnlineColor: Color
 
 val ConnectionOfflineColor: Color
     @Composable get() = LocalSemanticColors.current.offline
+
+/**
+ * 四类语义色的**取色入口**（路线 C，2026-10-26）。
+ *
+ * 之前只有一个 `LocalSemanticColors` 里的 online/offline，其余语义（警告、信息）
+ * 无处安放，只能借 `colorScheme.tertiary`（陶土色）与 `secondary`（青色）——
+ * 借来的色相读不出语义：「待确认」画成陶土色，用户看到的是「强调」而不是「等你」。
+ *
+ * 现在四个语义各有入口，**调用方写法统一**：`SemanticWarn` / `SemanticInfo`，
+ * 容器色同理 `SemanticWarnContainer` / `OnSemanticWarnContainer`。
+ *
+ * 一律在 `@Composable` 上下文里取值（与 `ConnectionOnlineColor` 同规矩）。
+ */
+val SemanticOkColor: Color
+    @Composable get() = LocalSemanticColors.current.ok
+
+val SemanticErrColor: Color
+    @Composable get() = LocalSemanticColors.current.err
+
+val SemanticWarnColor: Color
+    @Composable get() = LocalSemanticColors.current.warn
+
+val SemanticInfoColor: Color
+    @Composable get() = LocalSemanticColors.current.info
+
+/** 成功态容器底 + 内文字。 */
+val SemanticOkContainer: Color
+    @Composable get() = LocalSemanticColors.current.okContainer
+
+val OnSemanticOkContainer: Color
+    @Composable get() = LocalSemanticColors.current.onOkContainer
+
+/** 警告态容器底 + 内文字。 */
+val SemanticWarnContainer: Color
+    @Composable get() = LocalSemanticColors.current.warnContainer
+
+val OnSemanticWarnContainer: Color
+    @Composable get() = LocalSemanticColors.current.onWarnContainer
+
+/** 失败态容器底 + 内文字。 */
+val SemanticErrContainer: Color
+    @Composable get() = LocalSemanticColors.current.errContainer
+
+val OnSemanticErrContainer: Color
+    @Composable get() = LocalSemanticColors.current.onErrContainer
+
+/** 信息态容器底 + 内文字。 */
+val SemanticInfoContainer: Color
+    @Composable get() = LocalSemanticColors.current.infoContainer
+
+val OnSemanticInfoContainer: Color
+    @Composable get() = LocalSemanticColors.current.onInfoContainer
 
 /**
  * 一行状态：**状态点 + 文字**。

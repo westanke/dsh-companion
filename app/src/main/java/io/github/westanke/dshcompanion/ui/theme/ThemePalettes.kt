@@ -364,35 +364,148 @@ private val InkDark: ColorScheme = darkColorScheme(
 )
 
 /**
- * 语义色：连接「通 / 断」。
+ * 语义色：**四对**独立 token（绿 / 黄 / 红 / 蓝）+ 各自的容器色。
  *
- * 为什么不直接用 `colorScheme` 的角色：Material 3 的语义角色里**没有** online/offline
- * 这一对，塞进 `primary`/`error` 会把「连接断了」画成「出错了」。但也不能像改造前那样
- * 在屏幕组件里写死两个色值 —— 那样深色底上只有 3.47 / 3.16:1，小字号读不清
- * （原 `Components.kt:117-118`）。
+ * ## 为什么从「一对」扩到「四对」（2026-10-26 路线 C）
  *
- * 所以做成**主题的一部分**（每个主题成对给浅/深两值），既保住「语义色不随明暗随机漂」，
- * 又让对比度随主题各自达标。八组实测数字见实施记录。
+ * 改造前只有 `online`/`offline` 一对。问题不在于「少」，而在于**其余语义无处安放**：
+ * 「等你确认」「权限警告」这类**警告**语义只能借 `colorScheme.tertiary`（陶土色，
+ * 读起来像「强调」不像「警告」），「工具名/信息」只能借 `secondary`（青色）。
+ * 全仓 79 处 `colorScheme.tertiary/secondary/error` 的借用里，有相当一部分是
+ * **想表达语义但没有语义色可用**才去借的。
+ *
+ * 四对 token 各归其位：
+ *
+ * | token | 语义 | 用在哪 |
+ * |---|---|---|
+ * | `online` | 绿 · 成功 / 已连接 | 状态点、成功标记 |
+ * | `offline` | 红 · 失败 / 已断开 | 状态点、失败标记 |
+ * | `warn` | 黄 · 待确认 / 需批准 | 审批卡、权限警告 |
+ * | `info` | 蓝 · 中性信息 / 工具 | 工具名、代码高亮 |
+ *
+ * ## 为什么不直接用 `colorScheme` 的角色
+ *
+ * Material 3 的语义角色里**没有**这四对，塞进 `primary`/`error` 会把
+ * 「连接断了」画成「出错了」。但也不能像改造前那样在屏幕组件里写死色值 ——
+ * 那样深色底上只有 3.47 / 3.16:1，小字号读不清（原 `Components.kt:117-118`）。
+ *
+ * 所以做成**主题的一部分**（每个主题给浅/深两值），既保住「语义色不随明暗随机漂」，
+ * 又让对比度随主题各自达标。
+ *
+ * ## `online`/`offline` 的零漂移
+ *
+ * 这两个字段的值**一个字都没改**（PAPER 浅 `#2E7D32`/`#C62828` 等四套原值），
+ * 由 `AppThemeTest` 的语义色断言继续钉住。新增的 `warn`/`info`/容器色是**纯增量**，
+ * 不影响任何现有像素。
+ *
+ * ## 容器色为什么单独给
+ *
+ * banner/卡片底需要「同色系的浅底 + 深字」而不是「语义色本身当底」。直接把 `warn`
+ * 当底色会得到「黄底黄字」；而用 `warn.copy(alpha=0.1f)` 叠在任意底色上，
+ * 对比度**不可预测**（叠在深色底上会发灰）。所以每对容器色都是**算过对比度**的实色，
+ * 见 [okContainer] 等字段的注释。
+ *
+ * 判据：容器内文字 ≥ 4.5:1（AA 正文），容器 vs 页面底 ≥ 1.15:1（肉眼可察觉）。
+ * 32 组色对全部实测达标，数字见 `docs/project/` 的主题实施记录。
  */
 data class SemanticColors(
+    /** 绿 · 成功 / 已连接。四套主题各自取值，**保持改造前的原值**。 */
     val online: Color,
+    /** 红 · 失败 / 已断开。四套主题各自取值，**保持改造前的原值**。 */
     val offline: Color,
-)
+    /** 黄 · 待确认 / 需批准。浅深两套统一值，四套主题共用（实测均达标）。 */
+    val warn: Color,
+    /** 蓝 · 中性信息 / 工具名 / 代码高亮。浅深两套统一值。 */
+    val info: Color,
+    /** 成功态容器底（浅绿）。 */
+    val okContainer: Color,
+    /** 成功态容器内文字/图标（深绿）。 */
+    val onOkContainer: Color,
+    /** 警告态容器底（浅黄）。 */
+    val warnContainer: Color,
+    /** 警告态容器内文字/图标（深棕）。 */
+    val onWarnContainer: Color,
+    /** 失败态容器底（浅红）。 */
+    val errContainer: Color,
+    /** 失败态容器内文字/图标（深红）。 */
+    val onErrContainer: Color,
+    /** 信息态容器底（浅青）。 */
+    val infoContainer: Color,
+    /** 信息态容器内文字/图标（深青）。 */
+    val onInfoContainer: Color,
+) {
+    /** 成功语义的别名：`online` 在「连接状态」语境读着自然，在「操作成功」语境不自然。 */
+    val ok: Color get() = online
 
-private fun semanticOf(theme: AppTheme): SemanticColors = when (theme) {
-    // PAPER 浅色沿用改造前的绿/红（它们原本就 ≥4.5：4.86 / 5.33）；
-    // 深色的这对是本次**唯一会改变手机端像素**的地方，属于报告里的可读性修复。
-    AppTheme.PAPER -> SemanticColors(Color(0xFF2E7D32), Color(0xFFC62828))
-    AppTheme.WARM -> SemanticColors(Color(0xFF2F6B2A), Color(0xFFA32F1F))
-    AppTheme.MIST -> SemanticColors(Color(0xFF2A6B45), Color(0xFFA32F1F))
-    AppTheme.INK -> SemanticColors(Color(0xFF0F6B22), Color(0xFFB3150C))
+    /** 失败语义的别名：同上，`offline` 只管连接，`err` 管一切失败。 */
+    val err: Color get() = offline
 }
 
-private fun semanticOfDark(theme: AppTheme): SemanticColors = when (theme) {
-    AppTheme.PAPER -> SemanticColors(Color(0xFF7FD48A), Color(0xFFFF8A80))
-    AppTheme.WARM -> SemanticColors(Color(0xFF9DDC9A), Color(0xFFFF9E8C))
-    AppTheme.MIST -> SemanticColors(Color(0xFF8EDCA8), Color(0xFFFF9E8C))
-    AppTheme.INK -> SemanticColors(Color(0xFF7FE08C), Color(0xFFFF8F84))
+/**
+ * 浅色语义色。
+ *
+ * `online`/`offline` 是**原值不动**（零漂移）；`warn`/`info` 与四对容器色是新增，
+ * 四套主题共用同一组值 —— 因为四套浅色底的相对亮度都在 0.90~1.00 之间，
+ * 实测这组值在最暖的 WARM `#FAF6EF` 与最白的 INK `#FFFFFF` 上**都 ≥ 4.5:1**，
+ * 没必要为每套主题各配一份（配了反而更容易漂）。
+ */
+private fun semanticOf(theme: AppTheme): SemanticColors {
+    val onlineOffline = when (theme) {
+        // PAPER 浅色沿用改造前的绿/红（它们原本就 ≥4.5：4.86 / 5.33）；
+        // 深色的这对是本次**唯一会改变手机端像素**的地方，属于报告里的可读性修复。
+        AppTheme.PAPER -> Color(0xFF2E7D32) to Color(0xFFC62828)
+        AppTheme.WARM -> Color(0xFF2F6B2A) to Color(0xFFA32F1F)
+        AppTheme.MIST -> Color(0xFF2A6B45) to Color(0xFFA32F1F)
+        AppTheme.INK -> Color(0xFF0F6B22) to Color(0xFFB3150C)
+    }
+    return SemanticColors(
+        online = onlineOffline.first,
+        offline = onlineOffline.second,
+        // 琥珀：白底上 4.66（WARM 最差）~ 5.02（INK）
+        warn = Color(0xFFB45309),
+        // 青蓝：白底上 4.97 ~ 5.36
+        info = Color(0xFF0E7490),
+        okContainer = Color(0xFFC6F0D0),
+        onOkContainer = Color(0xFF14532D),
+        warnContainer = Color(0xFFFBE3A8),
+        onWarnContainer = Color(0xFF78350F),
+        errContainer = Color(0xFFF9C9C9),
+        onErrContainer = Color(0xFF7F1D1D),
+        infoContainer = Color(0xFFB8E9F2),
+        onInfoContainer = Color(0xFF164E63),
+    )
+}
+
+/**
+ * 深色语义色。
+ *
+ * `online`/`offline` 原值不动；`warn`/`info` 用**荧光档**（为暗底设计，白底上会失明）；
+ * 容器色是「比页面底亮一档」的实色 —— 深色界面的容器不能靠「更黑」区分，
+ * 只能靠「更亮」，实测 1.15~1.69:1，肉眼可辨。
+ */
+private fun semanticOfDark(theme: AppTheme): SemanticColors {
+    val onlineOffline = when (theme) {
+        AppTheme.PAPER -> Color(0xFF7FD48A) to Color(0xFFFF8A80)
+        AppTheme.WARM -> Color(0xFF9DDC9A) to Color(0xFFFF9E8C)
+        AppTheme.MIST -> Color(0xFF8EDCA8) to Color(0xFFFF9E8C)
+        AppTheme.INK -> Color(0xFF7FE08C) to Color(0xFFFF8F84)
+    }
+    return SemanticColors(
+        online = onlineOffline.first,
+        offline = onlineOffline.second,
+        // 暗底上 10.15 ~ 12.58
+        warn = Color(0xFFFBBF24),
+        // 暗底上 10.61 ~ 12.60
+        info = Color(0xFF7DD3FC),
+        okContainer = Color(0xFF1E3A2A),
+        onOkContainer = Color(0xFFBBF7D0),
+        warnContainer = Color(0xFF3D2A08),
+        onWarnContainer = Color(0xFFFDE68A),
+        errContainer = Color(0xFF421717),
+        onErrContainer = Color(0xFFFECACA),
+        infoContainer = Color(0xFF0C3448),
+        onInfoContainer = Color(0xFFBAE6FD),
+    )
 }
 
 /**

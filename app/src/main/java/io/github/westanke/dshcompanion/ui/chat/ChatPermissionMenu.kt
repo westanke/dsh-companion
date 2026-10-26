@@ -208,6 +208,9 @@ import io.github.westanke.dshcompanion.data.TodoItem
 import io.github.westanke.dshcompanion.data.displayItems
 import io.github.westanke.dshcompanion.data.permissionSelect
 import io.github.westanke.dshcompanion.data.todoItems
+import io.github.westanke.dshcompanion.ui.SemanticWarnColor
+import io.github.westanke.dshcompanion.ui.SemanticWarnContainer
+import io.github.westanke.dshcompanion.ui.OnSemanticWarnContainer
 import java.io.InputStream
 
 /**
@@ -332,7 +335,7 @@ internal fun FullAccessConfirmDialog(onDismiss: () -> Unit, onConfirm: () -> Uni
 
         onDismissRequest = onDismiss,
 
-        icon = { Icon(Icons.Outlined.WarningAmber, null, tint = MaterialTheme.colorScheme.tertiary) },
+        icon = { Icon(Icons.Outlined.WarningAmber, null, tint = SemanticWarnColor) },
 
         title = { Text(stringResource(R.string.permission_full_access_title)) },
 

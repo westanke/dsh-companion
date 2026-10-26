@@ -208,6 +208,9 @@ import io.github.westanke.dshcompanion.data.TodoItem
 import io.github.westanke.dshcompanion.data.displayItems
 import io.github.westanke.dshcompanion.data.permissionSelect
 import io.github.westanke.dshcompanion.data.todoItems
+import io.github.westanke.dshcompanion.ui.SemanticWarnColor
+import io.github.westanke.dshcompanion.ui.SemanticWarnContainer
+import io.github.westanke.dshcompanion.ui.OnSemanticWarnContainer
 import java.io.InputStream
 
 /**
@@ -232,11 +235,11 @@ internal fun ApprovalStatusLabel(modifier: Modifier = Modifier) {
             Icons.Outlined.WarningAmber,
             contentDescription = null,
             modifier = Modifier.size(15.dp),
-            tint = MaterialTheme.colorScheme.tertiary,
+            tint = SemanticWarnColor,
         )
         Text(
             stringResource(R.string.awaiting_approval),
-            color = MaterialTheme.colorScheme.tertiary,
+            color = SemanticWarnColor,
             style = MaterialTheme.typography.labelMedium,
         )
     }
@@ -270,7 +273,7 @@ internal fun ApprovalPanel(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, if (fullAccess) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.outlineVariant),
+        border = BorderStroke(1.dp, if (fullAccess) SemanticWarnColor else MaterialTheme.colorScheme.outlineVariant),
         shadowElevation = 3.dp,
     ) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -279,7 +282,7 @@ internal fun ApprovalPanel(
                     if (fullAccess) Icons.Outlined.WarningAmber else Icons.Outlined.Build,
                     contentDescription = null,
                     modifier = Modifier.size(20.dp),
-                    tint = if (fullAccess) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.secondary,
+                    tint = if (fullAccess) SemanticWarnColor else MaterialTheme.colorScheme.secondary,
                 )
                 Column(Modifier.weight(1f)) {
                     Text(stringResource(R.string.approval_required), style = MaterialTheme.typography.titleMedium)
@@ -321,11 +324,11 @@ internal fun ApprovalPanel(
                         Icons.Outlined.WarningAmber,
                         contentDescription = null,
                         modifier = Modifier.size(17.dp),
-                        tint = MaterialTheme.colorScheme.tertiary,
+                        tint = SemanticWarnColor,
                     )
                     Text(
                         stringResource(R.string.full_access),
-                        color = MaterialTheme.colorScheme.tertiary,
+                        color = SemanticWarnColor,
                         style = MaterialTheme.typography.labelMedium,
                     )
                 }
@@ -351,7 +354,7 @@ internal fun ApprovalPanel(
     if (showRiskDialog) {
         AlertDialog(
             onDismissRequest = { showRiskDialog = false; acknowledged = false },
-            icon = { Icon(Icons.Outlined.WarningAmber, null, tint = MaterialTheme.colorScheme.tertiary) },
+            icon = { Icon(Icons.Outlined.WarningAmber, null, tint = SemanticWarnColor) },
             title = { Text(stringResource(R.string.confirm_full_access)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {

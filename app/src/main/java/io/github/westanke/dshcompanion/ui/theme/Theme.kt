@@ -17,17 +17,30 @@ import androidx.compose.ui.unit.sp
 import io.github.westanke.dshcompanion.data.AppTheme
 
 /**
- * 语义色（连接通/断）的 **CompositionLocal**。
+ * 语义色（绿/黄/红/蓝 + 容器色）的 **CompositionLocal**。
  *
  * 为什么走 CompositionLocal 而不是让组件自己判明暗：`Components.kt` 里的
  * `StatusLabel` 是**跨页复用**的哑组件，它不该知道「现在是哪套主题、深还是浅」——
  * 那是主题层的知识。主题在这里下发一次，组件只消费。
  *
- * 默认值取 PAPER 浅色那一对：任何在 `DeepSeekHarnessTheme` 之外渲染的场景
+ * 默认值取 PAPER 浅色那一组：任何在 `DeepSeekHarnessTheme` 之外渲染的场景
  * （预览、单测、将来某个忘了包主题的入口）都不会拿到 null。
  */
 val LocalSemanticColors = staticCompositionLocalOf {
-    SemanticColors(online = Color(0xFF2E7D32), offline = Color(0xFFC62828))
+    SemanticColors(
+        online = Color(0xFF2E7D32),
+        offline = Color(0xFFC62828),
+        warn = Color(0xFFB45309),
+        info = Color(0xFF0E7490),
+        okContainer = Color(0xFFC6F0D0),
+        onOkContainer = Color(0xFF14532D),
+        warnContainer = Color(0xFFFBE3A8),
+        onWarnContainer = Color(0xFF78350F),
+        errContainer = Color(0xFFF9C9C9),
+        onErrContainer = Color(0xFF7F1D1D),
+        infoContainer = Color(0xFFB8E9F2),
+        onInfoContainer = Color(0xFF164E63),
+    )
 }
 
 private val Baseline = Typography()

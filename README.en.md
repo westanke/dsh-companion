@@ -592,7 +592,7 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 - Version: `v2.2.55` (`versionCode` 10080)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
-- Unit tests: 69 test classes / 634 cases at the last run (0 failures). The counts move with the code, so
+- Unit tests: 69 test classes / 636 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
 - Current APK: `DSH伴侣-companion-v2.2.55.apk`, **3,188,276 bytes**, SHA-256
@@ -616,7 +616,7 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
   bridges simply ignore the field. Hard-coding `true` would put a field an old bridge does not know
   into the body; `ignoreUnknownKeys` would absorb it, but that is leaning on the other side's
   tolerance, not on a contract.
-  **Verified**: 69 test classes / 634 cases green (the new `ModelCapacityLabelTest` adds 7,
+  **Verified**: 69 test classes / 636 cases green (the new `ModelCapacityLabelTest` adds 7,
   including `1024 → 1.0K` but `1000 → 1000` to pin the radix); `docsCheck` consistent in both
   directions; `lintDebug` reports 0 errors.
   **Not verified on a device**: the capacity line's layout still needs a look once installed (model

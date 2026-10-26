@@ -245,6 +245,81 @@ class AppThemeTest {
         }
     }
 
+    /**
+     * 四对语义色（绿/黄/红/蓝）在**每套主题的明暗两态**都要 ≥ 4.5:1（路线 C，2026-10-26）。
+     *
+     * 为什么这条必须存在：`warn`/`info` 是新增 token，四套主题**共用同一组值**
+     * （因为四套浅色底的相对亮度都在 0.90~1.00 之间）。共用意味着**只要有人调一次色值，
+     * 就可能只对 PAPER 达标、对 WARM 掉到 4.4** —— 肉眼几乎看不出，但已经违反 AA。
+     * 实测 WARM 是最紧的那个底（`#FAF6EF`），所以这条测试本质上是在钉 WARM。
+     *
+     * 历史教训：规范初稿的 `#DC2626` 在 WARM 上只有 **4.48**、MIST 上 4.49，
+     * 差 0.01 就是不合格。没有这条断言，这种差距会一路带到真机上。
+     */
+    @Test
+    fun `四对语义色在每套主题的明暗两态都达标`() {
+        val problems = mutableListOf<String>()
+        for (theme in AppTheme.entries) {
+            val palette = paletteOf(theme)
+            for (dark in listOf(false, true)) {
+                val scheme = palette.colorScheme(dark)
+                val sem = palette.semantics(dark)
+                val label = "$theme ${if (dark) "dark" else "light"}"
+                val pairs = listOf(
+                    "ok" to sem.ok,
+                    "err" to sem.err,
+                    "warn" to sem.warn,
+                    "info" to sem.info,
+                )
+                for ((name, color) in pairs) {
+                    val ratio = contrastRatio(color, scheme.background)
+                    if (ratio < AA_BODY) problems += "$label · $name/background = $ratio"
+                }
+            }
+        }
+        if (problems.isNotEmpty()) {
+            fail("四对语义色不达标：\n" + problems.joinToString("\n") { "- $it" })
+        }
+    }
+
+    /**
+     * 容器色两件事都要成立：**内文字 ≥ 4.5**、**容器 vs 页面底 ≥ 1.15**。
+     *
+     * 只测前者是不够的 —— 容器色与底色同亮度时，文字读得清，但**整块 banner 看不见**。
+     * 实测把容器色按「同色系浅底」的直觉取值（`#DCFCE7` 之类）时，
+     * vs 底的对比度只有 **1.02~1.16**，深色下更是 1.10，等于白加一层。
+     * 所以两档都调深/调亮过，1.15 是「肉眼刚好能看出有块底色」的下限。
+     */
+    @Test
+    fun `语义容器色内文字达标且容器本身可辨识`() {
+        val problems = mutableListOf<String>()
+        for (theme in AppTheme.entries) {
+            val palette = paletteOf(theme)
+            for (dark in listOf(false, true)) {
+                val scheme = palette.colorScheme(dark)
+                val sem = palette.semantics(dark)
+                val label = "$theme ${if (dark) "dark" else "light"}"
+                val containers = listOf(
+                    Triple("ok", sem.okContainer, sem.onOkContainer),
+                    Triple("warn", sem.warnContainer, sem.onWarnContainer),
+                    Triple("err", sem.errContainer, sem.onErrContainer),
+                    Triple("info", sem.infoContainer, sem.onInfoContainer),
+                )
+                for ((name, bg, fg) in containers) {
+                    val text = contrastRatio(fg, bg)
+                    if (text < AA_BODY) problems += "$label · $name 容器内文字 = $text"
+                    val vsPage = contrastRatio(bg, scheme.background)
+                    if (vsPage < CONTAINER_MIN) {
+                        problems += "$label · $name 容器 vs 页面底 = $vsPage（应 ≥ $CONTAINER_MIN）"
+                    }
+                }
+            }
+        }
+        if (problems.isNotEmpty()) {
+            fail("语义容器色不达标：\n" + problems.joinToString("\n") { "- $it" })
+        }
+    }
+
     // ───────────── 三、主题与明暗的装配 ─────────────
 
     /** 同一主题的 light / dark 必须是**不同的**色板（别把深色也指到浅色上）。 */
@@ -380,6 +455,15 @@ class AppThemeTest {
 
         /** WCAG 1.4.11 非文本（边框/图标）门槛。 */
         const val AA_NON_TEXT = 3.0
+
+        /**
+         * 语义容器色 vs 页面底的最低可辨识度。
+         *
+         * 不是 WCAG 门槛（WCAG 不要求「容器底必须可辨」），而是**工程下限**：
+         * 容器色按「同色系浅底」的直觉取值时实测只有 1.02~1.16，肉眼几乎看不出有块底色，
+         * banner 就退化成了「一段换了颜色的文字」。1.15 是实测出的可察觉下限。
+         */
+        const val CONTAINER_MIN = 1.15
 
         /**
          * WCAG 2.1 对比度：[相对亮度](https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html)。

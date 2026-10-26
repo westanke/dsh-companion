@@ -539,7 +539,7 @@ keyPassword=...
 - 当前版本：`v2.2.55`（`versionCode` 10080）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
-- 单元测试：69 个测试类 / 634 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
+- 单元测试：69 个测试类 / 636 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
 - 当前 APK：`DSH伴侣-companion-v2.2.55.apk`，**3,188,276 字节**，
   SHA-256 `7afe646f2c8f76cb825268e984784fbe09d10bca8ed9bad0f6bf39a782703c90`（`artifacts/SHA256SUMS.txt` 同步）。
@@ -559,7 +559,7 @@ keyPassword=...
   `true`（对齐 DSH 0.2.1 桌面行为），更老的桥不认识这个字段就维持原样。写死 `true` 会让
   请求体多出一个老桥不认识的字段，虽然被 `ignoreUnknownKeys` 忽略，但那是「靠对方的宽容
   工作」，不是契约。
-  **验证**：单测 69 类 / 634 用例全绿（新增 `ModelCapacityLabelTest` 7 例，含
+  **验证**：单测 69 类 / 636 用例全绿（新增 `ModelCapacityLabelTest` 7 例，含
   `1024 → 1.0K` 但 `1000 → 1000` 钉住进制）；`docsCheck` 双向一致；`lintDebug` 0 error。
   **真机未验**：容量小字的排版要装包看一眼（模型名 + 两行描述 + 容量行可能偏挤）。
 - 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用。证书没变，但 **v2.2.41 起包名变了**，
