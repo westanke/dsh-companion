@@ -211,9 +211,9 @@ data/ws/
 | P0 桥侧契约 | 已完成 | `asyncapi.yaml` 的 `/ws/mobile` 通道、Kotlin SDK、`mobile-frame-contract.spec.ts` 静态对账 |
 | P1 传输层基座 | 已完成 | `data/ws/` 的 `ChannelState.kt` / `WsFrames.kt` / `MobileWsTransport.kt` / `WsPorts.kt` |
 | **P2 三域接入** | **已完成（本阶段）** | `WsRequestRouter.kt`（配对层）、`HarnessWsPortsViewModel.kt`（装配层 + 端口适配）、`SessionPort` / `MessagePort` / `EventPort` 的 WS 实现与 REST 兜底 |
-| P3 HITL/命令/模型 | 未开始 | — |
-| P4 目标写操作 | 未开始 | — |
-| P5 真机验收 + 发版 | **P2 部分的真机验收已完成**（2026-10-29） | V2080A 对真桥 v2.8.0 跑通 7.2 的第 1/2/3/6/7 步；P3/P4 未开始，故整个 P5 未收口 |
+| P3 HITL/命令/模型 | 已完成（模型域的**读+写**已真机验证） | `data/ws/WsDomainPorts.kt`、`HarnessDomainPortsViewModel.kt`；`sent` kind 三生产者双向互斥 |
+| P4 目标写操作 | 已完成（四项写操作全部真机验证） | `data/ws/GoalPort.kt`、`HarnessGoalPortViewModel.kt`、`ChatStatsSheet` 目标区可操作 |
+| P5 真机验收 + 发版 | **P2/P3/P4 部分的真机验收已完成**（2026-10-29） | V2080A 对真桥 v2.8.0 跑通 7.2 的第 1/2/3/6/7 步 + §7.1.2 的 P3/P4 验收；HITL 与 `command-execute` 未单独验，发版未做 |
 
 ### 7.1.1 P2 真机验收记录（2026-10-29，V2080A + 桥 v2.8.0）
 
@@ -230,6 +230,38 @@ data/ws/
 **这一步抓到一个 P2 自带的回归**：交接瞬间 `EventSubscription.close()` 无条件回调
 `connection(false)`，把刚置上的 `eventsConnected = true` 立刻改回 false，顶栏一直是「已断开」。
 修复见 `handleEventsConnection` 的守卫与 `PITFALLS.md` §两个事件通道交接时…。
+
+### 7.1.2 P3/P4 真机验收记录（2026-10-29，V2080A + 桥 v2.8.0）
+
+**判据一律取「桥侧回读」**，不看界面自己说成功 —— 界面上写成功而内核没动，正是本项目反复踩的坑。
+
+P4（目标写操作），全部在真机会话上点按钮、再用裸 WS 发 `goal` 帧回读：
+
+| 动作 | 点击后界面 | WS 回读 |
+|---|---|---|
+| 暂停 | `阶段 paused · rev 2 · 轮次上限 10`，按钮变「恢复」 | `phase: "paused"`，`revision: 2` |
+| 恢复 | `阶段 active · rev 3 · 轮次上限 10`，按钮变「暂停」 | `phase: "active"`，`revision: 3` |
+| 编辑（轮次上限 10 → 12） | `rev 4 · 轮次上限 12` | `maxGoalRounds: 12`，`revision: 4` |
+| 清除 | 目标区整块消失，无残留控件 | `goal: null` |
+
+`revision` 每次 +1 说明 `ref` 的 compare-and-set 真的带过去了（桥侧拿旧 revision 会拒）。
+编辑对话框的「正文留空 = 不改」也验了：只改轮次上限时正文原样保留。
+
+P3（模型域）：
+
+| 动作 | 结果 |
+|---|---|
+| 读（打开「会话配置 → 模型」） | 分组、provider、上下文容量、思考强度齐全 —— 数据来自 `models` 帧 |
+| 写（`deepseek-flash` → `deepseek-v4-pro`） | WS 回读 `current.model` 从 `deepseek-flash` 变为 `deepseek-v4-pro`，思考强度 `high` 保持 |
+
+这一条是 P3 里风险最高的（`sent` 是 `message`/`unsubscribe`/`select-model` 三个生产者共用的 kind），
+真机通过说明双向互斥的 matcher 写对了：既没把在途发消息确认掉，也没让模型切换被吞。
+
+**未真机验证的两项**（原因写明，避免下次误以为验过）：
+- `approval-response`：要触发一次真实的审批弹窗，得让内核在会话里发起审批；本次没构造。
+  单测里按 `sessionId + approvalId` 配对、`approval-resolved` 当推送都已钉住。
+- `command-execute`：斜杠命令执行本身在 v2.2.57 验过，但当时走的是 REST；切到 `command-execute`
+  帧后没单独跑一遍（`/permission` 切换会改权限档位，真机上验它会影响后续操作）。
 
 > 本次真机对的是**已发布的**桥 v2.8.0 —— 它还不回显 requestId，所以配对走的是
 > `WsRequestRouter` 的按 kind 兜底路径（清单第 3 步）。桥侧统一回显已在
