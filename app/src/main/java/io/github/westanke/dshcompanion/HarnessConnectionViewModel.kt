@@ -309,6 +309,8 @@ internal fun HarnessViewModel.disconnect() {
     requestGate.invalidate()
     eventSubscription?.close()
     eventSubscription = null
+    // WS 传输也要收掉：它自带退避重连，留着会在「已断开」的状态里继续拨号。
+    closeWsTransport()
     // 手动断开要清掉熄屏暂停标志：否则下次亮屏 resumeEvents 会把
     // 用户刚刚主动断开的连接又接回去 —— 那是最容易让人以为「断开没用」的 bug。
     eventsPaused = false

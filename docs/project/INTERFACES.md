@@ -218,7 +218,7 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `fun isNewerVersion(remote: String, current: String): Boolean` | `data/UpdateChecker.kt` | 版本比较 |
 | `fun pickApkAsset(assets: List<ReleaseAsset>): ReleaseAsset?` | `data/UpdateChecker.kt` | 从 Release 资产里挑 APK |
 
-**`data/ws/`（`/ws/mobile` 传输层，P1 基座）**
+**`data/ws/`（`/ws/mobile` 传输层，P1 基座 + P2 三域接入）**
 
 | 符号 | 位置 | 说明 |
 | --- | --- | --- |
@@ -229,9 +229,13 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `object WsSubprotocol` | `data/ws/WsFrames.kt` | 三个子协议前缀（`dsh-mobile-v1` / `dsh-pair.<code>` / `dsh-auth.<token>`） |
 | `object WsClientFrame` / `WsServerFrame` | `data/ws/WsFrames.kt` | 帧 type/kind 常量（只收本阶段用到的，其余见注释） |
 | `val REQUIRED_CAPABILITIES_FOR_WS: Set<String>` | `data/ws/WsFrames.kt` | 建 WS 所需能力位；缺则降级 |
-| `object WsFrames` | `data/ws/WsFrames.kt` | `json` / `encode` / `decode` / `kindOf` / `requestIdOf` / `dataOf` / `parseHello` |
+| `object WsFrames` | `data/ws/WsFrames.kt` | `json` / `encode` / `decode` / `kindOf` / `requestIdOf` / `dataOf` / `decodeEvent` / `parseHello` |
+| `class WsRequestRouter(...)` | `data/ws/WsRequestRouter.kt` | 请求配对层：requestId 快路 + 按响应 kind 兜底、同 kind 串行、`error` 按 `requestType` 归属、超时只失败本次不掀连接 |
 | `class MobileWsTransport(...)` | `data/ws/MobileWsTransport.kt` | 建连鉴权、requestId 关联、超时、退避重连、`StateFlow<ChannelState>` |
-| `interface SessionPort` / `MessagePort` / `EventPort` | `data/ws/WsPorts.kt` | 三个高频域端口（P2 接入用），含 REST 兜底实现 |
+| `interface SessionPort` / `MessagePort` / `EventPort` | `data/ws/WsPorts.kt` | 三个高频域端口；每域两套实现（`Ws*` 走 `/ws/mobile`、`Rest*` 走 `DshClient`） |
+| `class AdaptiveSessionPort` / `AdaptiveMessagePort` | `HarnessWsPortsViewModel.kt` | 按 `ChannelState` 选通道；读操作任何 WS 失败都回落，写操作只在「帧没发出去」时回落 |
+| `fun HarnessViewModel.reconcileEventChannel()` | `HarnessWsPortsViewModel.kt` | 事件通道收敛：WS 可用就关 SSE 改订阅帧，否则走 `openRestEvents` |
+| `fun HarnessViewModel.handleWorkspaceEvent(event)` | `HarnessWsPortsViewModel.kt` | 事件 listener 主体（两条通道共用，逐字搬自原 `connectEvents`） |
 
 > **WS 建连必须复用 `DshClient.defaultHttpClient`**：`ArchitectureGuardTest` 的
 > `NETWORK_BOUNDARY_ALLOWLIST` 只放行 `data/DshClient.kt` 与 `web/ChatWebBridge.kt`，
@@ -411,6 +415,11 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `interface SessionPort` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsPorts.kt` | interface |
 | `interface MessagePort` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsPorts.kt` | interface |
 | `interface EventPort` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsPorts.kt` | interface |
+| `class WsRequestRouter` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsRequestRouter.kt` | class |
+| `class AdaptiveSessionPort` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessWsPortsViewModel.kt` | class |
+| `class AdaptiveMessagePort` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessWsPortsViewModel.kt` | class |
+| `fun reconcileEventChannel` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessWsPortsViewModel.kt` | function |
+| `fun handleWorkspaceEvent` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessWsPortsViewModel.kt` | function |
 | `data class BridgeCapabilities` | `app/src/main/java/io/github/westanke/dshcompanion/data/BridgeCapabilities.kt` | class |
 | `fun parseBridgeCapabilities` | `app/src/main/java/io/github/westanke/dshcompanion/data/BridgeCapabilities.kt` | function |
 | `fun missingRequiredCapabilities` | `app/src/main/java/io/github/westanke/dshcompanion/data/BridgeCapabilities.kt` | function |

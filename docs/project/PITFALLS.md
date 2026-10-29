@@ -1154,3 +1154,41 @@ GFM 允许这种紧凑写法，**这颗解析器比 GitHub 更严格**。
 
 判据：以后凡是写「等某个 id 匹配的响应」，先问一句**「对端真的会回这个 id 吗，
 我怎么验证的」**。答不上来就先去实测。
+
+### 两个事件通道交接时，旧通道的「告别」会把新通道的状态改回断开
+
+**症状**（2026-10-29 真机，WS 优先改造 P2 落地后）：会话正文正常渲染、内容实时更新，
+说明推送好端端地在跑；但顶栏一直是红点 +「已断开」。
+进任何一个会话都一样，重启 App 也一样。
+
+**根因**：`DshClient.EventSubscription.close()` **无条件**回调 `connection(false)`
+（`data/DshClient.kt:742`）。而 `reconcileEventChannel()` 在 WS 抢到事件流时，
+做的第一件事就是**关掉那条老的 REST 流**：
+
+```
+handleEventsConnection(true)     // 刚置上「连上了」
+  → eventSubscription?.close()    // 关 REST 流
+    → connection(false)           // 立刻被改回「断开」
+```
+
+于是 `eventsConnected` 在这两个通道交接的几毫秒里被写成 true 又写成 false，
+最终停在 false。**两个通道各自都是对的，错的是「谁说了算」没有定义。**
+
+**怎么发现的**：一开始怀疑渲染判据、怀疑 `snapshot.copy()` 冲掉字段，都不对。
+最后是在 `handleEventsConnection` 里加一行 `DiagLog.i`，真机跑一遍，
+diag.log 末尾赫然是 `事件连状态 → false` —— 一个**没人该发的** false。
+判据：**状态位被改成意外值时，先查"谁还有权改它"，而不是查"谁没改它"**。
+
+**现在怎么办（铁律）**：
+
+1. **同一时刻只有一个事件通道在服役，状态位听服役者的。**
+   `handleEventsConnection(false)` 在 WS 可用时必须丢弃：
+   ```kotlin
+   if (!connected && wsEventsUsable()) return
+   ```
+2. 凡是 `close()` 会回调状态的订阅对象，**接手方必须显式声明"我接管了"**，
+   不能指望旧对象安静地退场 —— 它的 clenup 回调分不清「我该走了」和「大家都断了」。
+3. 排查这类问题**不要靠读代码猜**：加一条日志、真机跑一遍，比在三个文件里
+   推断状态流转快一个数量级（同 `### 契约文档写着「requestId 回显」` 那条的教训）。
+
+判据：以后凡是出现「A 上线同时 B 下线」，先问一句**「B 下线时会不会顺手把 A 的状态位写坏」**。

@@ -1,5 +1,6 @@
 package io.github.westanke.dshcompanion.data.ws
 
+import io.github.westanke.dshcompanion.data.WorkspaceEvent
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -80,6 +81,16 @@ internal object WsClientFrame {
     const val SESSION_ARCHIVE: String = "session-archive"
     const val SESSION_CANCEL: String = "session-cancel"
 
+    /**
+     * 会话分叉。
+     *
+     * **刻意不在桥的 `ClientFrameType` 联合里**（`grep -n "fork" src/host/ws-protocol.ts` 无命中），
+     * 但 `ws-sessions.ts` 的 `handle()` 里有 `case 'fork'`，且 `ClientFrame` 声明是
+     * `interface ClientFrame { type: string; [key: string]: unknown }` —— 运行时合法，
+     * asyncapi（`docs/api/asyncapi.yaml:450,589`）也已声明。所以这里照字面量收下。
+     */
+    const val FORK: String = "fork"
+
     // —— MessagePort ——
     const val MESSAGE: String = "message"
     const val ATTACHMENT: String = "attachment"
@@ -136,6 +147,13 @@ internal object WsServerFrame {
     const val SESSION_RENAMED: String = "session-renamed"
     const val SESSION_ARCHIVED: String = "session-archived"
     const val SESSION_CANCELLED: String = "session-cancelled"
+
+    /**
+     * `fork` 的应答：`data.sessionId` 是**新**会话 id，**不含原 sessionId**。
+     *
+     * 正因为没有判别字段，[WsRequestRouter] 只能靠「同 kind 串行」把它认出来。
+     */
+    const val FORK: String = "fork"
 }
 
 /**
@@ -226,6 +244,19 @@ internal object WsFrames {
 
     /** 帧的 `data` 对象；没有或不是对象时给空对象（调用方不必层层判空）。 */
     fun dataOf(frame: JsonObject): JsonObject = frame[DATA] as? JsonObject ?: JsonObject(emptyMap())
+
+    /**
+     * 把 `event` 帧的 `data` 解成 [WorkspaceEvent]。
+     *
+     * 桥侧 `ws-handler.ts:203-208` 的构造是 `{kind:'event', data: event}`，`data` **直接就是**
+     * 那条 `WorkspaceEvent`（`{id, type, time, data}`），与 `/api/v1/events` 推的载荷同构 ——
+     * 所以同一套 listener 能同时吃两条通道。
+     *
+     * 缺 `id` / `type` 这类必填字段时抛异常，由调用方决定丢弃（不在这里吞掉：
+     * 静默丢事件比报错更难查，PITFALLS「delta 帧缺 turn/step 被静默丢弃」就是同类教训）。
+     */
+    fun decodeEvent(data: JsonObject): WorkspaceEvent =
+        json.decodeFromJsonElement(WorkspaceEvent.serializer(), data)
 
     /**
      * 构造一条带 `requestId` 的客户端请求帧。

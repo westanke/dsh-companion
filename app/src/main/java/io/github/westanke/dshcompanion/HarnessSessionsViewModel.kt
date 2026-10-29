@@ -159,7 +159,12 @@ internal fun HarnessViewModel.selectSession(id: String?) {
 
 internal fun HarnessViewModel.refreshHistory() = withClient { api ->
     val id = mutableState.value.selectedSessionId ?: return@withClient
-    val fresh = api.history(id)
+    val fresh = sessionPort().history(id)
+    // 回来时这个会话可能已经不是当前会话了（用户在等待期间切走）。
+    // 不比对就会把**别的会话**的历史写进当前状态 —— 界面上表现为
+    // 「标题是 B、内容是 A」，是这类改造最容易漏的一条（通道从 REST 换成
+    // WS 之后，请求可能更早回来，窗口只会更明显）。
+    if (mutableState.value.selectedSessionId != id) return@withClient
     val previous = mutableState.value.history
     update { copy(history = mergeRefreshedHistory(previous, fresh)) }
     // 顺手把待答问题也拉一次。这个函数只有两个调用点（切会话、顶栏那个刷新按钮），
@@ -194,7 +199,7 @@ internal fun HarnessViewModel.loadOlderHistory() = withClient { api ->
     val current = mutableState.value.history ?: return@withClient
     if (!current.hasMore) return@withClient
     val beforeSeq = current.events.minOfOrNull { it.event.seq } ?: return@withClient
-    val older = api.history(id, beforeSeq)
+    val older = sessionPort().history(id, beforeSeq)
     update {
         copy(history = current.copy(
             events = (older.events + current.events).distinctBy { it.event.seq },
@@ -332,15 +337,15 @@ internal fun HarnessViewModel.sessionFileEntry(api: DshClient, resolved: Resolve
 }
 
 internal fun HarnessViewModel.createSession(workspaceId: String, preset: String?, permission: String = "") = withClient { api ->
-    val created = api.createSession(workspaceId, preset?.takeIf(String::isNotBlank))
-    val sessions = api.sessions()
-    val history = api.history(created.id)
-    val models = api.sessionModels(created.id)
-    val commands = api.sessionCommands(created.id)
+    val createdId = sessionPort().createSession(workspaceId, preset?.takeIf(String::isNotBlank))
+    val sessions = sessionPort().sessions()
+    val history = sessionPort().history(createdId)
+    val models = api.sessionModels(createdId)
+    val commands = api.sessionCommands(createdId)
     update {
         copy(
             sessions = sessions,
-            selectedSessionId = created.id,
+            selectedSessionId = createdId,
             history = history,
             sessionModels = models,
             commands = commands,
@@ -359,7 +364,7 @@ internal fun HarnessViewModel.createSession(workspaceId: String, preset: String?
     // 与内核的创建流程，而内核本来就把权限做成**会话级命令**（`/permission`）。
     // 走命令这条路的额外好处：**与用户在会话中手动切档位是同一套机制**，
     // 不会出现「创建时定的」与「切出来的」两套语义。
-    applyPermissionPreset(created.id, permission)
+    applyPermissionPreset(createdId, permission)
 }
 
 /**
@@ -419,39 +424,47 @@ internal fun HarnessViewModel.loadWorkspacePickerDirectory(path: String) = withC
 
 internal fun HarnessViewModel.createWorkspaceAndSession(rootId: String, path: String, preset: String?, permission: String = "") = withClient { api ->
     val workspace = api.createChatWorkspace(rootId, path.trim('/'))
-    val created = api.createSession(workspace.id, preset?.takeIf(String::isNotBlank))
-    val sessions = api.sessions()
+    val createdId = sessionPort().createSession(workspace.id, preset?.takeIf(String::isNotBlank))
+    val sessions = sessionPort().sessions()
     val workspaces = api.chatWorkspaces()
+    val history = sessionPort().history(createdId)
+    val models = api.sessionModels(createdId)
+    val commands = api.sessionCommands(createdId)
     update {
         copy(
             chatWorkspaces = workspaces,
             sessions = sessions,
-            selectedSessionId = created.id,
-            history = api.history(created.id),
-            sessionModels = api.sessionModels(created.id),
-            commands = api.sessionCommands(created.id),
+            selectedSessionId = createdId,
+            history = history,
+            sessionModels = models,
+            commands = commands,
             approvalState = ApprovalUiState.None,
         )
     }
     // 与 createSession 同一个理由：创建路径不经过 selectSession，`@` 补全得自己拉。
     loadMentionEntries()
     // 权限档位：与 createSession 同一套机制（建完再切）。
-    applyPermissionPreset(created.id, permission)
+    applyPermissionPreset(createdId, permission)
 }
 
 internal fun HarnessViewModel.renameWorkspace(workspaceId: String, title: String) = withClient { api ->
     api.renameChatWorkspace(workspaceId, title)
-    update { copy(chatWorkspaces = api.chatWorkspaces(), sessions = api.sessions()) }
+    val workspaces = api.chatWorkspaces()
+    val sessions = sessionPort().sessions()
+    update { copy(chatWorkspaces = workspaces, sessions = sessions) }
 }
 
 internal fun HarnessViewModel.deleteWorkspace(workspaceId: String) = withClient { api ->
     api.deleteChatWorkspace(workspaceId)
-    update { copy(chatWorkspaces = api.chatWorkspaces(), sessions = api.sessions()) }
+    val workspaces = api.chatWorkspaces()
+    val sessions = sessionPort().sessions()
+    update { copy(chatWorkspaces = workspaces, sessions = sessions) }
 }
 
 internal fun HarnessViewModel.renameSession(sessionId: String, title: String) = withClient { api ->
-    api.renameSession(sessionId, title)
-    update { copy(sessions = api.sessions()) }
+    sessionPort().renameSession(sessionId, title)
+    val sessions = sessionPort().sessions()
+    update { copy(sessions = sessions) }
 }
 
 /**
@@ -462,14 +475,18 @@ internal fun HarnessViewModel.renameSession(sessionId: String, title: String) = 
  * event sequence`）。
  */
 internal fun HarnessViewModel.forkSession(sessionId: String, atSeq: Int? = null) = withClient { api ->
-    val forkedId = api.forkSession(sessionId, atSeq)
+    val forkedId = sessionPort().forkSession(sessionId, atSeq)
+    val sessions = sessionPort().sessions()
+    val history = sessionPort().history(forkedId)
+    val models = api.sessionModels(forkedId)
+    val commands = api.sessionCommands(forkedId)
     update {
         copy(
-            sessions = api.sessions(),
+            sessions = sessions,
             selectedSessionId = forkedId,
-            history = api.history(forkedId),
-            sessionModels = api.sessionModels(forkedId),
-            commands = api.sessionCommands(forkedId),
+            history = history,
+            sessionModels = models,
+            commands = commands,
             approvalState = ApprovalUiState.None,
             liveChat = null,
         )
@@ -486,14 +503,14 @@ internal fun HarnessViewModel.forkSession(sessionId: String, atSeq: Int? = null)
 internal fun HarnessViewModel.loadArchivedSessions() {
     if (!supportsArchiveListing(mutableState.value.bridgeCapabilities)) return
     withClient { api ->
-        val archived = api.sessions(archived = true)
+        val archived = sessionPort().sessions(archived = true)
         update { copy(archivedSessions = archived) }
     }
 }
 
 internal fun HarnessViewModel.archiveSession(sessionId: String) = withClient { api ->
-    api.archiveSession(sessionId)
-    val sessions = api.sessions()
+    sessionPort().archiveSession(sessionId)
+    val sessions = sessionPort().sessions()
     update {
         if (selectedSessionId == sessionId) {
             copy(
@@ -547,7 +564,9 @@ internal fun HarnessViewModel.sendMessage(text: String, steer: Boolean) {
             if (execution.result.kind == "error") {
                 throw DshApiException(409, "COMMAND_FAILED", execution.result.text ?: "Command failed.")
             }
-            update { copy(history = api.history(id), commands = api.sessionCommands(id)) }
+            val history = sessionPort().history(id)
+            val commands = api.sessionCommands(id)
+            update { copy(history = history, commands = commands) }
         }
         return
     }
@@ -565,7 +584,7 @@ internal fun HarnessViewModel.sendMessage(text: String, steer: Boolean) {
     update { copy(pendingAttachments = emptyList(), pendingText = "") }
     launchOperation {
         try {
-            api.sendMessage(id, parts, steer)
+            messagePort().sendMessage(id, parts, steer)
         } catch (failure: Throwable) {
             if (failure is CancellationException) throw failure
             // 把附件与文字都放回输入区；期间新加的条目按 id 去重，不重复。
@@ -610,12 +629,15 @@ internal fun HarnessViewModel.selectPermissionPreset(preset: String) = withClien
     if (execution.result.kind == "error") {
         throw DshApiException(409, "COMMAND_FAILED", execution.result.text ?: "Permission change failed.")
     }
-    update { copy(history = api.history(id), commands = api.sessionCommands(id)) }
+    val history = sessionPort().history(id)
+    val commands = api.sessionCommands(id)
+    update { copy(history = history, commands = commands) }
 }
 
 internal fun HarnessViewModel.refreshSessionModels() = withClient { api ->
     val id = mutableState.value.selectedSessionId ?: return@withClient
-    update { copy(sessionModels = api.sessionModels(id)) }
+    val models = api.sessionModels(id)
+    update { copy(sessionModels = models) }
 }
 
 internal fun HarnessViewModel.selectModel(selection: ModelSelection) = withClient { api ->
@@ -638,7 +660,7 @@ internal fun HarnessViewModel.applyCommandArgOption(option: CommandArgOption) = 
 internal fun HarnessViewModel.selectAgentPreset(agentPreset: String) = withClient { api ->
     val id = mutableState.value.selectedSessionId ?: return@withClient
     api.selectAgentPreset(id, agentPreset)
-    val sessions = api.sessions()
+    val sessions = sessionPort().sessions()
     val models = api.sessionModels(id)
     val commands = api.sessionCommands(id)
     update { copy(sessions = sessions, sessionModels = models, commands = commands) }
@@ -646,7 +668,7 @@ internal fun HarnessViewModel.selectAgentPreset(agentPreset: String) = withClien
 
 internal fun HarnessViewModel.cancelRun() = withClient { api ->
     val id = mutableState.value.selectedSessionId ?: return@withClient
-    api.cancel(id)
+    sessionPort().cancelSession(id)
     chatSessionRefreshPending = true
     scheduleChatRefresh()
 }

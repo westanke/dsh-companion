@@ -278,6 +278,12 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
     @Volatile internal var chatRefreshPending = false
     @Volatile internal var chatSessionRefreshPending = false
     @Volatile internal var liveFinalizeTarget: LiveKey? = null
+    // WS 优先改造（P2）的装配状态。实现全在 HarnessWsPortsViewModel.kt。
+    internal var wsTransport: io.github.westanke.dshcompanion.data.ws.MobileWsTransport? = null
+    internal var wsRouter: io.github.westanke.dshcompanion.data.ws.WsRequestRouter? = null
+    internal var wsEventPort: io.github.westanke.dshcompanion.data.ws.WsEventPort? = null
+    internal var wsSubscribedSessionId: String? = null
+    internal var ports: PortSet? = null
 
     init {
         // 诊断日志开关：冷启动后到用户进设置页之前，会话页可能已被点开好几轮 ——
@@ -452,213 +458,39 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         refreshPendingQuestions()
     }
 
+    /**
+     * 打开事件通道（**WS 优先，REST 兜底**，见 `HarnessWsPortsViewModel.kt`）。
+     *
+     * 语义与 P2 改造前一致：老的 SSE 流照旧由 `api.events(...)` 建立，
+     * 只是现在多了一步「先试着把 WS 挂上」。`ChannelState` 判不了 WsReady/WsDegraded 时，
+     * [reconcileEventChannel] 走的就是 `openRestEvents(api)` —— 与改造前逐字节相同。
+     *
+     * listener 主体搬到了 `HarnessWsPortsViewModel.kt` 的 [handleWorkspaceEvent]：
+     * VM 已顶到 800 行预算，而那段有 187 行，不搬塞不进来。搬迁是逐字的，未改一行逻辑。
+     */
     internal fun connectEvents(api: DshClient) {
         eventSubscription?.close()
-        eventSubscription = api.events(
-            listener = { event ->
-                val delta = event.chatDelta()
-                if (delta != null) {
-                    if (mutableState.value.selectedSessionId == delta.sessionId) {
-                        update { copy(liveChat = (liveChat ?: LiveChatState(delta.sessionId, delta.turn, delta.step)).append(delta)) }
-
-                        // 正文一律走历史那条路（页面只从历史渲染），所以每来一段增量
-                        // 都要让历史跟上，否则流式文字要等消息落盘才出现。
-                        //
-                        // 以前这里**不**刷新：正文只能靠页面里那个独立的实时区显示，
-                        // 而实时区换 step 就重置 —— 真机表现是「这一段说完，上一段没了」。
-                        // scheduleChatRefresh 自带 400ms 静默去抖 + 单飞，token 再密也只捞一次。
-                        // （旧实现是 1 秒轮询 + 每帧置位，token 流式期间等于每秒拉一次全量
-                        //  history —— 那是 v2.2.29 修掉的耗电主因，详见该函数 KDoc。）
-                        scheduleChatRefresh()
-                    }
-                } else if (event.type == "connection.ready") {
-                    // 服务端连上就自报版本与能力位。读到就存：缺关键能力时界面要**明说**，
-                    // 因为「卡片不弹」与「本来就没有待审批」在屏幕上完全一样（真踩过，见 PITFALLS）。
-                    parseBridgeCapabilities(event.data)?.let { reported ->
-                        update {
-                            copy(
-                                bridgeVersion = reported.bridgeVersion ?: bridgeVersion,
-                                bridgeCapabilities = reported.capabilities,
-                            )
-                        }
-                    }
-                } else if (event.type.startsWith("chat.")) {
-                    val sessionId = event.dataString("sessionId")
-                    // ——— 断档检测（2026-10-17）———
-                    //
-                    // WS 是「订阅之后才收得到」，REST 历史是「发请求那一刻的快照」——
-                    // 两者的时间差里发生的事件**谁都管不着**，除非客户端能自己发现「我漏了一段」。
-                    // 判据、以及「为什么重复和倒退不算断档」，见 `data/ChatSeqMonitor.kt`。
-                    //
-                    // 只对**当前会话**计数：别的会话有自己的序号序列，混在一起必然误判。
-                    val incomingSeq = event.dataInt("seq")
-                    if (incomingSeq != null && sessionId == mutableState.value.selectedSessionId) {
-                        if (seqVerdict(mutableState.value.lastEventSeq, incomingSeq) == SeqVerdict.Resync) {
-                            // 重取历史。`scheduleChatRefresh` 自带 400ms 去抖 + 单飞，
-                            // 连续跳号也只会合并成一次。
-                            chatSessionRefreshPending = true
-                            scheduleChatRefresh()
-                        }
-                        update { copy(lastEventSeq = incomingSeq) }
-                    }
-                    when (event.type) {
-                        // 订阅基线：服务端告诉我们「这条订阅从哪个持久 seq 开始接增量」。
-                        // 本地历史落后于它 ⇒「拉历史」与「订阅」之间的窗口**真漏了**事件，重取一次。
-                        "chat.session.snapshot" -> {
-                            val cursor = event.dataInt("cursor")
-                            if (cursor != null && sessionId != null) {
-                                update { copy(baselineCursor = cursor) }
-                                if (sessionId == mutableState.value.selectedSessionId) {
-                                    val localMax = mutableState.value.history?.events?.maxOfOrNull { it.event.seq }
-                                    if (baselineBehind(localMax, cursor)) {
-                                        chatSessionRefreshPending = true
-                                        scheduleChatRefresh()
-                                    }
-                                }
-                            }
-                        }
-                        // 交付物（内核 `present` 工具）：卡片数据在**历史**里，收到这条就刷新一次，
-                        // 新交付物立刻出现在会话文件卡片里。此前这个事件名客户端不认识 ——
-                        // 数据一直在历史里原样透传，只是要等下一次消息完成才顺带刷到。
-                        "chat.deliverables.presented" -> {
-                            if (sessionId == mutableState.value.selectedSessionId) {
-                                chatSessionRefreshPending = true
-                                scheduleChatRefresh()
-                            }
-                        }
-                        "chat.message.committed" -> {
-                            if (sessionId != null && sessionId == mutableState.value.selectedSessionId) {
-                                if (event.dataString("role") == "assistant") {
-                                    val turn = event.dataInt("turn")
-                                    val step = event.dataInt("step")
-                                    if (turn != null && step != null) liveFinalizeTarget = LiveKey(sessionId, turn, step)
-                                }
-                                scheduleChatRefresh()
-                            }
-                        }
-                        "chat.turn.start", "chat.turn.end", "chat.session.status" -> {
-                            chatSessionRefreshPending = true
-                            scheduleChatRefresh()
-                            // 「这一轮刚结束」= 会话已不在运行。
-                            //
-                            // 这是工具结果帧那条路的兜底：那帧只在提问还挂在前台时才会到，
-                            // agent 若在超时后很快收尾，App 可能整轮都没接住。
-                            // 在轮次结束的**那一刻**补拉一次，之后彻底停止 —— 不是轮询。
-                            if (event.type == "chat.turn.end" && sessionId != null && !isSessionRunning(sessionId)) {
-                                refreshPendingQuestions()
-                            }
-                            noteTurnBoundary(event, sessionId) // 截断提示，见同名文件
-                        }
-                        "chat.agent-preset.selected" -> {
-                            chatSessionRefreshPending = true
-                            scheduleChatRefresh()
-                            if (sessionId == mutableState.value.selectedSessionId) refreshSessionModels()
-                        }
-                        // 终局失败：限流 429、配额用尽、密钥无效、登出停止。
-                        //
-                        // 为什么必须在这里就地处理，而不是等 `chat.turn.end`：
-                        // 插件为失败发的**就是**这一帧，`chat.turn.end` 那一帧在失败时
-                        // 不再发（一个失败只有一帧）。而客户端原来只认 turn.end，
-                        // 于是「模型早就失败了」与「还在跑」在界面上完全一样 ——
-                        // 表现就是转圈等到天荒地老。
-                        //
-                        // 三件事：① 本地立即标记不在运行；② 全局错误通道；③ 拉历史收口。
-                        //
-                        // 第 1 步不能省：服务端标 not-running 与这帧到达之间有几百毫秒，
-                        // 那时「停止」还是亮的、占位符还写「运行中…」。本地先置位，等 GET 再盖
-                        // 权威数据盖一次，两头都对。
-                        "chat.turn.failed" -> {
-                            val failure = event.chatTurnFailure()
-                            if (failure != null) {
-                                if (sessionId != null) {
-                                    // 注意 update 的 receiver 就是 HarnessState，所以这里直接用
-                                    // 属性而不是 `it.` / `state.` —— 写成显式参数名会遮蔽 receiver，
-                                    // 编译直接报「Unresolved reference」。
-                                    update {
-                                        copy(
-                                            sessions = markSessionStopped(sessions, sessionId),
-                                            liveChat = if (selectedSessionId == sessionId) null else liveChat,
-                                            busySendMode = if (selectedSessionId == sessionId) BusySendMode.QUEUE else busySendMode,
-                                        )
-                                    }
-                                }
-                                if (sessionId == mutableState.value.selectedSessionId) {
-                                    // 流式缓冲清掉：失败之后留着半截文字，用户会以为
-                                    // 「它还在说，只是慢」。历史拉回来会带上完整失败行。
-                                    // 出错文案跟随界面语言：先按错误码本地化，命不中才用内核原文
-                                    //（多半是英文，但至少是信息，也方便贴给开发者）。
-                                    val localized = localizedErrorRes(failure.code)
-                                    notify(
-                                        when {
-                                            localized == null -> failure.message.ifBlank { appString(failure.titleRes) }
-                                            localized == R.string.err_request_generic -> appString(localized, failure.code.orEmpty())
-                                            else -> appString(localized)
-                                        },
-                                    )
-                                    // 挂起的提问卡片也要撤：这一轮已经结束了，
-                                    // 卡片继续挂着会让人以为问题还有效。与 WebView 页同口径。
-                                    refreshPendingQuestions()
-                                }
-                                chatSessionRefreshPending = true
-                                scheduleChatRefresh()
-                            }
-                        }
-                        "chat.approval.requested", "chat.approval.resolved" -> {
-                            chatSessionRefreshPending = true
-                            scheduleChatRefresh()
-                            if (sessionId == mutableState.value.selectedSessionId) refreshPendingApprovals()
-                        }
-                        else -> if (sessionId == mutableState.value.selectedSessionId) scheduleChatRefresh()
-                    }
-                    // 待答问题的刷新靠事件驱动，**不引定时器、不轮询**：一条相关事件一次 GET。
-                    //
-                    // `chat.session.event` 是插件给所有「非特殊」会话事件的统一降级形态
-                    //（chat-adapter.ts 的 normalizeDshEvent 末段），`tool/result` 走的正是它。
-                    // 提问超时的那一刻，内核写出一条 tool/result，App 因此收到一帧 ——
-                    // 事件已经到了，只是它没有内容、只有 eventType 与 seq。
-                    // 这里按eventType 精确挑出工具结果，不做「来一帧就拉一次」：
-                    // 一个工具调用会带好几帧无关事件，全拉就是自己造轮询。
-                    if (event.type in QUESTION_REFRESH_EVENTS || isToolResultFrame(event.type, event.data)) {
-                        refreshPendingQuestions()
-                    }
-                    // 插件为问答推的**专属帧**（经 normalizeDshEvent 末段兜成 `chat.<payloadType>`）。
-                    //
-                    // 有了它，手机端不必等「tool/result 帧」或「轮次结束」这两个间接信号：
-                    // 提问一落地就能拿到通知；电脑端答完之后卡片也能**立刻**消失。
-                    when (event.type) {
-                        "chat.userQuestions/requested" -> refreshPendingQuestions()
-                        "chat.userQuestions/answered",
-                        "chat.userQuestions/dismissed" -> {
-                            // 这两帧是「这道题已经不用答了」的确定性事实 ——
-                            // 直接摘掉，不必等一次网络往返（等 GET 只会让卡片多挂一会儿）。
-                            val callId = event.dataString("callId")
-                            if (callId != null) {
-                                update { copy(questions = removeQuestion(questions, callId)) }
-                            }
-                        }
-                    }
-                }
-                // 去抖，不是直接 loadDirectory()：一次批量改写会推来几十帧，
-                // 逐帧请求就是自己造的轮询风暴（见 directoryDebouncer 的说明）。
-                if (event.type.startsWith("file.")) directoryDebouncer.trigger()
-            },
-            connection = { connected ->
-                update { copy(eventsConnected = connected) }
-                if (connected && mutableState.value.selectedSessionId != null) {
-                    scheduleChatRefresh()
-                    refreshPendingApprovals()
-                    // 断线期间问出来的问题要靠这一下补回来。
-                    refreshPendingQuestions()
-                    refreshCommands()
-                }
-            },
-        )
+        eventSubscription = null
+        connectWsTransport(api)
+        // connectWsTransport 内部的 reconcileEventChannel 只在 WS 可用时挂流；
+        // 这里兜底保证「WS 不可用」时也一定有一条 REST 流在跑。
+        if (eventSubscription == null) {
+            eventSubscription = openRestEvents(api)
+            reconcileEventChannel()
+        }
     }
 
-    internal fun loadSnapshot(api: DshClient, device: DeviceView): HarnessState {
+    /**
+     * 拉一次完整快照。
+     *
+     * 是 `suspend` 而不是普通函数：会话列表现在经 [sessionPort] 走（WS 可用时用 `sessions` 帧），
+     * 而 Port 接口是 suspend 的。两个调用点（`refreshDashboard` 与连接建立）本来就都在
+     * 协程里、且已切到 `Dispatchers.IO`，加个 suspend 不改变任何执行上下文。
+     */
+    internal suspend fun loadSnapshot(api: DshClient, device: DeviceView): HarnessState {
         val roots = if ("files.read" in device.scopes) api.roots() else emptyList()
         val canReadChat = "chat.read" in device.scopes
-        val sessions = if (canReadChat) api.sessions() else emptyList()
+        val sessions = if (canReadChat) sessionPort(api).sessions() else emptyList()
         val chatWorkspaces = if (canReadChat) api.chatWorkspaces() else emptyList()
         val agentPresets = if (canReadChat) api.agentPresets() else emptyList()
         val canReadSettings = "settings.read" in device.scopes
@@ -713,7 +545,9 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
                 val api = client ?: break
                 val id = mutableState.value.selectedSessionId
                 if (id != null) {
-                    runCatching { withContext(Dispatchers.IO) { api.history(id) } }
+                    // 走 Port：WS 可用时用 history 帧（分页/刷新都带 beforeSeq=null，
+                    // 所以这里仍走 REST —— 首屏需要 projections，WS 帧不带）。
+                    runCatching { withContext(Dispatchers.IO) { sessionPort().history(id) } }
                         .onSuccess { history ->
                             if (mutableState.value.selectedSessionId == id) update {
                                 val clearLive = finalizeTarget != null && liveChat?.let {
@@ -732,7 +566,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
                         }
                 }
                 if (refreshSessions) {
-                    runCatching { withContext(Dispatchers.IO) { api.sessions() } }
+                    runCatching { withContext(Dispatchers.IO) { sessionPort().sessions() } }
                         .onSuccess { sessions -> update { copy(sessions = sessions) } }
                         .onFailure { error ->
                             if (error is DshApiException && error.code == "RATE_LIMITED") {
@@ -759,6 +593,8 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         chatRefreshJob?.cancel()
         directoryDebouncer.cancel()
         eventSubscription?.close()
+        // WS 传输自带退避重连协程：不关掉它会在 ViewModel 销毁后继续拨号。
+        closeWsTransport()
         // 协调层自带后台 scope 来跑阻塞式健康检查（协程取消打不断 OkHttp 的阻塞调用），
         // 不显式关闭的话，探活期间挂死的调用会一直占着 IO 线程直到 OkHttp 自身超时。
         coordinator.close()

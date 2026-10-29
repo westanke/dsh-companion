@@ -210,7 +210,7 @@ internal fun HarnessViewModel.decideApproval(approval: PendingApproval, allowOnc
         runCatching {
             withContext(Dispatchers.IO) {
                 api.decideApproval(id, approval.id, allowOnce)
-                api.pendingApprovals(id) to api.sessions()
+                api.pendingApprovals(id) to sessionPort().sessions()
             }
         }.onSuccess { (approvals, sessions) ->
             if (mutableState.value.selectedSessionId == id) {

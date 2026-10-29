@@ -243,8 +243,16 @@ internal class MobileWsTransport(
                     }
                     return
                 }
-                // requestId 认不出来 = 超时后才到的迟到应答，或别的连接的回帧。丢弃。
-                return
+                // 回显的 requestId 不在**本层**的 pending 表里 —— 不等于该丢。
+                //
+                // 本层 pending 只装 [send] 发出去的请求；P2 的 [WsRequestRouter] 另外维护
+                // 自己的一张表（它发帧走 [sendNoReply]，本层看不到）。桥侧补齐统一回显后，
+                // 路由器发出的帧会带着 requestId 回来 —— 那时在这里 `return` 就等于把
+                // 路由器的快路**永久切断**，它只能永远靠 kind 兜底。
+                //
+                // 所以落下去交给 onPush，让上层自己认领；认不出来的上层也无害（路由器
+                // 命中不到会继续走 kind 分支或丢进事件出口）。
+                // 真正的迟到应答不会因此出错：路由器同样按 requestId + kind 双重校验。
             }
 
             // 无 requestId：hello / pong / event / question-requested / approval-requested。

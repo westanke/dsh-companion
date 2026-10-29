@@ -201,3 +201,43 @@ data/ws/
 | 重连风暴 | 指数退避 + 上限 30s + 抖动；`RestOnly` 不重试 |
 | 帧积压 | 桥侧已有背压（512 帧队列、溢出丢可重建帧）；客户端侧只保留 pending map，不缓存帧 |
 | 测试翻倍 | Port 接口层做假实现，VM 层测试不区分通道；通道差异只在 `MobileWsTransportTest` 一处测 |
+
+## 7. 实施进度与 P2 真机自检清单
+
+### 7.1 进度
+
+| 阶段 | 状态 | 产物 |
+|---|---|---|
+| P0 桥侧契约 | 已完成 | `asyncapi.yaml` 的 `/ws/mobile` 通道、Kotlin SDK、`mobile-frame-contract.spec.ts` 静态对账 |
+| P1 传输层基座 | 已完成 | `data/ws/` 的 `ChannelState.kt` / `WsFrames.kt` / `MobileWsTransport.kt` / `WsPorts.kt` |
+| **P2 三域接入** | **已完成（本阶段）** | `WsRequestRouter.kt`（配对层）、`HarnessWsPortsViewModel.kt`（装配层 + 端口适配）、`SessionPort` / `MessagePort` / `EventPort` 的 WS 实现与 REST 兜底 |
+| P3 HITL/命令/模型 | 未开始 | — |
+| P4 目标写操作 | 未开始 | — |
+| P5 真机验收 + 发版 | 未开始 | 本文档 7.2 是它的输入 |
+
+### 7.2 P2 真机自检清单
+
+P2 的单元测试跑在 JVM + MockWebServer 上，**验证不了两件真机才有的事**：真实桥的 `hello` 时机，以及「老桥不回显 requestId」这一不对称。所以必须真机对真桥跑一遍。前置：`DiagLog` 需开启（`BuildConfig.DIAG_LOG` 或设置里打开），否则下面所有日志都不会出现。所有日志 tag 为 `DSH_DIAG`，类别字段统一是 `WS`，用 `adb logcat -s DSH_DIAG | grep " WS "` 过滤。
+
+| # | 步骤 | 期望的 logcat 特征 | 判据 |
+|---|---|---|---|
+| 1 | 冷启动连桥（v2.8.0） | `WS 建立 WS 传输：endpoint=https://… 先 REST 后 WS，等 hello 判决` | 出现即说明 `connectWsTransport` 跑了；**没有**这行且出现 `WS 无设备令牌，不建 WS 通道，全量走 REST` 则是没令牌，属预期的 REST-only |
+| 2 | 等 `hello` 到达 | `WS 事件通道切到 WS：已关闭 REST /api/v1/events 流` | 这行是 `ChannelState` 变 `usesWs` 的**唯一可信标志**。它出现之前的所有请求都走 REST，属预期（`_state` 初值是 `WsDown`） |
+| 3 | 切换会话 / 下拉刷新 | `WS 配对：按 kind 兜底 sessions ← sessions` 或 `… history ← history（该桥未回显 requestId）` | **这是「WS 真接管」的铁证**。v2.8.0 不回显 requestId，所以走 kind 兜底是正确行为 |
+| 4 | 发一条消息 | `WS 配对：按 kind 兜底 message ← sent（该桥未回显 requestId）` | 消息送达即说明 `content` 数组 + `locale` 的载荷被桥接受 |
+| 5 | （桥修好回显后）同 3、4 | `WS 配对：requestId 快路 sessions ← sessions` | 快路日志出现即说明自适应切到了正确路径，**无需改代码、无需配置** |
+| 6 | 断开桥（或关掉桥进程） | `WS 事件通道留在 REST：state=WsDown(reason=…)` | 事件流自动退回老 `/api/v1/events`，聊天仍能收推送 |
+| 7 | 桥恢复 | 再次出现 `WS 事件通道切到 WS` | 退避重连生效，回到 `WsReady` |
+| 8 | 用 v2.7.2（无 `/ws/mobile`）连 | `WS 事件通道留在 REST：state=RestOnly(…)` | 退化等价：此后行为与改造前逐字节一致，且**不再重试** WS |
+
+**关于「第一个走 WS 的请求是哪条」**：冷启动时 `loadSnapshot` 里的 `sessions()` 是最先发出的会话请求，但它发出时 `hello` 还没到、`ChannelState` 仍是 `WsDown`，`usesWs == false`，所以那一次**实际走 REST**。真正第一条走 WS 的是 `hello` 之后的下一次 `sessions`/`history`（分页），或者事件订阅帧 `subscribe`。这不是缺陷 —— 设计上「连上 ≠ 能用」，`MobileWsTransport.onOpen` 刻意不置 `WsReady`，必须等桥推 `hello` 并核对能力位。
+
+### 7.3 并发正确性：REST 与 WS 混跑不会互相覆盖
+
+`WsDown → WsReady` 那一刻 `reconcileEventChannel()` 会关掉 REST 事件流改订阅 WS，而此刻**可能正有一条 REST `history` 在途**。三道保护叠加，不存在「旧数据覆盖新数据」：
+
+1. `launchOperation`（`HarnessOperations.kt:51`）在调用点领 `requestGate.current` 的代际，回来时 `isCurrent` 不成立就**结果与错误一并丢弃**；`selectSession` 首行 `requestGate.invalidate()`，换会话即让所有在途请求作废。
+2. `scheduleChatRefresh` 的回填本来就比对 `selectedSessionId == id`。
+3. `refreshHistory` 在 P2 补了同样的守卫（`if (mutableState.value.selectedSessionId != id) return@withClient`）—— 原来它只靠代际，换通道后请求可能更早回来，窗口更明显，故显式补上。
+
+WS 与 REST 的响应顺序不保证（桥侧 `handleMessage` 是 `void` 调用、并发处理），所以**任何回填都必须带 sessionId 或代际判据**，不能假设「谁先发谁先回」。

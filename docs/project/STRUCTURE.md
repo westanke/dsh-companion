@@ -126,7 +126,7 @@ dsh-companion/
 | 分组 | 文件 | 职责 |
 | --- | --- | --- |
 | 网络边界 | `DshClient.kt` | **唯一网络边界**：bridge REST 强类型客户端 + SSE 订阅 |
-| WS 传输 | `ws/ChannelState.kt` / `ws/WsFrames.kt` / `ws/MobileWsTransport.kt` / `ws/WsPorts.kt` | `/ws/mobile` 基座：状态机判据、帧编解码、requestId 关联与退避重连、三域端口 |
+| WS 传输 | `ws/ChannelState.kt` / `ws/WsFrames.kt` / `ws/MobileWsTransport.kt` / `ws/WsRequestRouter.kt` / `ws/WsPorts.kt` | `/ws/mobile` 基座：状态机判据、帧编解码、退避重连、请求配对（requestId 快路 + 按 kind 兜底）、三域端口与 REST 兜底 |
 | BFF 扩展 | `DshClientBff.kt` | 分块上传 / 定时任务 / 语音的 `/api/v1` 端点，复用 `DshClient` 的鉴权与客户端 |
 | BFF 模型 | `BffModels.kt` | 三组新端点的响应/请求模型与上限常量（块大小、阈值、转写超时） |
 | 协议辅助 | `ChunkPlan.kt` / `CronHint.kt` / `WavHeader.kt` | 分块计划与切块、cron 表达式人话解析、PCM16 → WAV 封装 |
@@ -179,7 +179,8 @@ dsh-companion/
 | `data/DshClient.kt` | ≈800 行 | **全部网络行为**；改它要同步 INTERFACES 与回归用例 |
 | `ui/chat/ChatDetail.kt` | ≈790 行 | 会话页骨架与挂载顺序（已贴 800 预算） |
 | `ui/ChatScreen.kt` | ≈360 行 | 窄/宽屏布局选择与会话页容器 |
-| `HarnessViewModel.kt` | ≈770 行 | 全 App 状态与跨域基础设施 |
+| `HarnessViewModel.kt` | ≈625 行 | 全 App 状态与跨域基础设施 |
+| `HarnessWsPortsViewModel.kt` | ≈570 行 | WS 装配层：transport 生命周期、端口自适应选路、事件通道收敛 |
 | `HarnessSessionsViewModel.kt` | ≈620 行 | 会话域全部动作 |
 | `data/Models.kt` | ≈580 行 | 大量响应模型；改字段会牵动映射与测试 |
 | `web/ChatWebBridge.kt` | ≈360 行 | WebView 兜底路径的全部桥行为 |
@@ -254,6 +255,7 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessSpeechViewModel.kt` | file | 语音输入域：目录、转写、取消与重试 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessTruncationViewModel.kt` | file | 一轮边界事件：落「回答被截断」提示或清掉上一轮的 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessViewModel.kt` | file | 唯一 ViewModel：持有 HarnessState 与跨域共用基础设施 |
+| `app/src/main/java/io/github/westanke/dshcompanion/HarnessWsPortsViewModel.kt` | file | WS 装配层：transport 生命周期、三端口的自适应选路（WS 优先/REST 兜底）、事件通道收敛与 listener 主体 |
 | `app/src/main/java/io/github/westanke/dshcompanion/MainActivity.kt` | file | 应用入口 Activity（Compose 宿主、生命周期、Intent 处理） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/AndroidConnectionStorage.kt` | file | KeyValueStore 的 SharedPreferences 落地（存密文） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/AppPreferences.kt` | file | 轻量应用偏好（明文，丢只影响一次点击） |
@@ -307,7 +309,8 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/ChannelState.kt` | file | 通道状态机（WsReady/WsDegraded/WsDown/RestOnly）与三条降级判据纯函数 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsFrames.kt` | file | `/ws/mobile` 帧编解码：子协议、帧类型常量、hello 解析、requestId 取值 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/MobileWsTransport.kt` | file | WS 传输层：建连鉴权、requestId 关联、超时、退避重连、StateFlow<ChannelState> |
-| `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsPorts.kt` | file | 三个高频域的端口接口（Session/Message/Event）与骨架实现 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsPorts.kt` | file | 三个高频域的端口接口（Session/Message/Event）与 WS / REST 两套实现 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsRequestRouter.kt` | file | WS 请求配对层：requestId 快路 + 按响应 kind 兜底、同 kind 串行、error 归属、超时只失败本次 |
 | `app/src/main/java/io/github/westanke/dshcompanion/debug/DiagLog.kt` | file | 诊断日志单一出口（关了就什么都不做） |
 | `app/src/main/java/io/github/westanke/dshcompanion/debug/DiagProbe.kt` | file | 诊断探针浮层（可拖动，收起成小条） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/App.kt` | file | 应用外壳：主导航与页面切换 |

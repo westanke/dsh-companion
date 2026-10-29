@@ -389,7 +389,7 @@ internal fun HarnessViewModel.loadAttachmentImage(attachmentId: String) {
                 if (handoffPath != null) {
                     readHandoffImage(api, handoffPath)
                 } else {
-                    api.readAttachment(sessionId.orEmpty(), attachmentId)
+                    messagePort().attachment(sessionId.orEmpty(), attachmentId)
                 }
             }
         }
