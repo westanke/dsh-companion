@@ -1062,3 +1062,27 @@ GFM 允许这种紧凑写法，**这颗解析器比 GitHub 更严格**。
 
 判据：以后遇到「加载更早之后空白」，先看 `grep SCROLL files/diag.log` 里的
 `totalItemsCount` 有没有回退，再看 `history.events` 的条数，别先怀疑渲染。
+
+### 建议面板硬截 N 条又不可滚：第 N+1 条之后的命令既看不见也够不着
+
+真机实测（2026-10-29，用户报「输入 `/` 命令不能上滑，其他的命令无法看见」）：
+打一个 `/` 只列出 `/acp` `/acp-cache` `/export` `/feedback` `/goal` 五条，
+而桥上 `GET /api/v1/chat/sessions/{id}/commands` 实际返回 **9 条** ——
+`/mcp` `/permission` `/plan` `/tunnel` 四条凭空消失，面板又不能滑，
+用户唯一的补救是「猜出命令名再手敲」，等于把命令的发现性彻底废掉。
+
+根因是两处叠加，任一处单独存在都不会这么糟：
+`ChatSuggestions.kt` 的 `commandSuggestions()` 末尾写着 `.take(5)`（**数据层截断**），
+而 `CommandSuggestions` 的选项列表是普通 `Column` + `forEach`（**没有滚动容器**）。
+截断本身不算错——`MentionSuggestions` 当年也截 8 条——但它早就改成了
+`LazyColumn(Modifier.heightIn(max = 264.dp))` 并在注释里写明「列表已经可滚动，就不该再硬截」，
+命令面板**漏做了同一件事**，于是「截断」从优化变成了唯一的出口。
+
+修法：`commandSuggestions()` 删掉 `.take(5)`；`CommandSuggestions` 的 `forEach`
+换成 `LazyColumn(Modifier.heightIn(max = 264.dp)) { items(suggestions) { ... } }`，
+与 `MentionSuggestions` 同一套做法。6 个单测在 `CommandSuggestionsTest`
+（第一条就叫 `doesNotTruncateWhenTheHostSendsMoreThanFiveCommands`，钉住「9 条全出」）。
+
+判据：以后凡是「列表条数由宿主决定」的面板，**先看它能不能滚，再看它截不截**。
+两者同时为「不能 / 截」，后面的条目就是永久不可达；只截不滚比只滚不截更危险，
+因为屏幕上完全看不出少了东西——用户只会以为自己记错了命令名。

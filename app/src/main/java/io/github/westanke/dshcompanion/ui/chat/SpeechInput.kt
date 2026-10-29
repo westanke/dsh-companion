@@ -194,7 +194,14 @@ internal fun SpeechInputButton(
         )
     }
 
-    val enabled = available || transcribing || recording
+    // 「不可用」也必须能点：下面 `onClick` 专门有一条 `!available -> notify(unavailableText)`，
+    // 文案还分了「有原因」和「没原因」两种 —— 只要 `enabled` 不含它，这条分支就是死代码。
+    // 真机实测（v2.2.57，内核未注入语音服务，目录回 available=false）正是如此：
+    // 图标灰着、点下去毫无反应，用户只能猜是自己没给权限还是功能坏了。
+    // 灰是**视觉**信号，不该同时掐掉唯一的解释入口。
+    // `catalog == null`（目录请求还在路上）仍然不可点：那一刻还不知道能不能录，
+    // 点下去只会给出「不可用」这种误导性提示。
+    val enabled = available || transcribing || recording || catalog != null
     IconButton(
         onClick = {
             when {

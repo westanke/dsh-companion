@@ -182,7 +182,7 @@ web/           ← WebView 容器（chat.html 兜底路径）
 
 | 层 | 命令 | 说明 |
 |---|---|---|
-| 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 75 类 / 711 用例（随代码变化，勿当常量） |
+| 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 76 类 / 717 用例（随代码变化，勿当常量） |
 | 文档 | `scripts/build.sh docsCheck` | 10 文档 / ROADMAP 任务 / STATUS 引用 / 根 README 双站 / 目录与接口锚点双向 |
 | 真机 | 人工 | **单测绿 ≠ 行为对**。涉及手势、键盘、WebView、耗电、断流的一律要真机确认 |
 
@@ -258,6 +258,7 @@ web/           ← WebView 容器（chat.html 兜底路径）
 - `设置页「能看不能存」：配对默认没有 settings.write`
 - `空助手消息把过程组劈成几十个组头`
 - `刷新历史把「加载更早」的成果抹掉，屏幕上只剩一片空白`
+- `建议面板硬截 N 条又不可滚：第 N+1 条之后的命令既看不见也够不着`
 
 > 新坑位：名字加进上面清单 + 原文写进 `PITFALLS.md` 并补 `### 同名` 锚点。
 

@@ -48,7 +48,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -370,7 +369,12 @@ internal fun commandSuggestions(
 ): List<CommandDescriptor> {
     val query = value.removePrefix("/")
     return if (value.startsWith("/") && query.none { it.isWhitespace() }) {
-        commands.filter { it.name.startsWith(query, ignoreCase = true) }.take(5)
+        // 不在这里截断：面板本身可滚动（见下方 LazyColumn 的 `heightIn(max = ...)`），
+        // 硬截 N 条会让第 N+1 条之后的命令**既看不见也够不着**。
+        // 真机实测（v2.2.57，桥侧 9 条命令）：打一个 `/` 只列出前 5 条，
+        // `permission` / `plan` / `tunnel` / `mcp` 全被吞掉，而面板又不可滑 ——
+        // 用户唯一的补救办法是「猜出命令名再手敲」，等于把发现性彻底废掉。
+        commands.filter { it.name.startsWith(query, ignoreCase = true) }
     } else {
         emptyList()
     }
@@ -398,28 +402,38 @@ internal fun CommandSuggestions(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelMedium,
                 )
-                suggestions.forEach { command ->
-                    val supportingText = localizedCommandDescription(command) ?: command.description.ifBlank {
-                        command.input?.hint?.let { stringResource(R.string.command_input_hint, it) }
-                            ?: stringResource(R.string.command_input_hint, "")
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
-                            .clickable { onSelect("/${command.name} ") }
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Icon(Icons.Outlined.Code, null, Modifier.size(19.dp), tint = MaterialTheme.colorScheme.secondary)
-                        Column(Modifier.weight(1f)) {
-                            Text("/${command.name}", style = MaterialTheme.typography.labelLarge)
-                            Text(
-                                supportingText,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodySmall,
+                // 命令条数由宿主决定（本机实测 9 条），面板必须自己能滚：
+                // 限高 + `LazyColumn` 与 `MentionSuggestions` 同一套做法，
+                // 免得命令一多就把输入区顶出屏幕，也免得后面的命令永远够不着。
+                LazyColumn(Modifier.heightIn(max = 264.dp)) {
+                    items(suggestions) { command ->
+                        val supportingText = localizedCommandDescription(command) ?: command.description.ifBlank {
+                            command.input?.hint?.let { stringResource(R.string.command_input_hint, it) }
+                                ?: stringResource(R.string.command_input_hint, "")
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                .clickable { onSelect("/${command.name} ") }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Icon(
+                                Icons.Outlined.Code,
+                                null,
+                                Modifier.size(19.dp),
+                                tint = MaterialTheme.colorScheme.secondary,
                             )
+                            Column(Modifier.weight(1f)) {
+                                Text("/${command.name}", style = MaterialTheme.typography.labelLarge)
+                                Text(
+                                    supportingText,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
                         }
                     }
                 }
