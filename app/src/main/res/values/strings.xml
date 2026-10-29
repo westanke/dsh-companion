@@ -132,6 +132,32 @@
     <string name="stats_section_goal">目标</string>
     <string name="stats_goal_phase">阶段</string>
     <string name="stats_goal_rounds">轮次上限</string>
+    <!-- 目标写操作（P4）：四个动作、编辑/清除对话框、四种「写不了」的说明 -->
+    <string name="goal_action_pause">暂停</string>
+    <string name="goal_action_resume">恢复</string>
+    <string name="goal_action_edit">编辑</string>
+    <string name="goal_action_clear">清除</string>
+    <string name="goal_unsupported_inline">这个内核不支持目标管理，点按钮会说明原因。</string>
+    <string name="goal_edit_title">编辑目标</string>
+    <string name="goal_edit_objective">目标内容</string>
+    <string name="goal_edit_rounds">轮次上限</string>
+    <string name="goal_edit_rounds_hint">留空 = 不改；只能填正整数</string>
+    <string name="goal_edit_rounds_invalid">轮次上限必须是正整数</string>
+    <string name="goal_edit_need_change">目标内容与轮次上限至少要改一项</string>
+    <string name="goal_clear_title">清除目标</string>
+    <string name="goal_clear_body">目标「%1$s」会被清除，此操作不能撤销。</string>
+    <string name="goal_clear_confirm">清除</string>
+    <string name="goal_failure_unsupported_title">这个内核不支持目标管理</string>
+    <string name="goal_failure_unsupported_body">当前连接的内核没有 goals 服务（通常是内核版本较旧）。目标的查看不受影响，但编辑、暂停、恢复、清除发不出去；升级内核后就有。</string>
+    <string name="goal_failure_channel_title">目标管理需要 WebSocket 通道</string>
+    <string name="goal_failure_channel_body">当前连接还没有建立 WebSocket 通道，或者刚刚断开。目标的查看不受影响；通道恢复后可以重试。</string>
+    <string name="goal_failure_stale_title">目标已被别处改动</string>
+    <string name="goal_failure_stale_body">这个目标在别处改过了，刚才那次修改按旧版本号被内核拒绝。已经重新读回最新目标（rev %1$s），要按最新版本再试一次吗？</string>
+    <string name="goal_failure_stale_retry">按最新版本重试</string>
+    <string name="goal_failure_ref_title">读不到目标的版本号</string>
+    <string name="goal_failure_ref_body">这个目标的投影里没有 id 或正整数 revision，无法安全执行修改。已经顺手刷新一次历史；如果还是这样，请等内核推送新投影后再试。</string>
+    <string name="goal_failure_other_title">目标操作失败</string>
+    <string name="goal_failure_other_body">没有拿到具体原因。</string>
     <string name="stats_section_kernel">内核统计</string>
     <string name="stats_kernel_steps">步骤</string>
     <string name="stats_kernel_llm">模型耗时</string>
@@ -596,6 +622,7 @@
     <string name="err_file_changed">文件在别处被改过，重新加载再试</string>
     <string name="err_no_root_selected">请先选择一个授权根目录</string>
     <string name="err_session_missing">找不到这个会话</string>
+    <string name="err_session_forbidden">这个会话不在已授权的目录里，桥拒绝了这次操作</string>
     <string name="err_workspace_missing">找不到这个工作区</string>
     <string name="err_workspace_outside_root">这个工作区不在已授权的目录里</string>
     <string name="err_title_invalid">这个名字不合法</string>

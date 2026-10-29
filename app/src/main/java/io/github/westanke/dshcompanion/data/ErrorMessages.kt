@@ -67,6 +67,8 @@ fun localizedErrorRes(code: String?): Int? = when (normalizeErrorCode(code)) {
 
     // ———— 会话 · 聊天 ————
     "SESSION_NOT_FOUND" -> R.string.err_session_missing
+    // 桥侧 WS 写帧（P4 目标写操作）对未授权会话回这个码，见 ws-goals.ts 的 forwardError。
+    "SESSION_FORBIDDEN" -> R.string.err_session_forbidden
     "WORKSPACE_NOT_FOUND" -> R.string.err_workspace_missing
     "SESSION_FORK_OUTSIDE_ROOT", "WORKSPACE_OUTSIDE_ROOT" -> R.string.err_workspace_outside_root
     "SESSION_TITLE_INVALID", "WORKSPACE_TITLE_INVALID" -> R.string.err_title_invalid

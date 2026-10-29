@@ -785,7 +785,7 @@ internal fun ChatDetail(
         }
     }
     if (modelSheet) ModelSheet(state, viewModel) { modelSheet = false }
-    if (statsSheet) ChatStatsSheet(state) { statsSheet = false }
+    if (statsSheet) ChatStatsSheet(state, viewModel) { statsSheet = false }
     if (trajectorySheet) ChatTrajectorySheet(state) { trajectorySheet = false }
     if (jobsSheet) ChatJobsSheet(state, viewModel) { jobsSheet = false }
     if (filesSheet) {

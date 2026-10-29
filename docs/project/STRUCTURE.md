@@ -241,9 +241,11 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessAttachmentsViewModel.kt` | file | 附件域：待发附件与历史图片按需取回 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessConnectionViewModel.kt` | file | 连接域：多主机/多地址配对、导入、探活选路与断开 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessDiagViewModel.kt` | file | 把偏好里的开关同步给 DiagLog |
+| `app/src/main/java/io/github/westanke/dshcompanion/HarnessDomainPortsViewModel.kt` | file | P3 三域（HITL / 命令 / 模型）的装配层：DomainPorts、端口取用、读/写两条回落判据 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessErrorText.kt` | file | 失败调用 → 用户可读句子的三档降级 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessEventRules.kt` | file | 事件帧与输入行的纯判定（不碰 Android / 网络） |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessFilesViewModel.kt` | file | 文件域：授权根、浏览分页、读写增删移、上传下载、回收站与编解码 |
+| `app/src/main/java/io/github/westanke/dshcompanion/HarnessGoalPortViewModel.kt` | file | 目标写操作域：四帧装配、ref 取用、按主机记住「内核不支持」与就地失败态 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessInteractionsViewModel.kt` | file | 交互域：工具审批与内核提问的拉取、提交与决定 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessJobsViewModel.kt` | file | 后台任务面板的动作集 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessModels.kt` | file | UI 状态（HarnessState）与跨层数据载体 |
@@ -307,8 +309,10 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/data/Trajectory.kt` | file | 轨迹页数据：历史按轮次分组的节点 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/UpdateChecker.kt` | file | 应用内更新检查：渠道分流、下载、SHA256 校验、调起安装器 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/ChannelState.kt` | file | 通道状态机（WsReady/WsDegraded/WsDown/RestOnly）与三条降级判据纯函数 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/ws/GoalPort.kt` | file | 目标写端口（goal-edit/pause/resume/clear）：compare-and-set 的 ref 传递、不可用与 revision 过期判定 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsFrames.kt` | file | `/ws/mobile` 帧编解码：子协议、帧类型常量、hello 解析、requestId 取值 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/MobileWsTransport.kt` | file | WS 传输层：建连鉴权、requestId 关联、超时、退避重连、StateFlow<ChannelState> |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsDomainPorts.kt` | file | P3 三域的端口接口（Hitl/Command/Model）与 WS / REST 两套实现 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsPorts.kt` | file | 三个高频域的端口接口（Session/Message/Event）与 WS / REST 两套实现 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsRequestRouter.kt` | file | WS 请求配对层：requestId 快路 + 按响应 kind 兜底、同 kind 串行、error 归属、超时只失败本次 |
 | `app/src/main/java/io/github/westanke/dshcompanion/debug/DiagLog.kt` | file | 诊断日志单一出口（关了就什么都不做） |

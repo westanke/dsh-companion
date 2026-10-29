@@ -129,6 +129,32 @@
     <string name="stats_section_goal">Goal</string>
     <string name="stats_goal_phase">Phase</string>
     <string name="stats_goal_rounds">Round limit</string>
+    <!-- Goal write operations (P4): four actions, edit/clear dialogs, four "cannot write" explanations -->
+    <string name="goal_action_pause">Pause</string>
+    <string name="goal_action_resume">Resume</string>
+    <string name="goal_action_edit">Edit</string>
+    <string name="goal_action_clear">Clear</string>
+    <string name="goal_unsupported_inline">This kernel cannot manage goals — tapping a button explains why.</string>
+    <string name="goal_edit_title">Edit goal</string>
+    <string name="goal_edit_objective">Objective</string>
+    <string name="goal_edit_rounds">Round limit</string>
+    <string name="goal_edit_rounds_hint">Empty = keep as is; positive whole numbers only</string>
+    <string name="goal_edit_rounds_invalid">The round limit must be a positive whole number</string>
+    <string name="goal_edit_need_change">Change either the objective or the round limit</string>
+    <string name="goal_clear_title">Clear goal</string>
+    <string name="goal_clear_body">The goal "%1$s" will be cleared. This cannot be undone.</string>
+    <string name="goal_clear_confirm">Clear</string>
+    <string name="goal_failure_unsupported_title">This kernel cannot manage goals</string>
+    <string name="goal_failure_unsupported_body">The connected kernel has no goals service (usually an older kernel). Viewing the goal still works, but edit, pause, resume and clear cannot be sent. Upgrading the kernel enables them.</string>
+    <string name="goal_failure_channel_title">Goal management needs the WebSocket channel</string>
+    <string name="goal_failure_channel_body">The WebSocket channel is not established yet, or it just dropped. Viewing the goal still works; retry once the channel is back.</string>
+    <string name="goal_failure_stale_title">The goal changed elsewhere</string>
+    <string name="goal_failure_stale_body">This goal was modified somewhere else, so the change was rejected against the old revision. The latest goal has been re-read (rev %1$s). Try again with the latest revision?</string>
+    <string name="goal_failure_stale_retry">Retry with the latest revision</string>
+    <string name="goal_failure_ref_title">Cannot read the goal revision</string>
+    <string name="goal_failure_ref_body">The projection for this goal has no id or positive revision, so it cannot be modified safely. History was refreshed once; if it persists, wait for the kernel to push a fresh projection.</string>
+    <string name="goal_failure_other_title">Goal action failed</string>
+    <string name="goal_failure_other_body">No detail was returned.</string>
     <string name="stats_section_kernel">Kernel stats</string>
     <string name="stats_kernel_steps">Steps</string>
     <string name="stats_kernel_llm">LLM time</string>
@@ -588,6 +614,7 @@
     <string name="err_file_changed">The file changed elsewhere — reload and try again</string>
     <string name="err_no_root_selected">Select an authorized root folder first</string>
     <string name="err_session_missing">That conversation no longer exists</string>
+    <string name="err_session_forbidden">That conversation is outside the authorized folders, so the bridge rejected the operation</string>
     <string name="err_workspace_missing">That workspace no longer exists</string>
     <string name="err_workspace_outside_root">That workspace is outside the authorized folders</string>
     <string name="err_title_invalid">That name is not valid</string>

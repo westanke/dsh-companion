@@ -233,7 +233,10 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `class WsRequestRouter(...)` | `data/ws/WsRequestRouter.kt` | 请求配对层：requestId 快路 + 按响应 kind 兜底、同 kind 串行、`error` 按 `requestType` 归属、超时只失败本次不掀连接 |
 | `class MobileWsTransport(...)` | `data/ws/MobileWsTransport.kt` | 建连鉴权、requestId 关联、超时、退避重连、`StateFlow<ChannelState>` |
 | `interface SessionPort` / `MessagePort` / `EventPort` | `data/ws/WsPorts.kt` | 三个高频域端口；每域两套实现（`Ws*` 走 `/ws/mobile`、`Rest*` 走 `DshClient`） |
+| `interface HitlPort` / `CommandPort` / `ModelPort` | `data/ws/WsDomainPorts.kt` | P3 三域端口（审批决定、提问答复、命令清单与执行、会话模型与切模型）；同样每域两套实现 |
+| `class WsHitlPort` / `WsCommandPort` / `WsModelPort` | `data/ws/WsDomainPorts.kt` | WS 实现：`select-model` 的应答 kind 是 `sent`，靠 `data.type == "select-model"` 与发消息的确认互斥 |
 | `class AdaptiveSessionPort` / `AdaptiveMessagePort` | `HarnessWsPortsViewModel.kt` | 按 `ChannelState` 选通道；读操作任何 WS 失败都回落，写操作只在「帧没发出去」时回落 |
+| `class AdaptiveHitlPort` / `AdaptiveCommandPort` / `AdaptiveModelPort` | `HarnessDomainPortsViewModel.kt` | P3 三域的自适应选路；与 P2 共用 `isFrameNeverSent` / `isWsTransportFailure` 判据，不另写一份 |
 | `fun HarnessViewModel.reconcileEventChannel()` | `HarnessWsPortsViewModel.kt` | 事件通道收敛：WS 可用就关 SSE 改订阅帧，否则走 `openRestEvents` |
 | `fun HarnessViewModel.handleWorkspaceEvent(event)` | `HarnessWsPortsViewModel.kt` | 事件 listener 主体（两条通道共用，逐字搬自原 `connectEvents`） |
 
@@ -379,6 +382,11 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `fun loadSpeechCatalog` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessSpeechViewModel.kt` | function |
 | `fun transcribeSpeech` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessSpeechViewModel.kt` | function |
 | `fun cancelSpeechTranscription` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessSpeechViewModel.kt` | function |
+| `fun goalPort` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessGoalPortViewModel.kt` | function |
+| `fun requestGoalEdit` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessGoalPortViewModel.kt` | function |
+| `fun requestGoalPause` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessGoalPortViewModel.kt` | function |
+| `fun requestGoalClear` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessGoalPortViewModel.kt` | function |
+| `data class GoalActionState` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessGoalPortViewModel.kt` | class |
 | `fun ScheduleSheet` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ScheduleSheet.kt` | function |
 | `fun SpeechInputButton` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SpeechInput.kt` | function |
 | `fun SpeechStatusBar` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SpeechInput.kt` | function |
@@ -409,17 +417,32 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `fun decideAfterHello` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/ChannelState.kt` | function |
 | `fun isDefinitiveUpgradeRejection` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/ChannelState.kt` | function |
 | `fun isProtocolRejected` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/ChannelState.kt` | function |
+| `interface GoalPort` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/GoalPort.kt` | interface |
+| `data class GoalRef` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/GoalPort.kt` | class |
+| `data class GoalAck` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/GoalPort.kt` | class |
+| `fun isStaleRevisionError` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/GoalPort.kt` | function |
 | `object WsSubprotocol` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsFrames.kt` | object |
 | `object WsFrames` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsFrames.kt` | object |
 | `class MobileWsTransport` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/MobileWsTransport.kt` | class |
 | `interface SessionPort` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsPorts.kt` | interface |
 | `interface MessagePort` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsPorts.kt` | interface |
 | `interface EventPort` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsPorts.kt` | interface |
+| `interface HitlPort` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsDomainPorts.kt` | interface |
+| `interface CommandPort` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsDomainPorts.kt` | interface |
+| `interface ModelPort` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsDomainPorts.kt` | interface |
+| `class WsHitlPort` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsDomainPorts.kt` | class |
+| `class WsCommandPort` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsDomainPorts.kt` | class |
+| `class WsModelPort` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsDomainPorts.kt` | class |
 | `class WsRequestRouter` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsRequestRouter.kt` | class |
 | `class AdaptiveSessionPort` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessWsPortsViewModel.kt` | class |
 | `class AdaptiveMessagePort` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessWsPortsViewModel.kt` | class |
 | `fun reconcileEventChannel` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessWsPortsViewModel.kt` | function |
 | `fun handleWorkspaceEvent` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessWsPortsViewModel.kt` | function |
+| `class DomainPorts` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessDomainPortsViewModel.kt` | class |
+| `fun buildDomainPorts` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessDomainPortsViewModel.kt` | function |
+| `class AdaptiveHitlPort` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessDomainPortsViewModel.kt` | class |
+| `class AdaptiveCommandPort` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessDomainPortsViewModel.kt` | class |
+| `class AdaptiveModelPort` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessDomainPortsViewModel.kt` | class |
 | `data class BridgeCapabilities` | `app/src/main/java/io/github/westanke/dshcompanion/data/BridgeCapabilities.kt` | class |
 | `fun parseBridgeCapabilities` | `app/src/main/java/io/github/westanke/dshcompanion/data/BridgeCapabilities.kt` | function |
 | `fun missingRequiredCapabilities` | `app/src/main/java/io/github/westanke/dshcompanion/data/BridgeCapabilities.kt` | function |

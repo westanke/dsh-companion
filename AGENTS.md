@@ -182,7 +182,7 @@ web/           ← WebView 容器（chat.html 兜底路径）
 
 | 层 | 命令 | 说明 |
 |---|---|---|
-| 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 80 类 / 795 用例（随代码变化，勿当常量） |
+| 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 84 类 / 840 用例（随代码变化，勿当常量） |
 | 文档 | `scripts/build.sh docsCheck` | 10 文档 / ROADMAP 任务 / STATUS 引用 / 根 README 双站 / 目录与接口锚点双向 |
 | 真机 | 人工 | **单测绿 ≠ 行为对**。涉及手势、键盘、WebView、耗电、断流的一律要真机确认 |
 
@@ -262,6 +262,7 @@ web/           ← WebView 容器（chat.html 兜底路径）
 - `WebSocket 断连只挂 onClosed：桥重启后连接永远「还在」`
 - `契约文档写着「requestId 回显」，实测一半的帧不回显`
 - `两个事件通道交接时，旧通道的「告别」会把新通道的状态改回断开`
+- `整份状态重建只填服务端字段，其余五十多个字段被打回默认值`
 
 > 新坑位：名字加进上面清单 + 原文写进 `PITFALLS.md` 并补 `### 同名` 锚点。
 

@@ -97,6 +97,10 @@ import kotlinx.serialization.json.intOrNull
  *
  * 拉取**只对当前选中的会话**发一次 GET，绝不遍历会话列表、也不做后台轮询 ——
  * 插件的 `resolveAgent` 是「resolve **or resume**」，对冷会话调会把那边已经停下的 Agent 拉活。
+ *
+ * **这一条永远走 REST**，不是漏改：桥的 WS 侧没有「列待审批」的帧（`ws-hitl.ts` 只有
+ * `approval-response` / `question-answer` / `question-cancel` 三条写帧），WS-FIRST 的
+ * P3 范围里也没有要加它的意思。同理见 [refreshPendingQuestions]。
  */
 internal fun HarnessViewModel.refreshPendingApprovals() {
     val api = client ?: return
@@ -127,6 +131,8 @@ internal fun HarnessViewModel.refreshPendingApprovals() {
  * 失败**刻意静默**：这条路会挂在全轮的 turn 事件上，插件版本旧（404）或一次网络抖
  * 都会失败；把错误塞进 snackbar 就等于每轮弹一次。列表也**保留原样**不清空 ——
  * 已经显示出来的卡片不该因为一次刷新失败就消失（清空只在换会话时发生）。
+ *
+ * **这一条永远走 REST**（理由同 [refreshPendingApprovals]：桥没有列待回答的帧）。
  */
 internal fun HarnessViewModel.refreshPendingQuestions() {
     val api = client ?: return
@@ -148,14 +154,18 @@ internal fun HarnessViewModel.refreshPendingQuestions() {
  * 已经答过的 callId 也不再发；插件的 409 是最后一道防线，但不该让用户点到那一步。
  */
 internal fun HarnessViewModel.answerQuestions(callId: String, answers: List<QuestionAnswer>) {
-    val api = client ?: return
+    // 这里只当「有没有活动连接」的闸：真正发请求的是 hitlPort()（WS 优先，REST 兜底）。
+    if (client == null) return
     val id = mutableState.value.selectedSessionId ?: return
     if (mutableState.value.answeringCallId != null) return
     if (callId in mutableState.value.answeredCallIds) return
     viewModelScope.launch {
         update { copy(answeringCallId = callId, error = null) }
         val result = runCatching {
-            withContext(Dispatchers.IO) { api.answerQuestions(id, callId, answers) }
+            // 写操作走 HitlPort：WS 优先（`question-answer`），只在帧没发出去时回落 REST。
+            // 桥的 accepted:false + reason 会被端口翻成 QUESTION_* 码，所以下面
+            // describeAnswerFailure 的分支一条都不用改。
+            hitlPort().answerQuestions(id, callId, answers)
         }
         if (mutableState.value.selectedSessionId != id) return@launch
         result
@@ -208,10 +218,10 @@ internal fun HarnessViewModel.decideApproval(approval: PendingApproval, allowOnc
     viewModelScope.launch {
         update { copy(approvalState = ApprovalUiState.Deciding(approval, items), error = null) }
         runCatching {
-            withContext(Dispatchers.IO) {
-                api.decideApproval(id, approval.id, allowOnce)
-                api.pendingApprovals(id) to sessionPort().sessions()
-            }
+            // 审批决定本身走 HitlPort（`approval-response`）；随后的两笔刷新保持原样 ——
+            // 待审批清单在桥的 WS 侧**没有**对应的帧（ws-hitl.ts 只有写帧），而会话列表本来就走 SessionPort。
+            hitlPort().decideApproval(id, approval.id, allowOnce)
+            withContext(Dispatchers.IO) { api.pendingApprovals(id) } to sessionPort().sessions()
         }.onSuccess { (approvals, sessions) ->
             if (mutableState.value.selectedSessionId == id) {
                 update { copy(approvalState = approvals.toApprovalState(), sessions = sessions) }

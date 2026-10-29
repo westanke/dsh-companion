@@ -412,6 +412,8 @@ data class HarnessState(
     val schedulePanel: SchedulePanelState? = null,
     /** 官方语音输入（目录 + 转写状态）。 */
     val speech: SpeechState = SpeechState(),
+    /** 目标写操作（P4）：正在进行的动作、就地失败态与"这个内核不支持"的主机级记忆。 */
+    val goalAction: GoalActionState = GoalActionState(),
     /**
      * 输入框上方是否**开着补全面板**（`@` 文件补全，或 `/` 命令补全）。
      *

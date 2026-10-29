@@ -15,7 +15,7 @@ import kotlinx.serialization.json.put
  * `/ws/mobile` 的线路帧常量与编解码（`docs/project/WS-FIRST-DESIGN.md` §3.1/§3.3）。
  *
  * 全集在桥侧 `src/host/ws-protocol.ts:70-160`：客户端 `type` 约 70 个、服务端 `kind` 约 90 个。
- * **这里只收 P1/P2 用得到的**，其余在 [PENDING_CLIENT_FRAMES] / [PENDING_SERVER_FRAMES] 里
+ * **这里只收 P1/P2/P3 用得到的**，其余在 [PENDING_CLIENT_FRAMES] / [PENDING_SERVER_FRAMES] 里
  * 用注释列名留待后续阶段 —— 一次全抄进来会让「本阶段到底支持什么」失去判据，
  * 而抄错一个字符串（`session-archived` vs `session-archive`）的代价是运行时静默超时。
  *
@@ -97,6 +97,36 @@ internal object WsClientFrame {
 
     // —— EventPort ——
     // 事件域没有独立 type：靠 SUBSCRIBE 建订阅，服务端用 `event` 帧回推。
+
+    // —— HitlPort（P3）——
+    //
+    // 只有这两条：桥侧 HITL 处理器一共就 3 个写帧，第三条 `question-cancel` 刻意不接 ——
+    // App 里根本没有「撤回提问」的入口，REST 侧也没有对等端点（`DshClient` 只有
+    // pendingQuestions / answerQuestions），接进来就是一段永远跑不到的死代码。
+    const val APPROVAL_RESPONSE: String = "approval-response"
+    const val QUESTION_ANSWER: String = "question-answer"
+
+    // —— CommandPort（P3）——
+    //
+    // `command-options` / `command-select` 不接：App 的 `/model`、`/permission` 二级菜单
+    // 是**本地渲染**的（候选来自 `sessionModels` 与 `/permission-presets`），换成桥的
+    // opaque optionId 会连着改 UI 状态机与命令模型，而收益只是少一次 REST —— 不划算。
+    const val COMMANDS: String = "commands"
+    const val COMMAND_EXECUTE: String = "command-execute"
+
+    // —— ModelPort（P3）——
+    //
+    // `default-model` / `save-default-model` 桥明确回 NOT_IMPLEMENTED（ws-models.ts:38/41），
+    // 全局目录仍然只有 REST `GET /settings/providers` 一条路，所以不接。
+    const val MODELS: String = "models"
+
+    /**
+     * 会话级切模型。
+     *
+     * **应答 kind 是 `sent`**（`ws-models.ts:80`），与 `message` 同 kind —— 两边必须靠
+     * `data.type` / `data.accepted` 互相排除，见 [WsMessagePort] 与 [WsModelPort] 的 matcher。
+     */
+    const val SELECT_MODEL: String = "select-model"
 }
 
 /**
@@ -105,9 +135,10 @@ internal object WsClientFrame {
  * 留成注释而不是常量：常量摆着不用会让人以为「已经支持」，而实际调用点一个都没有 ——
  * 这比没写更糟。等哪个域真要切了，把名字挪进 [WsClientFrame] 并补一条用例。
  *
- * - HITL：`question-answer` `question-cancel` `approval-response`
- * - 命令：`commands` `command-execute` `command-options` `command-select`
- * - 模型：`models` `providers` `select-model` `default-model` `permission-options` `permission`
+ * - HITL：`question-cancel`（App 无撤回入口，且 REST 侧无对等端点）
+ * - 命令：`command-options` `command-select`（二级菜单本地渲染，换桥的 opaqueId 要连 UI 一起改）
+ * - 模型：`providers` `default-model` `permission-options` `permission`
+ *   （`default-model` 桥回 NOT_IMPLEMENTED；全局目录仍只有 REST 一条路）
  * - 投影：`tasks` `goal` `session-stats` `context-usage` `agent-team` `subagents`
  *   （**读**这六项刻意不迁，见设计 §3.4；只迁 `goal-edit`/`goal-pause`/`goal-resume`/`goal-clear` 写操作）
  * - 文件：`file-download-open` `file-download-read` `file-download-cancel` `file-resolve`
@@ -154,16 +185,52 @@ internal object WsServerFrame {
      * 正因为没有判别字段，[WsRequestRouter] 只能靠「同 kind 串行」把它认出来。
      */
     const val FORK: String = "fork"
+
+    // —— HitlPort 的应答（P3）——
+
+    /**
+     * `approval-response` 的确认，**kind 与请求 type 同名**（`ws-hitl.ts:44`）。
+     *
+     * 这不是命名巧合而是桥的写法：`data` 里 `sessionId` + `approvalId` 都在，因此还能配对；
+     * 但看到 `approval-resolved` 时**不要**拿它当应答 —— 那是随后额外推的一条推送帧。
+     */
+    const val APPROVAL_RESPONSE: String = "approval-response"
+
+    /**
+     * `question-answer` 的应答（`ws-hitl.ts:66-75`）。
+     *
+     * `data.accepted == false` 时带 `data.reason`，取值 `not-pending` / `reply-queued` /
+     * `bad-response` / `not-answerable` —— 这是**正常应答里的业务失败**，不是 error 帧。
+     */
+    const val QUESTION_RESPONSE: String = "question-response"
+
+    /**
+     * `approval-response` 成功之后桥**额外推**的一条（`ws-hitl.ts:50-51`）。
+     *
+     * 它在 `REQUEST_ID_ECHO_EXCLUDED_KINDS` 里，且是主动推送 —— 永远不会有 pending 等它，
+     * 拿它当应答只会让那条 pending 超时。列在这里是为了让读代码的人认得出「这是推送」。
+     */
+    const val APPROVAL_RESOLVED: String = "approval-resolved"
+
+    // —— CommandPort 的应答（P3）——
+    const val COMMANDS: String = "commands"
+    const val COMMAND_EXECUTED: String = "command-executed"
+
+    // —— ModelPort 的应答（P3）——
+    const val MODELS: String = "models"
 }
 
 /**
- * **待接**的服务端帧（P3/P4）：`question-requested` `approval-requested` `question-response`
- * `question-resolved` `approval-response` `approval-resolved` `commands` `command-executed`
- * `models` `tasks` `goal` `session-stats` `context-usage` `agent-team` `subagents`
- * `file-list` `file-resolved` `file-download-*` `search` `session-archives` `paired`。
+ * **待接**的服务端帧（P4）：
+ * `question-requested` `approval-requested` `question-resolved` `tasks` `goal` `session-stats`
+ * `context-usage` `agent-team` `subagents` `file-list` `file-resolved` `file-download-*`
+ * `search` `session-archives` `paired`。
  *
  * 注意 `question-requested` / `approval-requested` **天生无 requestId**（服务端主动推），
  * 所以它们即便将来接进来，也必须走推送回调而不是 pending map。
+ *
+ * P3 已经接掉的那几个（`question-response` `approval-response` `approval-resolved`
+ * `commands` `command-executed` `models`）已挪进 [WsServerFrame]，不再列在这里。
  */
 internal const val PENDING_SERVER_FRAMES: String = "见上方注释：HITL/命令/模型/投影/文件/搜索，均无 requestId 者走推送"
 
@@ -178,6 +245,11 @@ internal const val PENDING_SERVER_FRAMES: String = "见上方注释：HITL/命�
  *
  * **P1 自身一帧不发**，所以这份清单此刻是**为 P2 前置声明**的：`decideAfterHello` 是
  * 唯一判据，P2 接域时直接用同一个集合，不许在调用点另写一份。
+ *
+ * **P3 不往这里加位**：桥侧 `ws-hitl.ts` / `ws-commands.ts` / `ws-models.ts` 与
+ * `ws-handler.ts` 是同一次提交引入的（`f7b5c44` → 拆域 `38e6f3b`，2026-10-28），
+ * 也就是说「有 `/ws/mobile` 的桥就一定有这三个域」—— 再按 `commands-v1` /
+ * `session-config-v1` 分支一次，只会多出一条永远不会走到的降级路径。
  */
 internal val REQUIRED_CAPABILITIES_FOR_WS: Set<String> =
     setOf("session-list-v1", "history-v1", "turn-cancel-v1")

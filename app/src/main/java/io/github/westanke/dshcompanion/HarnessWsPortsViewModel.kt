@@ -367,6 +367,8 @@ internal fun HarnessViewModel.connectWsTransport(api: DshClient) {
         ),
         events = wsEventPort!!,
     )
+    // P3 三域（HITL / 命令 / 模型）：同一把 router、同一个 state 闭包，判据与上面完全一致。
+    domainPorts = buildDomainPorts(router, api) { transport.state.value }
     DiagLog.i("WS", "建立 WS 传输：endpoint=${connection.endpoint.baseUrl} 先 REST 后 WS，等 hello 判决")
     transport.start()
     reconcileEventChannel()
@@ -458,6 +460,7 @@ internal fun HarnessViewModel.closeWsTransport() {
     wsEventPort = null
     wsRouter = null
     ports = null
+    domainPorts = null
     wsTransport?.close()
     wsTransport = null
 }
@@ -561,12 +564,17 @@ internal class AdaptiveMessagePort(
         rest.attachment(sessionId, attachmentId)
 }
 
-/** WS 帧压根没离开客户端：这种情况回落 REST 绝不会造成重复副作用。 */
-private fun isFrameNeverSent(failure: DshApiException): Boolean =
+/**
+ * WS 帧压根没离开客户端：这种情况回落 REST 绝不会造成重复副作用。
+ *
+ * `internal` 而不是 `private`：P3 的 `HarnessDomainPortsViewModel.kt` 必须复用**同一份**判据。
+ * 两份判据迟早会漂，而漂的后果是「超时后偷偷重试写操作」。
+ */
+internal fun isFrameNeverSent(failure: DshApiException): Boolean =
     failure.code == "WS_NOT_READY" || failure.code == "WS_SEND_FAILED"
 
-/** WS 传输层失败（而不是服务端业务错误）：读操作遇到它就该回落 REST。 */
-private fun isWsTransportFailure(failure: DshApiException): Boolean =
+/** WS 传输层失败（而不是服务端业务错误）：读操作遇到它就该回落 REST。理由见 [isFrameNeverSent]。 */
+internal fun isWsTransportFailure(failure: DshApiException): Boolean =
     isFrameNeverSent(failure) || failure.code == "WS_TIMEOUT" || failure.code == "WS_BAD_FRAME" ||
         failure.code == "WS_ERROR"
 
@@ -607,7 +615,7 @@ internal fun HarnessViewModel.messagePort(api: DshClient): MessagePort =
  * 调用点都在 `withClient { api -> ... }` 或 `client ?: return` 之后，
  * 走到这里还缺 client 只可能是中途断连 —— 抛异常比静默走错通道好。
  */
-private fun HarnessViewModel.requireApi(): DshClient =
+internal fun HarnessViewModel.requireApi(): DshClient =
     client ?: throw DshApiException(0, "NO_CONNECTION", "无活动连接")
 
 /**

@@ -95,6 +95,15 @@ internal data class GoalInfo(
     val phase: String?,
     val revision: Int?,
     val maxGoalRounds: Int?,
+    /**
+     * 内核的目标 id（`values.goal.goal.id`），写操作的表单引用 `ref.id` 用它。
+     *
+     * 放在最后且带默认值：本类的构造点只有 [goalInfoOf] 一处，但没有默认值会让
+     * 后续加字段时所有调用点一起改 —— 而 id 在**老内核**的投影里可能没有，
+     * 缺了它只是不能写（[io.github.westanke.dshcompanion.data.ws.GoalError.REF_MISSING]），
+     * 读端展示一点都不受影响。
+     */
+    val id: String? = null,
 )
 
 /** 智能体团队（内核 `agentTeam`）。成员/任务的**条数**是稳定信息，内容形状随内核演化。 */
@@ -187,6 +196,7 @@ internal fun goalInfoOf(values: JsonObject): GoalInfo? {
         phase = goal.stringValue("phase"),
         revision = goal.intValue("revision"),
         maxGoalRounds = goal.intValue("maxGoalRounds"),
+        id = goal.stringValue("id")?.takeIf(String::isNotBlank),
     )
 }
 

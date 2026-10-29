@@ -285,6 +285,9 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
     internal var wsSubscribedSessionId: String? = null
     internal var ports: PortSet? = null
 
+    /** P3 三域（HITL / 命令 / 模型）的自适应端口。实现全在 HarnessDomainPortsViewModel.kt。 */
+    internal var domainPorts: DomainPorts? = null
+
     init {
         // 诊断日志开关：冷启动后到用户进设置页之前，会话页可能已被点开好几轮 ——
         // 那几次正是要观察的对象。放在 init 里，开关是「开」的包从第一条日志起就记。
@@ -487,7 +490,23 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
      * 而 Port 接口是 suspend 的。两个调用点（`refreshDashboard` 与连接建立）本来就都在
      * 协程里、且已切到 `Dispatchers.IO`，加个 suspend 不改变任何执行上下文。
      */
-    internal suspend fun loadSnapshot(api: DshClient, device: DeviceView): HarnessState {
+    /**
+     * @param base 上一份状态。快照只负责**服务端字段**，其余（连接级运行态、会话正文、
+     *   面板开关、权限目录、目标记忆……）一律从 [base] 原样带过来。
+     *
+     *   为什么必须有这个参数：`HarnessState` 有 72 个字段，而快照只填 16 个。原来是
+     *   `HarnessState(...)` 全新构造，于是每次刷新（顶栏刷新 / 导航面板刷新，共三处
+     *   `refreshDashboard`）都会把另外 56 个字段打回默认值 —— 用户点一下刷新就"掉线"
+     *   （`eventsConnected`）、权限档位切换消失（`permissionCatalog`）、「关于」页
+     *   显示版本未知（`bridgeVersion`）、定时任务入口凭空消失（`bridgeCapabilities`）、
+     *   正在看的对话正文变空（`history`）。此前只在调用点手工补了 2 个字段，
+     *   剩下的 54 个仍在漏 —— 加一个补一个必然漏，所以改成"默认全带、只覆盖服务端那份"。
+     */
+    internal suspend fun loadSnapshot(
+        api: DshClient,
+        device: DeviceView,
+        base: HarnessState = HarnessState(),
+    ): HarnessState {
         val roots = if ("files.read" in device.scopes) api.roots() else emptyList()
         val canReadChat = "chat.read" in device.scopes
         val sessions = if (canReadChat) sessionPort(api).sessions() else emptyList()
@@ -496,7 +515,7 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
         val canReadSettings = "settings.read" in device.scopes
         val selectedRoot = roots.firstOrNull()?.id
         val directory = selectedRoot?.let { api.entries(it) }
-        return HarnessState(
+        return base.copy(
             restoring = false,
             connected = true,
             endpoint = api.endpoint,

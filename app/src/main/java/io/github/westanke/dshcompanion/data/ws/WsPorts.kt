@@ -248,11 +248,19 @@ internal class WsMessagePort(
             requestType = WsClientFrame.MESSAGE,
             expectedKind = WsServerFrame.SENT,
             payload = payload,
-            // `sent` 也用于 `unsubscribe` 的确认（`{type:'unsubscribe', acknowledged:true}`）；
-            // 靠 data.sessionId + data.accepted 把两者分开，避免发消息的调用被退订确认"完成"。
+            // `sent` 是个**共用 kind**，至少三个生产者：
+            //   1. 本帧（`message`）的确认：`{type:'message', sessionId, accepted:true}`；
+            //   2. `unsubscribe` 的确认：`{type:'unsubscribe', acknowledged:true}`（无 sessionId）；
+            //   3. P3 的 `select-model` 确认：`{type:'select-model', sessionId, accepted:true, selected}`
+            //      （ws-models.ts:80 —— 应答 kind 同样是 `sent`，字段与 message 几乎一样）。
+            // 所以判据是「sessionId 对上 + 有 accepted + **不是** select-model」。
+            // 少了最后那一项，一条迟到的 select-model 帧就能把一条在途的发消息"确认"掉：
+            // 调用方以为消息发出去了，实际服务端只切了个模型。
             matcher = { frame ->
                 val data = WsFrames.dataOf(frame)
-                data.sessionIdOf() == sessionId && data.containsKey("accepted")
+                data.sessionIdOf() == sessionId &&
+                    data.containsKey("accepted") &&
+                    (data["type"] as? JsonPrimitive)?.contentOrNull != WsClientFrame.SELECT_MODEL
             },
         )
     }

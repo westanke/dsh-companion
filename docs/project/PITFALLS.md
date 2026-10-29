@@ -1192,3 +1192,40 @@ diag.log 末尾赫然是 `事件连状态 → false` —— 一个**没人该发
    推断状态流转快一个数量级（同 `### 契约文档写着「requestId 回显」` 那条的教训）。
 
 判据：以后凡是出现「A 上线同时 B 下线」，先问一句**「B 下线时会不会顺手把 A 的状态位写坏」**。
+
+### 整份状态重建只填服务端字段，其余五十多个字段被打回默认值
+
+**症状**：点一下顶栏刷新（或导航面板里的刷新），顶栏立刻显示「已断开」，可推送其实好好的；
+或者「关于」页的桥版本变成「版本未知」、权限档位切换没了、定时任务入口凭空消失、
+正在看的对话正文变空。重启 App 又全好了 —— 于是第一反应永远是「网络不稳」。
+
+**根因**：`loadSnapshot()` 原来 `return HarnessState(...)` —— **全新构造**。而 `HarnessState`
+有 72 个字段，快照只填 16 个，剩下 56 个（`eventsConnected`、`bridgeVersion`、
+`bridgeCapabilities`、`permissionCatalog`、`history`、`sessionModels`、`commands`、
+`jobsPanel`、`schedulePanel`、`goalAction`……）全部落回构造参数的默认值。
+`refreshDashboard` 又把这份新状态整个盖到共享状态上，于是运行态被一次刷新清空。
+
+**为什么此前只补了两个字段**：2026-10-29 先发现 `eventsConnected`（刷新即"掉线"）与
+`goalAction`，就在 `refreshDashboard` 的 `snapshot.copy(...)` 里手工加了
+`eventsConnected = eventsConnected` / `goalAction = goalAction`。这两行**看着像在保留字段，
+实际只保住了被点到的那两个** —— 剩下 54 个还在漏。这就是「加一个补一个」的典型结局：
+逐字段点名的写法，漏掉的那些不会报错，只会安静地回默认值。
+
+**现在怎么办（铁律）**：
+
+1. **重建方向要反过来：默认全带，只覆盖服务端那份。**
+   `loadSnapshot(api, device, base: HarnessState = HarnessState())` 里 `return base.copy(...)`，
+   只写那 16 个服务端字段。新字段加进 `HarnessState` 时**不需要改这里**，它自动被带过。
+2. **两种调用点语义不同，都要显式写出来**：
+   - 刷新（`refreshDashboard`）传 `base = mutableState.value`；
+   - 新连接（`connectHostInternal`）**不传**，用默认空状态 —— 换一台电脑不该继承上一台的
+     会话正文、选中会话、问答状态。
+3. **不要再用「自我赋值」假装保留字段**：`eventsConnected = eventsConnected` 这类写法
+   会被 `SnapshotCarryOverTest` 判红，它同时盯着「`loadSnapshot` 不许再 `HarnessState(`」
+   「刷新必须传 base」「连接路径不许传 base」三条。
+
+**判据**：看到一个 `data class` 有几十个字段、而「重建」处只列了十几个，
+就要问一句**「没列的那些去哪了」**。凡是靠逐字段点名来"保留"的写法，早晚会漏。
+
+**同类**：`### busy 只在 launchOperation 里收尾`（同一个模式的另一面）、
+`### 两个事件通道交接时，旧通道的「告别」会把新通道的状态改回断开`（同一次排查中发现）。

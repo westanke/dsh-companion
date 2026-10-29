@@ -106,7 +106,10 @@ import kotlinx.serialization.json.intOrNull
  */
 internal fun HarnessViewModel.refreshDashboard() = withClient { api ->
     val device = api.currentDevice()
-    val snapshot = loadSnapshot(api, device)
+    // `base = mutableState.value`：快照只覆盖服务端那份，运行态字段全部沿用。
+    // 详见 [loadSnapshot] 的 KDoc —— 这里曾手工补过 `eventsConnected`/`goalAction`，
+    // 但另外 54 个字段仍在漏（权限档位、桥版本/能力位、会话正文、面板开关……）。
+    val snapshot = loadSnapshot(api, device, base = mutableState.value)
     update {
         snapshot.copy(
             restoring = false,
@@ -340,8 +343,10 @@ internal fun HarnessViewModel.createSession(workspaceId: String, preset: String?
     val createdId = sessionPort().createSession(workspaceId, preset?.takeIf(String::isNotBlank))
     val sessions = sessionPort().sessions()
     val history = sessionPort().history(createdId)
-    val models = api.sessionModels(createdId)
-    val commands = api.sessionCommands(createdId)
+    // 新建会话后紧接的这两笔属于**读**，可以切 WS：`ports` 在连接建立时就装配好了，
+    // 没装配（无令牌/老桥）时 commandPort()/modelPort() 自己回落 REST 实现 —— 与改造前同一个方法。
+    val models = modelPort().sessionModels(createdId)
+    val commands = commandPort().commands(createdId)
     update {
         copy(
             sessions = sessions,
@@ -376,10 +381,11 @@ internal fun HarnessViewModel.createSession(workspaceId: String, preset: String?
  */
 internal fun HarnessViewModel.applyPermissionPreset(sessionId: String, permission: String) {
     if (permission.isBlank()) return
-    val api = client ?: return
+    if (client == null) return
     viewModelScope.launch {
         val outcome = runCatching {
-            withContext(Dispatchers.IO) { api.executeCommand(sessionId, "/permission $permission") }
+            // 写操作走 CommandPort（`command-execute`）：只在帧没发出去时回落 REST。
+            commandPort().executeCommand(sessionId, "/permission $permission")
         }
         if (mutableState.value.selectedSessionId != sessionId) return@launch
         outcome
@@ -428,8 +434,8 @@ internal fun HarnessViewModel.createWorkspaceAndSession(rootId: String, path: St
     val sessions = sessionPort().sessions()
     val workspaces = api.chatWorkspaces()
     val history = sessionPort().history(createdId)
-    val models = api.sessionModels(createdId)
-    val commands = api.sessionCommands(createdId)
+    val models = modelPort().sessionModels(createdId)
+    val commands = commandPort().commands(createdId)
     update {
         copy(
             chatWorkspaces = workspaces,
@@ -478,8 +484,8 @@ internal fun HarnessViewModel.forkSession(sessionId: String, atSeq: Int? = null)
     val forkedId = sessionPort().forkSession(sessionId, atSeq)
     val sessions = sessionPort().sessions()
     val history = sessionPort().history(forkedId)
-    val models = api.sessionModels(forkedId)
-    val commands = api.sessionCommands(forkedId)
+    val models = modelPort().sessionModels(forkedId)
+    val commands = commandPort().commands(forkedId)
     update {
         copy(
             sessions = sessions,
@@ -554,18 +560,19 @@ internal fun HarnessViewModel.retryLastUserMessage() {
 }
 
 internal fun HarnessViewModel.sendMessage(text: String, steer: Boolean) {
-    val api = client ?: return
+    // 只当「有没有活动连接」的闸：发消息与执行命令都改走端口了（WS 优先、REST 兜底）。
+    if (client == null) return
     val id = mutableState.value.selectedSessionId ?: return
     val attachments = mutableState.value.pendingAttachments
     val line = text.trimEnd()
     if (attachments.isEmpty() && isHostCommandLine(line, mutableState.value.commands)) {
         launchOperation {
-            val execution = api.executeCommand(id, line)
+            val execution = commandPort().executeCommand(id, line)
             if (execution.result.kind == "error") {
                 throw DshApiException(409, "COMMAND_FAILED", execution.result.text ?: "Command failed.")
             }
             val history = sessionPort().history(id)
-            val commands = api.sessionCommands(id)
+            val commands = commandPort().commands(id)
             update { copy(history = history, commands = commands) }
         }
         return
@@ -618,32 +625,37 @@ internal fun HarnessViewModel.describeSendFailure(failure: Throwable): String {
     }
 }
 
-internal fun HarnessViewModel.refreshCommands() = withClient { api ->
+internal fun HarnessViewModel.refreshCommands() = withClient {
     val id = mutableState.value.selectedSessionId ?: return@withClient
-    update { copy(commands = api.sessionCommands(id)) }
+    val commands = commandPort().commands(id)
+    update { copy(commands = commands) }
 }
 
-internal fun HarnessViewModel.selectPermissionPreset(preset: String) = withClient { api ->
+internal fun HarnessViewModel.selectPermissionPreset(preset: String) = withClient {
     val id = mutableState.value.selectedSessionId ?: return@withClient
-    val execution = api.executeCommand(id, "/permission $preset")
+    val execution = commandPort().executeCommand(id, "/permission $preset")
     if (execution.result.kind == "error") {
         throw DshApiException(409, "COMMAND_FAILED", execution.result.text ?: "Permission change failed.")
     }
     val history = sessionPort().history(id)
-    val commands = api.sessionCommands(id)
+    val commands = commandPort().commands(id)
     update { copy(history = history, commands = commands) }
 }
 
-internal fun HarnessViewModel.refreshSessionModels() = withClient { api ->
+internal fun HarnessViewModel.refreshSessionModels() = withClient {
     val id = mutableState.value.selectedSessionId ?: return@withClient
-    val models = api.sessionModels(id)
+    // 读操作走 ModelPort：REST /models 在真机上是 39.7 KB / 0.96–2.84 s，WS 帧只回三个面板要用的字段。
+    val models = modelPort().sessionModels(id)
     update { copy(sessionModels = models) }
 }
 
-internal fun HarnessViewModel.selectModel(selection: ModelSelection) = withClient { api ->
+internal fun HarnessViewModel.selectModel(selection: ModelSelection) = withClient {
     val id = mutableState.value.selectedSessionId ?: return@withClient
-    api.selectModel(id, selection)
-    update { copy(sessionModels = api.sessionModels(id)) }
+    // 写操作：WS 帧 `select-model` 的应答 kind 是 `sent`（与 message 同 kind），
+    // 配对靠 WsModelPort 里的 `data.type == "select-model"` —— 见那边的注释。
+    modelPort().selectModel(id, selection)
+    val models = modelPort().sessionModels(id)
+    update { copy(sessionModels = models) }
 }
 
 /**
@@ -661,8 +673,10 @@ internal fun HarnessViewModel.selectAgentPreset(agentPreset: String) = withClien
     val id = mutableState.value.selectedSessionId ?: return@withClient
     api.selectAgentPreset(id, agentPreset)
     val sessions = sessionPort().sessions()
-    val models = api.sessionModels(id)
-    val commands = api.sessionCommands(id)
+    // `agent-preset` 在桥的 WS 侧没有帧（不在本阶段范围），所以那一笔仍走 REST；
+    // 后面这两笔是读，照常切端口。
+    val models = modelPort().sessionModels(id)
+    val commands = commandPort().commands(id)
     update { copy(sessions = sessions, sessionModels = models, commands = commands) }
 }
 
