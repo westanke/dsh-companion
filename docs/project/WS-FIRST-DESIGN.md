@@ -213,7 +213,28 @@ data/ws/
 | **P2 三域接入** | **已完成（本阶段）** | `WsRequestRouter.kt`（配对层）、`HarnessWsPortsViewModel.kt`（装配层 + 端口适配）、`SessionPort` / `MessagePort` / `EventPort` 的 WS 实现与 REST 兜底 |
 | P3 HITL/命令/模型 | 未开始 | — |
 | P4 目标写操作 | 未开始 | — |
-| P5 真机验收 + 发版 | 未开始 | 本文档 7.2 是它的输入 |
+| P5 真机验收 + 发版 | **P2 部分的真机验收已完成**（2026-10-29） | V2080A 对真桥 v2.8.0 跑通 7.2 的第 1/2/3/6/7 步；P3/P4 未开始，故整个 P5 未收口 |
+
+### 7.1.1 P2 真机验收记录（2026-10-29，V2080A + 桥 v2.8.0）
+
+探活 1.5 s → 快照 3.5 s → `hello` 到达 → WS 接管事件流，界面顶栏绿点「已连接」，
+会话列表 104 条，进会话正文实时更新。关键日志（`files/diag.log`）：
+
+```
+#8  WS 建立 WS 传输：endpoint=http://192.168.1.126:3090 先 REST 后 WS，等 hello 判决
+#9  WS 事件通道留在 REST：state=WsDown(reason=尚未建立连接)
+#10 WS 忽略 REST 流的断开回调：WS 正接管事件通道
+#12 WS 事件通道切到 WS：已关闭 REST /api/v1/events 流
+```
+
+**这一步抓到一个 P2 自带的回归**：交接瞬间 `EventSubscription.close()` 无条件回调
+`connection(false)`，把刚置上的 `eventsConnected = true` 立刻改回 false，顶栏一直是「已断开」。
+修复见 `handleEventsConnection` 的守卫与 `PITFALLS.md` §两个事件通道交接时…。
+
+> 本次真机对的是**已发布的**桥 v2.8.0 —— 它还不回显 requestId，所以配对走的是
+> `WsRequestRouter` 的按 kind 兜底路径（清单第 3 步）。桥侧统一回显已在
+> `dsh-remote-bridge` 实现（未发版），发版后第 5 步的 `requestId 快路` 会自然生效，
+> 客户端无需改代码 —— 这是 §3.3「不靠版本号猜，靠回帧里那个字段在不在」的直接兑现。
 
 ### 7.2 P2 真机自检清单
 
