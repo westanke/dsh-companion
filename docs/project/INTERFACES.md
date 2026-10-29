@@ -231,7 +231,12 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `val REQUIRED_CAPABILITIES_FOR_WS: Set<String>` | `data/ws/WsFrames.kt` | 建 WS 所需能力位；缺则降级 |
 | `object WsFrames` | `data/ws/WsFrames.kt` | `json` / `encode` / `decode` / `kindOf` / `requestIdOf` / `dataOf` / `decodeEvent` / `parseHello` |
 | `class WsRequestRouter(...)` | `data/ws/WsRequestRouter.kt` | 请求配对层：requestId 快路 + 按响应 kind 兜底、同 kind 串行、`error` 按 `requestType` 归属、超时只失败本次不掀连接 |
-| `class MobileWsTransport(...)` | `data/ws/MobileWsTransport.kt` | 建连鉴权、requestId 关联、超时、退避重连、`StateFlow<ChannelState>` |
+| `class MobileWsTransport(...)` | `data/ws/MobileWsTransport.kt` | 建连鉴权、requestId 关联、超时、退避重连、429 按 `Retry-After` 等待、`StateFlow<ChannelState>` |
+| `fun retryAfterMillis(headers: Headers?): Long?` | `data/ws/RetryAfter.kt` | 只认 delta-seconds；缺/空/非数字/负数/HTTP-date 一律 `null`；夹 1 s..60 s |
+| `fun reconnectWaitMillis(backoffMillis: Long, retryAfterMillis: Long?): Long` | `data/ws/RetryAfter.kt` | 重连等待 = `max(自己的退避, 服务端要求)` —— 两条约束各管一头 |
+| `const val RESYNC_REQUIRED` | `data/ws/WsFrames.kt` | 桥的背压告知帧 `connection-resync-required`（kebab，老通道叫 `connection.resyncRequired`） |
+| `fun resyncDroppedOf` / `resyncReasonOf` | `data/ws/WsFrames.kt` | 读丢帧数与原因；字段缺失给 `null` 而非 `0`（诊断日志里 `0` 会误导） |
+| `fun HarnessViewModel.onResyncHint(frame: JsonObject)` | `HarnessWsPortsViewModel.kt` | 收到背压告知 → 清 `lastEventSeq` 基线 + 重取当前会话历史（无选中会话则跳过） |
 | `interface SessionPort` / `MessagePort` / `EventPort` | `data/ws/WsPorts.kt` | 三个高频域端口；每域两套实现（`Ws*` 走 `/ws/mobile`、`Rest*` 走 `DshClient`） |
 | `interface HitlPort` / `CommandPort` / `ModelPort` | `data/ws/WsDomainPorts.kt` | P3 三域端口（审批决定、提问答复、命令清单与执行、会话模型与切模型）；同样每域两套实现 |
 | `class WsHitlPort` / `WsCommandPort` / `WsModelPort` | `data/ws/WsDomainPorts.kt` | WS 实现：`select-model` 的应答 kind 是 `sent`，靠 `data.type == "select-model"` 与发消息的确认互斥 |
@@ -424,6 +429,8 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `object WsSubprotocol` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsFrames.kt` | object |
 | `object WsFrames` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsFrames.kt` | object |
 | `class MobileWsTransport` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/MobileWsTransport.kt` | class |
+| `fun retryAfterMillis` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/RetryAfter.kt` | function |
+| `fun reconnectWaitMillis` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/RetryAfter.kt` | function |
 | `interface SessionPort` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsPorts.kt` | interface |
 | `interface MessagePort` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsPorts.kt` | interface |
 | `interface EventPort` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsPorts.kt` | interface |

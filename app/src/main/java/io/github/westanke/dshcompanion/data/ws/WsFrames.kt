@@ -171,6 +171,18 @@ internal object WsServerFrame {
     /** 结构化错误。`data.code` 是 `AUTH_REQUIRED` / `UNKNOWN_TYPE` / `NOT_IMPLEMENTED` 等。 */
     const val ERROR: String = "error"
 
+    /**
+     * 服务端主动告知「刚才因为背压丢了帧」：`data` 是 `{dropped, reason}`，**无 requestId**。
+     *
+     * 桥在发送队列溢出后补发这一帧（`ws-handler.ts` 的 `drain`，2026-10-29 补）。丢掉的一定是
+     * **可重建帧**（`event` 与 `tasks-updated`/`goal-updated` 这类通知），应答帧一条都不会丢 ——
+     * 所以收到它正确的反应是「重取一次权威状态」，而不是「认为这条连接废了」。
+     *
+     * 名字是 kebab-case，因为 `/ws/mobile` 的 kind 全是 kebab；它在老通道
+     * （`/api/v1/events`）上的对应物叫 `connection.resyncRequired`（那个通道的 type 带点）。
+     */
+    const val RESYNC_REQUIRED: String = "connection-resync-required"
+
     // —— SessionPort 的应答 ——
     const val SESSIONS: String = "sessions"
     const val HISTORY: String = "history"
@@ -316,6 +328,19 @@ internal object WsFrames {
 
     /** 帧的 `data` 对象；没有或不是对象时给空对象（调用方不必层层判空）。 */
     fun dataOf(frame: JsonObject): JsonObject = frame[DATA] as? JsonObject ?: JsonObject(emptyMap())
+
+    /**
+     * [RESYNC_REQUIRED] 帧里「这次丢了几条」。
+     *
+     * 给 `null` 而不是 0 表示**这个字段不可信/缺失**，因为上报的数字会被写进诊断日志，
+     * 用 0 会让人以为「丢了零条却还让我重取」，反而更难查。
+     */
+    fun resyncDroppedOf(frame: JsonObject): Int? =
+        (dataOf(frame)["dropped"] as? JsonPrimitive)?.intOrNull
+
+    /** [RESYNC_REQUIRED] 帧里丢帧的原因；桥目前只发 `backpressure`。 */
+    fun resyncReasonOf(frame: JsonObject): String? =
+        (dataOf(frame)["reason"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotEmpty() }
 
     /**
      * 把 `event` 帧的 `data` 解成 [WorkspaceEvent]。

@@ -177,6 +177,42 @@ class WsFramesTest {
         assertEquals(0, WsFrames.dataOf(frame).size)
     }
 
+    // ───────────────────────── 背压告知（connection-resync-required） ─────────────────────────
+
+    @Test
+    fun `resync 帧的 kind 与桥侧字面量一致`() {
+        // 写成 connection.resyncRequired（老通道那种带点的拼法）会让这帧永远认不出来，
+        // 表现为「丢了帧但什么也不发生」—— 这条断言就是为了防这个。
+        assertEquals("connection-resync-required", WsServerFrame.RESYNC_REQUIRED)
+    }
+
+    @Test
+    fun `resync 帧能读出丢帧数与原因`() {
+        val frame = WsFrames.decode(
+            """{"kind":"connection-resync-required","data":{"dropped":7,"reason":"backpressure"}}""",
+        )!!
+        assertEquals(7, WsFrames.resyncDroppedOf(frame))
+        assertEquals("backpressure", WsFrames.resyncReasonOf(frame))
+    }
+
+    @Test
+    fun `resync 帧字段缺失时给 null 而不是 0`() {
+        // 给 0 会让诊断日志写成「丢了 0 条却要求重取」，反而更难查；
+        // null 明确表示「这个数字不可信/没给」。
+        val frame = WsFrames.decode("""{"kind":"connection-resync-required","data":{}}""")!!
+        assertNull(WsFrames.resyncDroppedOf(frame))
+        assertNull(WsFrames.resyncReasonOf(frame))
+    }
+
+    @Test
+    fun `resync 帧的计数不是数字时给 null`() {
+        val frame = WsFrames.decode(
+            """{"kind":"connection-resync-required","data":{"dropped":"many","reason":""}}""",
+        )!!
+        assertNull(WsFrames.resyncDroppedOf(frame))
+        assertNull(WsFrames.resyncReasonOf(frame))
+    }
+
     // ───────────────────────── hello 解析 ─────────────────────────
 
     @Test

@@ -126,7 +126,7 @@ dsh-companion/
 | 分组 | 文件 | 职责 |
 | --- | --- | --- |
 | 网络边界 | `DshClient.kt` | **唯一网络边界**：bridge REST 强类型客户端 + SSE 订阅 |
-| WS 传输 | `ws/ChannelState.kt` / `ws/WsFrames.kt` / `ws/MobileWsTransport.kt` / `ws/WsRequestRouter.kt` / `ws/WsPorts.kt` | `/ws/mobile` 基座：状态机判据、帧编解码、退避重连、请求配对（requestId 快路 + 按 kind 兜底）、三域端口与 REST 兜底 |
+| WS 传输 | `ws/ChannelState.kt` / `ws/WsFrames.kt` / `ws/MobileWsTransport.kt` / `ws/RetryAfter.kt` / `ws/WsRequestRouter.kt` / `ws/WsPorts.kt` | `/ws/mobile` 基座：状态机判据、帧编解码、退避重连与 `Retry-After`、请求配对（requestId 快路 + 按 kind 兜底）、三域端口与 REST 兜底 |
 | BFF 扩展 | `DshClientBff.kt` | 分块上传 / 定时任务 / 语音的 `/api/v1` 端点，复用 `DshClient` 的鉴权与客户端 |
 | BFF 模型 | `BffModels.kt` | 三组新端点的响应/请求模型与上限常量（块大小、阈值、转写超时） |
 | 协议辅助 | `ChunkPlan.kt` / `CronHint.kt` / `WavHeader.kt` | 分块计划与切块、cron 表达式人话解析、PCM16 → WAV 封装 |
@@ -311,7 +311,8 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/ChannelState.kt` | file | 通道状态机（WsReady/WsDegraded/WsDown/RestOnly）与三条降级判据纯函数 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/GoalPort.kt` | file | 目标写端口（goal-edit/pause/resume/clear）：compare-and-set 的 ref 传递、不可用与 revision 过期判定 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsFrames.kt` | file | `/ws/mobile` 帧编解码：子协议、帧类型常量、hello 解析、requestId 取值 |
-| `app/src/main/java/io/github/westanke/dshcompanion/data/ws/MobileWsTransport.kt` | file | WS 传输层：建连鉴权、requestId 关联、超时、退避重连、StateFlow<ChannelState> |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/ws/MobileWsTransport.kt` | file | WS 传输层：建连鉴权、requestId 关联、超时、退避重连、429 按 Retry-After 等待、StateFlow<ChannelState> |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/ws/RetryAfter.kt` | file | `Retry-After` 解析与重连等待合成：只认 delta-seconds、夹 1s..60s、与退避取较大者 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsDomainPorts.kt` | file | P3 三域的端口接口（Hitl/Command/Model）与 WS / REST 两套实现 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsPorts.kt` | file | 三个高频域的端口接口（Session/Message/Event）与 WS / REST 两套实现 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsRequestRouter.kt` | file | WS 请求配对层：requestId 快路 + 按响应 kind 兜底、同 kind 串行、error 归属、超时只失败本次 |

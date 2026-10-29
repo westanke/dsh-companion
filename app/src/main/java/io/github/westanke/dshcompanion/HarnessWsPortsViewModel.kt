@@ -447,11 +447,42 @@ internal fun HarnessViewModel.onWsUnmatchedFrame(frame: JsonObject) {
         handleWorkspaceEvent(event)
         return
     }
+    if (kind == WsServerFrame.RESYNC_REQUIRED) {
+        onResyncHint(frame)
+        return
+    }
     if (kind == WsServerFrame.ERROR) {
         val data = WsFrames.dataOf(frame)
         val code = (data["code"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
         DiagLog.w("WS", "收到无法归属的 error 帧（无 requestId / 无 requestType）：${code ?: "unknown"}")
     }
+}
+
+/**
+ * 服务端说「刚才因为背压丢了帧」—— 重取一次当前会话的权威历史。
+ *
+ * 为什么不能只是打个日志：丢的是**可重建帧**（`event` 与 `*-updated` 通知），说明客户端此刻
+ * 手里的正文/待办/目标可能缺了一段，而唯一能补齐的来源是 REST history。桥在队列排空后补发
+ * 这一帧（`ws-handler.ts` 的 `drain`），收到它就该当作一次「我漏了，快重读」的指令。
+ *
+ * 为什么仍要清 [HarnessState.lastEventSeq]：丢了 N 条之后，下一条到达的事件序号**一定**跳号，
+ * [seqVerdict] 会判成断档再触发一次重取。清掉基线等于声明「这一跳是我已知的缺口」，
+ * 让下一条事件重新当起点，省掉一次注定重复的请求（重取本身有 400ms 去抖 + 单飞，不会重复发，
+ * 但会白拉一次 history）。
+ *
+ * 没有选中会话时什么都不做：那说明用户还在列表页，没有需要补的正文。
+ */
+internal fun HarnessViewModel.onResyncHint(frame: JsonObject) {
+    val dropped = WsFrames.resyncDroppedOf(frame)
+    val reason = WsFrames.resyncReasonOf(frame) ?: "unknown"
+    if (mutableState.value.selectedSessionId == null) {
+        DiagLog.i("WS", "服务端告知丢帧 $dropped 条（$reason），当前无选中会话，跳过重取")
+        return
+    }
+    DiagLog.w("WS", "服务端告知丢帧 ${dropped ?: "?"} 条（$reason），重取当前会话历史")
+    update { copy(lastEventSeq = null) }
+    chatSessionRefreshPending = true
+    scheduleChatRefresh()
 }
 
 /** 关闭 WS 传输。连接断开、`onCleared` 时调用。 */

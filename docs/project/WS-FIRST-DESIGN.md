@@ -215,6 +215,15 @@ data/ws/
 | P4 目标写操作 | 已完成（四项写操作全部真机验证） | `data/ws/GoalPort.kt`、`HarnessGoalPortViewModel.kt`、`ChatStatsSheet` 目标区可操作 |
 | P5 真机验收 + 发版 | **P2/P3/P4 部分的真机验收已完成**（2026-10-29） | V2080A 对真桥 v2.8.0 跑通 7.2 的第 1/2/3/6/7 步 + §7.1.2 的 P3/P4 验收；HITL 与 `command-execute` 未单独验，发版未做 |
 
+**2026-10-29 晚补的两条接收侧缺口**（不是新阶段，是 P1/P2 留给后续阶段的账）：
+
+| 缺口 | 现象 | 补法 |
+|---|---|---|
+| 桥的背压告知没人听 | 桥在队列溢出后补发 `connection-resync-required`，而 `onWsUnmatchedFrame` 只认 `event`/`error`，这帧落到末尾被静默忽略 —— 带 seq 的事件丢了自己能发现（`seqVerdict` 跳号），**不带 seq 的流式 delta 丢了看不出来** | `WsFrames.RESYNC_REQUIRED` + `resyncDroppedOf`/`resyncReasonOf`；`onResyncHint` 清 `lastEventSeq` 基线并重取当前会话历史 |
+| 429 被当成普通故障 | `isDefinitiveUpgradeRejection` 不含 429 是对的（不能判死），但它会落到默认退避，**忽略 `Retry-After`**；桥以前没这个上限所以只是理论问题，2026-10-29 桥真会回 429 了 | 新增 `data/ws/RetryAfter.kt`：`retryAfterMillis`（只认 delta-seconds，夹 1 s..60 s）+ `reconnectWaitMillis`（与退避取较大者）；`onFailure` 里单列 429 分支 |
+
+两条都不改 `ChannelState` 的四态语义：429 仍进 `WsDown`（重连中），`RestOnly` 依然只留给「这条通道不存在」。
+
 ### 7.1.1 P2 真机验收记录（2026-10-29，V2080A + 桥 v2.8.0）
 
 探活 1.5 s → 快照 3.5 s → `hello` 到达 → WS 接管事件流，界面顶栏绿点「已连接」，

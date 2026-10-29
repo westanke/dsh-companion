@@ -293,6 +293,20 @@ class MobileWsTransportTest {
     }
 
     @Test
+    fun `upgrade 429 连接数已满时按 Retry-After 等待并自己恢复，不判死`() {
+        // 桥从 2026-10-29 起对 /ws/mobile 真的执行 32 条上限，第 33 条在 Upgrade 阶段收 429。
+        // 这是「我知道你来了，请晚点再来」——和 404/405 的「这条通道不存在」语义相反：
+        // 前者必须能自己恢复（进 RestOnly 等于把用户永久降级到 REST），且要按服务端给的节奏重试。
+        server.enqueue(MockResponse().setResponseCode(429).setHeader("Retry-After", "1"))
+        server.enqueue(upgrade(onOpen = sendHello(capabilities = ALL_REQUIRED)))
+        val transport = transport()
+        transport.start()
+
+        awaitState(transport, timeoutMs = 8_000) { it == ChannelState.WsReady }
+        assertEquals("429 之后必须再试一次并成功", 2, server.requestCount)
+    }
+
+    @Test
     fun `hello 之前的 4001 子协议被拒进 RestOnly 不重试`() {
         server.enqueue(
             upgrade(

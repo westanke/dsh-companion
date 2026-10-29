@@ -310,6 +310,17 @@ internal class MobileWsTransport(
                 transition(ChannelState.RestOnly)
                 return
             }
+            if (status == HTTP_TOO_MANY_REQUESTS && !helloSeen) {
+                // 连接数已满：**这不是终态**。桥在认真回答「现在不行，晚点来」，而且给了节奏。
+                //
+                // 以前这里落到默认分支，用 1 秒起步的退避去撞 —— 桥刚把 32 上限做实（2026-10-29），
+                // 多设备用户第一次真会撞上，撞法还是「每秒一次」，等于我们自己制造重连风暴。
+                // 现在按 Retry-After 等，且仍与自己的退避取较大者（各管一头，见 RetryAfter.kt）。
+                val asked = retryAfterMillis(response?.headers)
+                val detail = asked?.let { "服务端要求至少等 ${it}ms" } ?: "服务端未给 Retry-After，按退避重试"
+                degradeAndRetry("连接数已满（HTTP $HTTP_TOO_MANY_REQUESTS），$detail", minimumWaitMillis = asked)
+                return
+            }
             degradeAndRetry(t.message ?: t::class.java.simpleName)
         }
     }
@@ -346,17 +357,21 @@ internal class MobileWsTransport(
      * 在途请求**全部失败**而不是留着等重连：`CompletableDeferred` 跨连接没有意义
      * （requestId 只在那条连接上有效），留着只会让调用方等满超时。
      */
-    private fun degradeAndRetry(reason: String) {
+    private fun degradeAndRetry(reason: String, minimumWaitMillis: Long? = null) {
         failAllPending("WS_DISCONNECTED", "WS 连接已断开：$reason")
         if (closed) return
         transition(ChannelState.WsDown(reason))
-        scheduleReconnect()
+        scheduleReconnect(minimumWaitMillis)
     }
 
-    private fun scheduleReconnect() {
+    /**
+     * @param minimumWaitMillis 服务端明确要求的最短等待（`Retry-After`），可与退避叠加，
+     *   见 [reconnectWaitMillis]。
+     */
+    private fun scheduleReconnect(minimumWaitMillis: Long? = null) {
         if (closed) return
         if (reconnectJob?.isActive == true) return
-        val wait = backoffMillis(attempt)
+        val wait = reconnectWaitMillis(backoffMillis(attempt), minimumWaitMillis)
         attempt += 1
         reconnectJob = reconnectScope.launch {
             delay(wait)
@@ -408,6 +423,14 @@ internal class MobileWsTransport(
     companion object {
         /** 默认请求超时（设计 §3.3）。 */
         const val DEFAULT_TIMEOUT_MS: Long = 15_000
+
+        /**
+         * Upgrade 阶段「连接数已满」的状态码（桥 `server.ts` 的 `handleUpgrade`，默认上限 32）。
+         *
+         * 单独给个名字而不是写裸 `429`：它不是错误，是服务端在说「晚点再来，节奏在这个头里」，
+         * 和 404/405 那种「这条通道不存在」是**相反**的语义（见 [isDefinitiveUpgradeRejection]）。
+         */
+        const val HTTP_TOO_MANY_REQUESTS: Int = 429
 
         /** 文件传输类超时（设计 §3.3）：分片下载 512 KiB/块，15 秒在小带宽下不够。 */
         const val FILE_TIMEOUT_MS: Long = 120_000
