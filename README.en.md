@@ -592,7 +592,7 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 - Version: `v2.2.57` (`versionCode` 10082)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
-- Unit tests: 76 test classes / 717 cases at the last run (0 failures). The counts move with the code, so
+- Unit tests: 79 test classes / 782 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
 - Current APK: `DSH伴侣-companion-v2.2.57.apk`, **3,278,012 bytes**, SHA-256
@@ -623,7 +623,7 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
   **Capability bits** (final single names): `attachment-chunked-upload-v1`, `chat-schedules-v1`,
   `speech-transcription-v1`; an older bridge that does not advertise them simply keeps the
   corresponding entries hidden.
-  **Verified**: 76 test classes / 717 cases / 0 failures (the new `DshClientBffTest`,
+  **Verified**: 79 test classes / 782 cases / 0 failures (the new `DshClientBffTest`,
   `ChunkPlanTest`, `CronHintTest`, `WavHeaderTest`, `BffCapabilitiesTest` and `SchedulePolicyTest`
   add six classes); `docsCheck` consistent in both directions; `lintDebug` reports 0 errors.
   **Not verified on a device**: recording compatibility, the three-way permission state on vivo

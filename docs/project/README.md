@@ -24,6 +24,7 @@
 | `TESTING.md` | 测试口径与用例数演进 |
 | `SECURITY.md` | 签名、令牌、备份边界 |
 | `CONFIG-EMITTER.md` | 配置导入线格式与生成端 |
+| `WS-FIRST-DESIGN.md` | **WS 优先、REST 兜底**改造的设计定稿：通道抽象、降级判据、requestId 关联、各阶段范围与硬验收 |
 | `webview-port-todo.md` / `webview-parity-audit.md` / `webview-report.md` | 网页版 ↔ 原生 移植线与复盘 |
 
 ## 工程宪法

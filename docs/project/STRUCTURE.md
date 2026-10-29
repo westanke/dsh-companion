@@ -18,7 +18,7 @@ dsh-companion/
 │   ├── src/main/java/…/dshcompanion/   源码（见 §3）
 │   ├── src/main/assets/chat/           WebView 版会话页（chat.html 及资源）
 │   ├── src/main/res/                   资源：drawable / values / values-en / xml / mipmap
-│   ├── src/test/java/…/                单元测试（74 类，见 §5）
+│   ├── src/test/java/…/                单元测试（79 类，见 §5）
 │   └── src/androidTest/java/…/         仪器测试
 ├── design-system/              设计规范（MASTER.md 等），涉及界面时必须读
 ├── docs/project/               开发事实来源（状态 / 决策 / 坑位 / 本文）
@@ -121,11 +121,12 @@ dsh-companion/
 | `HarnessDiagViewModel.kt` | 把偏好开关同步给 `DiagLog` |
 | `HarnessTruncationViewModel.kt` | 一轮边界事件：落「回答被截断」提示或清上一轮的 |
 
-### 3.2 `data/`（50 个文件）
+### 3.2 `data/`（54 个文件）
 
 | 分组 | 文件 | 职责 |
 | --- | --- | --- |
 | 网络边界 | `DshClient.kt` | **唯一网络边界**：bridge REST 强类型客户端 + SSE 订阅 |
+| WS 传输 | `ws/ChannelState.kt` / `ws/WsFrames.kt` / `ws/MobileWsTransport.kt` / `ws/WsPorts.kt` | `/ws/mobile` 基座：状态机判据、帧编解码、requestId 关联与退避重连、三域端口 |
 | BFF 扩展 | `DshClientBff.kt` | 分块上传 / 定时任务 / 语音的 `/api/v1` 端点，复用 `DshClient` 的鉴权与客户端 |
 | BFF 模型 | `BffModels.kt` | 三组新端点的响应/请求模型与上限常量（块大小、阈值、转写超时） |
 | 协议辅助 | `ChunkPlan.kt` / `CronHint.kt` / `WavHeader.kt` | 分块计划与切块、cron 表达式人话解析、PCM16 → WAV 封装 |
@@ -220,12 +221,13 @@ dsh-companion/
 | `app/src/main/java/` | dir | 全部 Kotlin 源码根 |
 | `app/src/main/java/io/github/westanke/dshcompanion/` | dir | 源码包根（根目录放入口与 ViewModel 拆分） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/` | dir | 协议、状态、存储与网络边界 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/ws/` | dir | `/ws/mobile` 传输层：通道状态机、帧编解码、requestId 关联、域端口 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/` | dir | Compose 表现层（页面与跨页面组件） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/` | dir | 会话详情页拆分部件 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/` | dir | 主题与字号缩放 |
 | `app/src/main/java/io/github/westanke/dshcompanion/web/` | dir | WebView 容器与 JS 桥 |
 | `app/src/main/java/io/github/westanke/dshcompanion/debug/` | dir | 诊断日志与探针 |
-| `app/src/test/java/` | dir | 单元测试（74 类） |
+| `app/src/test/java/` | dir | 单元测试（79 类） |
 | `app/src/androidTest/java/` | dir | 仪器测试 |
 | `app/src/main/assets/chat/` | dir | WebView 版会话页资源 |
 | `app/src/main/res/` | dir | Android 资源（含双语 values） |
@@ -302,6 +304,10 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/data/SessionStats.kt` | file | 会话执行统计（全来自历史事件） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/Trajectory.kt` | file | 轨迹页数据：历史按轮次分组的节点 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/UpdateChecker.kt` | file | 应用内更新检查：渠道分流、下载、SHA256 校验、调起安装器 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/ws/ChannelState.kt` | file | 通道状态机（WsReady/WsDegraded/WsDown/RestOnly）与三条降级判据纯函数 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsFrames.kt` | file | `/ws/mobile` 帧编解码：子协议、帧类型常量、hello 解析、requestId 取值 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/ws/MobileWsTransport.kt` | file | WS 传输层：建连鉴权、requestId 关联、超时、退避重连、StateFlow<ChannelState> |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsPorts.kt` | file | 三个高频域的端口接口（Session/Message/Event）与骨架实现 |
 | `app/src/main/java/io/github/westanke/dshcompanion/debug/DiagLog.kt` | file | 诊断日志单一出口（关了就什么都不做） |
 | `app/src/main/java/io/github/westanke/dshcompanion/debug/DiagProbe.kt` | file | 诊断探针浮层（可拖动，收起成小条） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/App.kt` | file | 应用外壳：主导航与页面切换 |

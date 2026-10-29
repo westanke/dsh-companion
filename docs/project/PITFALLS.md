@@ -1086,3 +1086,37 @@ GFM 允许这种紧凑写法，**这颗解析器比 GitHub 更严格**。
 判据：以后凡是「列表条数由宿主决定」的面板，**先看它能不能滚，再看它截不截**。
 两者同时为「不能 / 截」，后面的条目就是永久不可达；只截不滚比只滚不截更危险，
 因为屏幕上完全看不出少了东西——用户只会以为自己记错了命令名。
+
+### WebSocket 断连只挂 onClosed：桥重启后连接永远「还在」
+
+**症状**：桥进程重启（或反代断开）之后，App 侧 WS 连接看上去一直「还连着」——
+状态不降级、不重连、也不报错，直到 OkHttp 的 `pingInterval`（本仓 20 秒）
+连续失败才被发现。如果对端是被 `kill -9` 走的、连 close 帧都没发，那就是
+`onFailure` 能兜住；但**只要对端发得出 close 帧**（正常退出、反代主动断），
+客户端就只收到 `onClosing`，`onClosed` 可能永远不来。
+
+**根因**：OkHttp 的 `WebSocketListener` 把「对端请求关闭」和「关闭握手完成」
+拆成两个回调。收到对端的 close 帧时先回调 `onClosing`，此时**需要应用把 close 帧回过去**
+（`webSocket.close(1000, null)`）才算握手完成，然后才轮到 `onClosed`。
+对端发完 close 就销毁 socket 的情况下，我们回过去的 close 帧没人收，
+`onClosed` 就悬着不来了。只重写 `onClosed` 的监听器 = 漏掉这条最常见的断线路径。
+
+本项目是 **MockWebServer 单测先撞出来的**（`MobileWsTransportTest` 的重连与
+`RestOnly` 三条同时卡在 `WsDown(reason=尚未建立连接)`），用一段裸 OkHttp 探针
+把回调序列打出来才定位到：`client onOpen` → `client msg` → `client closing 1000 bye`
+→ 之后就没了。真机上表现更隐蔽，因为 20 秒 ping 超时最终也会触发 `onFailure`，
+看起来「只是慢」而不是「断了」。
+
+**现在怎么办**：`WebSocketListener` **必须同时重写 `onClosing` 和 `onClosed`**，
+两者走同一段断线处理（本项目抽成 `onDisconnected(code, reason)`）。
+`onClosing` 里额外做两件事：
+
+1. `runCatching { webSocket.close(1000, null) }` 把 close 帧回过去，完成握手；
+2. **立刻让本连接的后续回调失效**（`MobileWsTransport` 用 `generation` 自增，
+   回调开头 `if (gen != generation.get()) return`）。不退休的话，随后迟到的
+   `onClosed` 会再排一次重连 —— 一次断线排两次重连，指数退避会被打乱，
+   严重时形成重连风暴。
+
+判据：以后凡是写 `WebSocketListener`，**先问「对端正常 close 时我怎么知道」**。
+只挂 `onClosed` 就是没答案。测试上也要用「服务端 `onOpen` 里发完帧就 `close`」
+这种最朴素的场景压一遍——这正是 MockWebServer 的默认行为，反而最容易暴露。
