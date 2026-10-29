@@ -161,6 +161,7 @@ import com.mikepenz.markdown.m3.markdownTypography
 import io.github.westanke.dshcompanion.HarnessState
 import io.github.westanke.dshcompanion.HarnessViewModel
 import io.github.westanke.dshcompanion.ApprovalUiState
+import io.github.westanke.dshcompanion.ChunkUploadProgress
 import io.github.westanke.dshcompanion.PendingAttachment
 import io.github.westanke.dshcompanion.R
 import io.github.westanke.dshcompanion.SessionFileOpen
@@ -229,6 +230,49 @@ import java.io.InputStream
  * 缩略图按需**降采样**解码（只解到约 96px），而不是把 8 MiB 的原图整张读进 Bitmap —
  * 那样几张图就能把输入区卡住。
  */
+/**
+ * 上传进度条：分块上传时显示**真实块数**，不是只转圈。
+ *
+ * 「已传 3/12 块」比一个无限转的圈有用得多 —— 前者能让用户判断「再等十秒」还是「切出去干别的」，
+ * 后者只告诉他「App 还在忙」。续传（resumed）要单独一句：同名同大小重传时服务端会接着上次的块，
+ * 用户看到「继续上传 5/12」就知道不用从头等。
+ */
+@Composable
+internal fun UploadProgressChip(
+    progress: ChunkUploadProgress?,
+    uploading: Boolean,
+    onRetry: () -> Unit,
+) {
+    if (!uploading && progress == null) return
+    Row(
+        modifier = Modifier.padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (progress?.failed == true) {
+            Text(
+                progress.error ?: stringResource(R.string.attachment_upload_failed),
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.widthIn(max = 180.dp),
+            )
+            TextButton(onClick = onRetry) { Text(stringResource(R.string.retry)) }
+        } else {
+            CircularProgressIndicator(Modifier.size(15.dp), strokeWidth = 2.dp)
+            Text(
+                when {
+                    progress == null -> stringResource(R.string.attachment_uploading)
+                    progress.resumed ->
+                        stringResource(R.string.attachment_upload_resumed, progress.sent, progress.total)
+                    else -> stringResource(R.string.attachment_upload_chunk_progress, progress.sent, progress.total)
+                },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+    }
+}
+
 @Composable
 internal fun AttachmentChip(attachment: PendingAttachment, onRemove: () -> Unit) {
     val thumbnail = attachment.imageBytes?.let { bytes ->

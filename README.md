@@ -290,7 +290,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.55.apk
+DSH伴侣-companion-v2.2.57.apk
 ```
 
 安装要求：
@@ -536,35 +536,42 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.55`（`versionCode` 10080）
+- 当前版本：`v2.2.57`（`versionCode` 10082）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
-- 单元测试：69 个测试类 / 636 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
+- 单元测试：75 个测试类 / 711 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.55.apk`，**3,188,276 字节**，
-  SHA-256 `7afe646f2c8f76cb825268e984784fbe09d10bca8ed9bad0f6bf39a782703c90`（`artifacts/SHA256SUMS.txt` 同步）。
-  **已发 Gitee + GitHub**（tag `v2.2.55`）——
-  本版改动：**对齐桥 v2.7.0 —— 模型选择器显示上下文容量，新会话复用空白会话**。
-  **为什么要做**：桥 v2.7.0 补上了模型目录的 `contextWindow` / `maxTokens`，并给
-  `POST /chat/sessions` 加了可选的 `reuseBlank`。安卓端两处都早就留了位却没接：
-  ① 模型数据类从 v2.2.49 起就反序列化 `contextWindow`，但 UI 里只有「编辑供应商」的表单
-  用它，**模型选择器一行都没显示** —— 选模型时看不到「这个模型能装多少」；
-  ② `createSession` 从不传 `sessionId`，于是在桥 v2.6.x 下每点一次「新会话」都新建一个
-  空白会话，同一工作区里会堆出好几个空会话。
-  **做法**：① 模型行在描述下面加一行小字显示上下文容量（只在非空时出现），格式化走新增的
-  `data/ModelCapacityLabel.kt`（1024 进制，`1048576 → 1.0M`、`131072 → 128K`）；
-  ② `CreateSessionRequest` 加 `reuseBlank` 字段、`createSession` 加同名可选参数，
-  **默认 `null`** —— kotlinx 不编码 null，所以老桥收到的请求体逐字节不变。
-  **为什么默认 `null` 而不是 `true`**：让「谁支持这个语义」由桥决定 —— 桥 v2.7.0 省略即
-  `true`（对齐 DSH 0.2.1 桌面行为），更老的桥不认识这个字段就维持原样。写死 `true` 会让
-  请求体多出一个老桥不认识的字段，虽然被 `ignoreUnknownKeys` 忽略，但那是「靠对方的宽容
-  工作」，不是契约。
-  **验证**：单测 69 类 / 636 用例全绿（新增 `ModelCapacityLabelTest` 7 例，含
-  `1024 → 1.0K` 但 `1000 → 1000` 钉住进制）；`docsCheck` 双向一致；`lintDebug` 0 error。
-  **真机未验**：容量小字的排版要装包看一眼（模型名 + 两行描述 + 容量行可能偏挤）。
+- 当前 APK：`DSH伴侣-companion-v2.2.57.apk`，**3,278,012 字节**，
+  SHA-256 `d8c133b8a9f6dccb3dfe40218e24c5694c71c54d398f0b911b03da6d1f542973`（`artifacts/SHA256SUMS.txt` 同步）。
+  **待发 Gitee + GitHub**（tag `v2.2.57`）——
+  本版改动：**对齐桥 v2.8.0 —— 分块上传 / 定时任务 / 官方语音三项 REST BFF**。
+  **为什么要做**：分块上传、定时任务、官方语音这三项能力原本**只存在于 `/ws/mobile` 帧里**，
+  App 只消费 `/api/v1` REST、没有 WS 客户端，拿不到。桥 v2.8.0 为它们补了**只增不改**的
+  REST 端点（契约见桥仓 `docs/project/BFF-REST-CONTRACT.md`），App 才能在 WS 之外拿到同语义能力。
+  **做法**：
+  ① **分块上传**：>4 MiB 且能力位支持时改走 `POST …/attachments/uploads` →
+  `GET …/chunks/{i}` / `PUT …/chunks/{i}` → `POST …/complete`（失败 `DELETE …/chunks/{i}`），
+  1 MiB 切片、单文件上限 256 MiB、断点续传、409 补块一次，界面显示「已传 N / M 块」；
+  小附件维持 `POST …/attachments`（32 KiB JSON 上限）；
+  ② **定时任务**：`…/schedules` 的 GET / POST / PATCH / DELETE，五段 Vixie cron + IANA 时区，
+  聊天顶栏 `⋯` 菜单入口；**「停用」= 删除**（内核没有暂停语义，先弹确认框点明不可恢复），
+  「启用」= PATCH `enabled:true`（409 `SCHEDULE_ENDED` 单独文案）；`createdAt` 恒 `null`，
+  排序只用 `nextRunAt`；
+  ③ **官方语音**：`GET …/speech/catalog` + `POST /chat/speech/transcriptions`，
+  输入框麦克风按钮录音 → PCM16 → WAV → 上传转写，180 s 超时、解码后 4 MiB 上限，
+  返回 `200 {available:false}` 时按正常结果展示（与「路由不存在」严格区分）。
+  **能力位**（**定稿单值名**）：`attachment-chunked-upload-v1` / `chat-schedules-v1` /
+  `speech-transcription-v1`；老桥不发位 → 对应入口不出现。
+  **验证**：单测 75 类 / 711 用例 / 0 失败（新增 `DshClientBffTest`、`ChunkPlanTest`、
+  `CronHintTest`、`WavHeaderTest`、`BffCapabilitiesTest`、`SchedulePolicyTest` 六个测试类）；
+  `docsCheck` 双向一致；`lintDebug` 0 error。
+  **真机未验**：录音兼容性、权限三态在 vivo ROM、分块对真实桥（单测用 MockWebServer 模拟）。
+  **降级已钉**：老桥 404 → `isRouteMissing()` → 入口隐藏；`available:false` 是正常结果不是错误。
+  （上一个版本 v2.2.56 的改动见 `docs/project/CHANGELOG-DEV.md`：模型选择器显示上下文容量、
+  新会话复用空白会话。v2.2.55 的改动已随该版本发布。）
 - 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用。证书没变，但 **v2.2.41 起包名变了**，
   `v2.2.40` 及更早仍需先卸载）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)
 - 许可证：[GNU Affero General Public License v3.0](./LICENSE)
-- 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.7**（「加载更早消息」需要 2.3.1+；「插件」页清单与启停需要 2.3.2+ / 2.3.3+；**审批 / 问答卡片需要 2.3.7+**；**断档重同步 / 订阅基线 / 交付物实时卡片需要 2.3.8+**；「回答被截断」提示需 bridge **≥ 2.4.1**；后台任务面板需 bridge **≥ 2.4.3**；模型页目录添加 / 恢复默认模型需 bridge **≥ 2.5.0**；**设备名显示为「平台 · 机型」需 bridge ≥ 2.6.1**（低于此版本时 App 照样能用，只是设备表里仍是占位名）；**模型上下文容量显示需 bridge ≥ 2.7.0**（低于此版本时模型行不显示容量）；**「新会话复用空白会话」需 bridge ≥ 2.7.0**（低于此版本时每次新建都会多一个空会话））
+- 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.7**（「加载更早消息」需要 2.3.1+；「插件」页清单与启停需要 2.3.2+ / 2.3.3+；**审批 / 问答卡片需要 2.3.7+**；**断档重同步 / 订阅基线 / 交付物实时卡片需要 2.3.8+**；「回答被截断」提示需 bridge **≥ 2.4.1**；后台任务面板需 bridge **≥ 2.4.3**；模型页目录添加 / 恢复默认模型需 bridge **≥ 2.5.0**；**设备名显示为「平台 · 机型」需 bridge ≥ 2.6.1**（低于此版本时 App 照样能用，只是设备表里仍是占位名）；**模型上下文容量显示需 bridge ≥ 2.7.0**（低于此版本时模型行不显示容量）；**「新会话复用空白会话」需 bridge ≥ 2.7.0**（低于此版本时每次新建都会多一个空会话）；**分块上传 / 定时任务 / 官方语音需 bridge ≥ 2.8.0**（低于此版本时对应入口不出现））
   （旧名 [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace)）

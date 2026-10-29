@@ -94,10 +94,19 @@ class DshClient(
 | GET | `chat/sessions/{sessionId}/jobs` | `sessionJobs(sessionId)` | 后台任务 roster |
 | GET | `chat/sessions/{sessionId}/jobs/{jobId}/output` | `jobOutput(...)` | 任务输出（增量） |
 | POST | `chat/sessions/{sessionId}/jobs/{jobId}/kill` | `killJob(...)` | 取消任务 |
+| GET | `chat/schedules?sessionId=` | `schedules(sessionId?)` | 定时任务列表（缺参数 = 全部；时间一律 epoch 毫秒） |
+| POST | `chat/schedules` | `createSchedule(...)` | 新建（text / cron 五段 / IANA 时区） |
+| PATCH | `chat/schedules/{id}` | `patchSchedule(...)` | 改字段；`enabled=true` 只对**未结束**任务有效（已结束 409 `details.reason=SCHEDULE_ENDED`），**`enabled=false` 会被回 400 `ENABLED_UNSUPPORTED`**（内核无暂停语义） |
+| DELETE | `chat/schedules/{id}` | `deleteSchedule(id)` | 删除（204）；**也是「停用」的唯一实现** |
 | GET | `chat/sessions/{sessionId}/messages` | `history(sessionId, beforeSeq, maxMessages)` | 历史（分页 + 字节预算） |
 | POST | `chat/sessions/{sessionId}/messages` | `sendMessage(...)` | 发消息（附件内联 / 上传凭证） |
 | POST | `attachments`（上传） | `uploadAttachment(...)` | 上传附件 |
 | GET | `attachments/{attachmentId}?sessionId=` | `readAttachment(...)` | 取附件字节 |
+| POST | `chat/sessions/{sessionId}/attachments/uploads` | `beginUpload(...)` | 开分块上传（同 name+size 复用 uploadId，返回 `alreadyReceived`） |
+| PUT | `…/attachments/uploads/{uploadId}/chunks/{index}` | `putChunk(...)` | 传一块（**raw octet-stream**，index 从 0 起，幂等覆盖） |
+| POST | `…/attachments/uploads/{uploadId}/complete` | `completeUpload(...)` | 收尾换附件视图；缺块 → 409 + `details.missing` |
+| GET | `…/attachments/uploads/{uploadId}` | `uploadStatus(...)` | 已收块数 / 缺块（断点续传） |
+| DELETE | `…/attachments/uploads/{uploadId}` | `cancelUpload(...)` | 放弃本次上传（204） |
 | GET | `chat/sessions/{sessionId}/approvals` | `pendingApprovals(...)` | 待审批 |
 | POST | `chat/sessions/{sessionId}/approvals/{approvalId}/decision` | `decideApproval(...)` | 审批决定 |
 | GET | `chat/sessions/{sessionId}/questions` | `pendingQuestions(...)` | 待答问题 |
@@ -106,6 +115,9 @@ class DshClient(
 | POST | `chat/sessions/{sessionId}/commands` | `executeCommand(...)` | 执行命令 |
 | GET | `chat/sessions/{sessionId}/models` | `sessionModels(...)` | 会话可选模型 |
 | PUT | `chat/sessions/{sessionId}/model` | `selectModel(...)` | 选择模型 |
+| GET | `chat/speech/catalog` | `speechCatalog()` | 语音服务目录；无服务时 **200 `available:false`**（不是 404） |
+| POST | `chat/speech/transcriptions` | `transcribe(...)` | 整段 WAV → 文本（≤4 MiB，服务端 180s 超时） |
+| PUT | `chat/speech/config` | `configureSpeech(...)` | 选提供商 / 语言 |
 | PUT | `chat/sessions/{sessionId}/agent-preset` | `selectAgentPreset(...)` | 选择智能体预设 |
 | POST | `chat/runs/{id}/cancel` | `cancel(sessionId)` | 取消当前轮 |
 | GET | `settings/providers` | `providerSettings()` | 提供商配置 |
@@ -144,6 +156,9 @@ internal fun parseBridgeCapabilities(data: JsonElement): BridgeCapabilities?
 internal fun missingRequiredCapabilities(capabilities: Set<String>): List<String>
 internal fun supportsArchiveListing(capabilities: Set<String>): Boolean
 internal fun supportsSessionJobs(capabilities: Set<String>): Boolean
+internal fun supportsChunkedUpload(capabilities: Set<String>): Boolean
+internal fun supportsSchedules(capabilities: Set<String>): Boolean
+internal fun supportsSpeech(capabilities: Set<String>): Boolean
 internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions-v1"]
 ```
 
@@ -151,6 +166,15 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 - **读不到 = 未知（null），不是「什么都缺」**。空数组也按未知处理 ——
   假警告比没有警告更坏，它教会用户忽略警告。
 - 调用方一律按「null → 不提示、不降级」处理。
+> BFF 三项的能力位是**跨仓契约、单值判定、不接受别名**（2026-10-29 桥侧定稿）：
+> `attachment-chunked-upload-v1` / `chat-schedules-v1` / `speech-transcription-v1`，
+> 桥侧 `tests/capabilities.spec.ts` 有对应钉子；名字对不上的表现是**入口消失**而不是 404 报错。
+> 「别名容忍表」已按预埋方案删除，`BffCapabilitiesTest` 反向钉住老名字不再接受。
+> 另：`chat/schedules` / `chat/speech/*` 在**老桥是 404**，读取类入口必须按「不可用」隐藏，
+> 不得整页报错（判据 `DshApiException.isRouteMissing()`，`DshClientBffTest` 钉住）。
+> ⚠️ `GET chat/schedules?sessionId=` 对**不存在的会话**同样回 404 `NOT_FOUND`，所以
+> 「路由不存在」与「会话没了」只能靠能力位区分（`SchedulePolicy.classifyScheduleReadFailure`）。
+
 - 两个必需项是**跨仓契约**：bridge 侧 `capabilities.spec.ts` 有对应钉子，
   防止那边当死代码删掉而这边对所有用户误报「插件过旧」。
 
@@ -291,6 +315,49 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `fun readAttachment` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClient.kt` | function |
 | `fun events` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClient.kt` | function |
 | `fun eventsUrl` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClient.kt` | function |
+| `fun beginUpload` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClientBff.kt` | function |
+| `fun putChunk` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClientBff.kt` | function |
+| `fun completeUpload` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClientBff.kt` | function |
+| `fun uploadStatus` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClientBff.kt` | function |
+| `fun cancelUpload` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClientBff.kt` | function |
+| `fun schedules` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClientBff.kt` | function |
+| `fun createSchedule` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClientBff.kt` | function |
+| `fun patchSchedule` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClientBff.kt` | function |
+| `fun deleteSchedule` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClientBff.kt` | function |
+| `fun speechCatalog` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClientBff.kt` | function |
+| `fun transcribe` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClientBff.kt` | function |
+| `fun configureSpeech` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClientBff.kt` | function |
+| `fun isRouteMissing` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClientBff.kt` | function |
+| `fun missingChunks` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClientBff.kt` | function |
+| `fun planChunks` | `app/src/main/java/io/github/westanke/dshcompanion/data/ChunkPlan.kt` | function |
+| `fun chunkSlice` | `app/src/main/java/io/github/westanke/dshcompanion/data/ChunkPlan.kt` | function |
+| `data class ChunkPlan` | `app/src/main/java/io/github/westanke/dshcompanion/data/ChunkPlan.kt` | class |
+| `data class UploadSession` | `app/src/main/java/io/github/westanke/dshcompanion/data/BffModels.kt` | class |
+| `data class ScheduleItem` | `app/src/main/java/io/github/westanke/dshcompanion/data/BffModels.kt` | class |
+| `data class SpeechCatalog` | `app/src/main/java/io/github/westanke/dshcompanion/data/BffModels.kt` | class |
+| `data class TranscriptionView` | `app/src/main/java/io/github/westanke/dshcompanion/data/BffModels.kt` | class |
+| `sealed interface CronHint` | `app/src/main/java/io/github/westanke/dshcompanion/data/CronHint.kt` | interface |
+| `fun parseCron` | `app/src/main/java/io/github/westanke/dshcompanion/data/CronHint.kt` | function |
+| `object WavHeader` | `app/src/main/java/io/github/westanke/dshcompanion/data/WavHeader.kt` | object |
+| `fun supportsChunkedUpload` | `app/src/main/java/io/github/westanke/dshcompanion/data/BridgeCapabilities.kt` | function |
+| `fun supportsSchedules` | `app/src/main/java/io/github/westanke/dshcompanion/data/BridgeCapabilities.kt` | function |
+| `fun supportsSpeech` | `app/src/main/java/io/github/westanke/dshcompanion/data/BridgeCapabilities.kt` | function |
+| `fun openSchedulePanel` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessSchedulesViewModel.kt` | function |
+| `fun loadSchedules` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessSchedulesViewModel.kt` | function |
+| `fun enableSchedule` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessSchedulesViewModel.kt` | function |
+| `fun scheduleToggle` | `app/src/main/java/io/github/westanke/dshcompanion/data/SchedulePolicy.kt` | function |
+| `fun isScheduleEnded` | `app/src/main/java/io/github/westanke/dshcompanion/data/SchedulePolicy.kt` | function |
+| `fun classifyScheduleReadFailure` | `app/src/main/java/io/github/westanke/dshcompanion/data/SchedulePolicy.kt` | function |
+| `fun displayOrder` | `app/src/main/java/io/github/westanke/dshcompanion/data/SchedulePolicy.kt` | function |
+| `val ScheduleToggle` | `app/src/main/java/io/github/westanke/dshcompanion/data/SchedulePolicy.kt` | interface |
+| `fun loadSpeechCatalog` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessSpeechViewModel.kt` | function |
+| `fun transcribeSpeech` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessSpeechViewModel.kt` | function |
+| `fun cancelSpeechTranscription` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessSpeechViewModel.kt` | function |
+| `fun ScheduleSheet` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ScheduleSheet.kt` | function |
+| `fun SpeechInputButton` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SpeechInput.kt` | function |
+| `fun SpeechStatusBar` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SpeechInput.kt` | function |
+| `fun rememberSpeechUiState` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SpeechInput.kt` | function |
+| `class SpeechRecorder` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SpeechRecorder.kt` | class |
 | `interface KeyValueStore` | `app/src/main/java/io/github/westanke/dshcompanion/data/HostStore.kt` | interface |
 | `interface SecretBox` | `app/src/main/java/io/github/westanke/dshcompanion/data/HostStore.kt` | interface |
 | `class SecureConnectionStore` | `app/src/main/java/io/github/westanke/dshcompanion/data/SecureConnectionStore.kt` | class |

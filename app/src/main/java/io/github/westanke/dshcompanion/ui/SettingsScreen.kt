@@ -26,6 +26,7 @@ import androidx.compose.material.icons.outlined.DeleteForever
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
 import androidx.compose.material.icons.outlined.PhoneAndroid
+import androidx.compose.material.icons.outlined.Router
 import androidx.compose.material.icons.outlined.SubdirectoryArrowRight
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -462,6 +463,11 @@ fun SettingsScreen(state: HarnessState, viewModel: HarnessViewModel) {
                 stringResource(R.string.version),
                 "v${BuildConfig.VERSION_NAME}",
                 Modifier.padding(bottom = 18.dp),
+            )
+            SettingRow(
+                Icons.Outlined.Router,
+                stringResource(R.string.bridge_version),
+                state.bridgeVersion ?: stringResource(R.string.bridge_version_unknown),
             )
 
             // ── 应用内更新检查 ────────────────────────────────────────────

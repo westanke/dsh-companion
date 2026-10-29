@@ -3,7 +3,19 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.westanke.dshcompanion.data.QUESTION_STATE_CONTINUED
+import io.github.westanke.dshcompanion.data.CHUNKED_UPLOAD_THRESHOLD
 import io.github.westanke.dshcompanion.data.ChatContentParts
+import io.github.westanke.dshcompanion.data.MAX_UPLOAD_BYTES
+import io.github.westanke.dshcompanion.data.UploadedAttachment
+import io.github.westanke.dshcompanion.data.ChunkPlan
+import io.github.westanke.dshcompanion.data.UploadSession
+import io.github.westanke.dshcompanion.debug.DiagLog
+import io.github.westanke.dshcompanion.data.beginUpload
+import io.github.westanke.dshcompanion.data.completeUpload
+import io.github.westanke.dshcompanion.data.missingChunks
+import io.github.westanke.dshcompanion.data.planChunks
+import io.github.westanke.dshcompanion.data.putChunk
+import io.github.westanke.dshcompanion.data.supportsChunkedUpload
 import io.github.westanke.dshcompanion.data.ChatHistory
 import io.github.westanke.dshcompanion.data.ChatSession
 import io.github.westanke.dshcompanion.data.ChatWorkspace
@@ -144,19 +156,28 @@ internal fun HarnessViewModel.attachImage(name: String, sizeBytes: Long, mediaTy
 internal fun HarnessViewModel.attachFile(name: String, sizeBytes: Long, openInput: () -> InputStream) {
     val api = client ?: return
     val sessionId = mutableState.value.selectedSessionId ?: return
-    if (sizeBytes > ChatContentParts.MAX_FILE_BYTES) {
-        notify(appString(R.string.attachment_file_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_FILE_BYTES)))
+    // 大文件改走分块，前提是**服务端自报了**能力位。老桥没有这条路由时退回单请求上传：
+    // base64 单请求的天花板是 24 MiB，分块是 256 MiB，两者的上限必须分开判，
+    // 否则用户会看到「明明插件支持大文件，App 却说太大了」。
+    val chunked = shouldUploadInChunks(sizeBytes)
+    val limit = if (chunked) MAX_UPLOAD_BYTES else ChatContentParts.MAX_FILE_BYTES
+    if (sizeBytes > limit) {
+        notify(appString(R.string.attachment_file_too_large, ChatContentParts.formatBytes(limit)))
         return
     }
     viewModelScope.launch {
-        update { copy(attachmentUploading = true) }
+        update { copy(attachmentUploading = true, chunkUpload = null) }
         try {
-            val bytes = readBytes(ChatContentParts.MAX_FILE_BYTES, openInput) ?: return@launch
-            if (bytes.size.toLong() > ChatContentParts.MAX_FILE_BYTES) {
-                notify(appString(R.string.attachment_file_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_FILE_BYTES)))
-                return@launch
+            val uploaded = if (chunked) {
+                uploadInChunks(api, sessionId, name, sizeBytes, openInput)
+            } else {
+                val bytes = readBytes(ChatContentParts.MAX_FILE_BYTES, openInput) ?: return@launch
+                if (bytes.size.toLong() > ChatContentParts.MAX_FILE_BYTES) {
+                    notify(appString(R.string.attachment_file_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_FILE_BYTES)))
+                    return@launch
+                }
+                withContext(Dispatchers.IO) { api.uploadAttachment(sessionId, bytes, name) }
             }
-            val uploaded = withContext(Dispatchers.IO) { api.uploadAttachment(sessionId, bytes, name) }
             // 上传期间用户可能换了会话：附件属于发起它的那条会话，别塞到别的会话里。
             if (mutableState.value.selectedSessionId != sessionId) return@launch
             update {
@@ -165,31 +186,149 @@ internal fun HarnessViewModel.attachFile(name: String, sizeBytes: Long, openInpu
                         id = java.util.UUID.randomUUID().toString(),
                         part = PromptPart.FilePart(uploaded.receiptId),
                         name = uploaded.name.ifBlank { name },
-                        sizeBytes = bytes.size.toLong(),
+                        sizeBytes = sizeBytes,
                     ),
+                    chunkUpload = null,
                 )
             }
         } catch (failure: Throwable) {
             if (failure is CancellationException) throw failure
+            val message = when {
+                // 服务端的上限可能比客户端更严；这时不能引用我们自己的 24 MiB，
+                // 否则用户会被「明明没到 24 MiB」搞糊涂。
+                failure is DshApiException && failure.code == "TOO_LARGE" ->
+                    appString(R.string.attachment_file_rejected)
+                // 端点不存在只有一个现实原因：服务端插件版本过旧。
+                // 这条提示必须可操作（去升级插件），而不是甩一句 ROUTE_NOT_FOUND。
+                failure is DshApiException && failure.code == "ROUTE_NOT_FOUND" ->
+                    appString(R.string.attachment_upload_unsupported)
+                else -> messageOf(failure)
+            }
+            // 分块失败留一条可重试的进度：重试会**重发同一次 beginUpload**，服务端按
+            // 同名同大小复用 uploadId 并带回 alreadyReceived，于是断点续传是免费的。
             update {
                 copy(
-                    error = when {
-                        // 服务端的上限可能比客户端更严；这时不能引用我们自己的 24 MiB，
-                        // 否则用户会被「明明没到 24 MiB」搞糊涂。
-                        failure is DshApiException && failure.code == "TOO_LARGE" ->
-                            appString(R.string.attachment_file_rejected)
-                        // 端点不存在只有一个现实原因：服务端插件版本过旧。
-                        // 这条提示必须可操作（去升级插件），而不是甩一句 ROUTE_NOT_FOUND。
-                        failure is DshApiException && failure.code == "ROUTE_NOT_FOUND" ->
-                            appString(R.string.attachment_upload_unsupported)
-                        else -> messageOf(failure)
-                    },
+                    error = message,
+                    chunkUpload = chunkUpload?.copy(failed = true, error = message),
                 )
             }
+            DiagLog.w("UPLOAD", "attachFile 失败（chunked=$chunked）: ${failure.message}")
         } finally {
             update { copy(attachmentUploading = false) }
         }
     }
+}
+
+/** 是否走分块：超阈值 + 服务端自报支持 + 没超分块上限。 */
+private fun HarnessViewModel.shouldUploadInChunks(sizeBytes: Long): Boolean =
+    sizeBytes > CHUNKED_UPLOAD_THRESHOLD &&
+        sizeBytes <= MAX_UPLOAD_BYTES &&
+        supportsChunkedUpload(mutableState.value.bridgeCapabilities)
+
+/**
+ * 分块上传：流式读文件，每块 1 MiB 直接 PUT，**不把整个文件读进内存**。
+ *
+ * 这是分块上传相对 base64 单请求的两个实际好处：大文件不再占两份内存（原文 + base64），
+ * 而且断点续传靠服务端的 `alreadyReceived` 免费拿到，客户端不记账。
+ */
+private suspend fun HarnessViewModel.uploadInChunks(
+    api: DshClient,
+    sessionId: String,
+    name: String,
+    sizeBytes: Long,
+    openInput: () -> InputStream,
+): UploadedAttachment {
+    val session = withContext(Dispatchers.IO) { api.beginUpload(sessionId, name, sizeBytes) }
+    val plan = planChunks(sizeBytes, session.chunkSize, session.alreadyReceived)
+    val alreadySent = plan.count - plan.pending.size
+    update {
+        copy(
+            chunkUpload = ChunkUploadProgress(
+                name = name,
+                sent = alreadySent,
+                total = plan.count,
+                resumed = alreadySent > 0,
+            ),
+        )
+    }
+    openInput().use { stream ->
+        var cursor = 0L
+        plan.pending.forEachIndexed { position, index ->
+            val offset = plan.offsetOf(index)
+            if (offset > cursor) cursor = skipFully(stream, offset, cursor)
+            val length = minOf(plan.chunkSize, sizeBytes - offset).toInt()
+            val bytes = readExactly(stream, length)
+            cursor = offset + bytes.size
+            withContext(Dispatchers.IO) { api.putChunk(sessionId, session.uploadId, index, bytes) }
+            update { copy(chunkUpload = chunkUpload?.copy(sent = alreadySent + position + 1)) }
+        }
+    }
+    return completeWithRepair(api, sessionId, session, plan, sizeBytes, openInput)
+}
+
+/**
+ * 收尾；遇 409 就按 `details.missing` **补一次**再重试。
+ *
+ * 只补一次是刻意的：服务端已经明确告诉我们缺哪几块，补完还缺说明它那边的状态在变，
+ * 再循环就是拿网络打服务端 —— 交给用户点重试（那次会走完整的断点续传）。
+ */
+private suspend fun HarnessViewModel.completeWithRepair(
+    api: DshClient,
+    sessionId: String,
+    session: UploadSession,
+    plan: ChunkPlan,
+    sizeBytes: Long,
+    openInput: () -> InputStream,
+): UploadedAttachment {
+    try {
+        return withContext(Dispatchers.IO) { api.completeUpload(sessionId, session.uploadId) }
+    } catch (failure: DshApiException) {
+        val missing = failure.missingChunks()
+        if (failure.status != 409 || missing.isEmpty()) throw failure
+        DiagLog.w("UPLOAD", "complete 报缺块 ${missing.joinToString()}，补传后重试一次")
+        openInput().use { stream ->
+            missing.sorted().forEach { index ->
+                val offset = plan.offsetOf(index)
+                val length = minOf(plan.chunkSize, sizeBytes - offset).toInt()
+                val bytes = readChunkAt(stream, offset, length)
+                withContext(Dispatchers.IO) { api.putChunk(sessionId, session.uploadId, index, bytes) }
+            }
+        }
+        return withContext(Dispatchers.IO) { api.completeUpload(sessionId, session.uploadId) }
+    }
+}
+
+/** 顺序读时把流推到 [target]；返回新的游标。 */
+private fun skipFully(stream: InputStream, target: Long, from: Long): Long {
+    var remaining = target - from
+    while (remaining > 0) {
+        val skipped = stream.skip(remaining)
+        if (skipped > 0) {
+            remaining -= skipped
+            continue
+        }
+        // skip 可能返回 0（某些 provider 就是这样）；退回读一个字节，别死循环。
+        if (stream.read() < 0) throw IOException("文件在读取过程中变短了")
+        remaining -= 1
+    }
+    return target
+}
+
+private fun readExactly(stream: InputStream, length: Int): ByteArray {
+    val buffer = ByteArray(length)
+    var read = 0
+    while (read < length) {
+        val count = stream.read(buffer, read, length - read)
+        if (count < 0) throw IOException("文件在读取过程中变短了")
+        read += count
+    }
+    return buffer
+}
+
+/** 从 [offset] 起读一段（补块用；按需跳过，不假设顺序）。 */
+private fun readChunkAt(stream: InputStream, offset: Long, length: Int): ByteArray {
+    skipFully(stream, offset, 0L)
+    return readExactly(stream, length)
 }
 
 /** 从待发附件里删掉一条。 */

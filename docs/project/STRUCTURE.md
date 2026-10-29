@@ -18,7 +18,7 @@ dsh-companion/
 │   ├── src/main/java/…/dshcompanion/   源码（见 §3）
 │   ├── src/main/assets/chat/           WebView 版会话页（chat.html 及资源）
 │   ├── src/main/res/                   资源：drawable / values / values-en / xml / mipmap
-│   ├── src/test/java/…/                单元测试（62 类，见 §5）
+│   ├── src/test/java/…/                单元测试（74 类，见 §5）
 │   └── src/androidTest/java/…/         仪器测试
 ├── design-system/              设计规范（MASTER.md 等），涉及界面时必须读
 ├── docs/project/               开发事实来源（状态 / 决策 / 坑位 / 本文）
@@ -114,16 +114,22 @@ dsh-companion/
 | `HarnessInteractionsViewModel.kt` | 交互域：工具审批与内核提问的拉取、提交、决定 |
 | `HarnessAttachmentsViewModel.kt` | 附件域：待发附件与历史图片按需取回 |
 | `HarnessJobsViewModel.kt` | 后台任务面板的动作集 |
+| `HarnessSchedulesViewModel.kt` | 定时任务域：面板数据、新建/暂停/删除（老桥 404 降级为「需要升级」） |
+| `HarnessSpeechViewModel.kt` | 官方语音输入域：语音目录、转写、取消与重试（不走全局 busy） |
 | `HarnessPluginsViewModel.kt` | 设置域：插件清单/启停、提供商增改查与模型发现 |
 | `HarnessNamespacesViewModel.kt` | 通用设置命名空间：加载与按路径提交（老桥 404/403 静默降级） |
 | `HarnessDiagViewModel.kt` | 把偏好开关同步给 `DiagLog` |
 | `HarnessTruncationViewModel.kt` | 一轮边界事件：落「回答被截断」提示或清上一轮的 |
 
-### 3.2 `data/`（40 个文件）
+### 3.2 `data/`（50 个文件）
 
 | 分组 | 文件 | 职责 |
 | --- | --- | --- |
 | 网络边界 | `DshClient.kt` | **唯一网络边界**：bridge REST 强类型客户端 + SSE 订阅 |
+| BFF 扩展 | `DshClientBff.kt` | 分块上传 / 定时任务 / 语音的 `/api/v1` 端点，复用 `DshClient` 的鉴权与客户端 |
+| BFF 模型 | `BffModels.kt` | 三组新端点的响应/请求模型与上限常量（块大小、阈值、转写超时） |
+| 协议辅助 | `ChunkPlan.kt` / `CronHint.kt` / `WavHeader.kt` | 分块计划与切块、cron 表达式人话解析、PCM16 → WAV 封装 |
+| 能力策略 | `SchedulePolicy.kt` | 定时任务开关走哪个动词（内核无暂停 → 停用=删除）、409/404 语义分类、列表展示顺序 |
 | 数据模型 | `Models.kt` / `ChatModels.kt` / `ConnectionModels.kt` / `JobViews.kt` / `SessionFileRefs.kt` / `SessionStats.kt` | 响应/请求模型、展示项、连接地基契约、任务与文件引用 |
 | 协议映射 | `ChatPresentation.kt` / `ChatHistoryMapping.kt` / `ChatDisplayGroups.kt` / `ChatVisibleItems.kt` / `ChatContentParts.kt` / `ChatToolBlocks.kt` / `ChatToolPresentation.kt` / `ChatJson.kt` / `ChatLinkTarget.kt` / `ChatPathLinks.kt` / `ChatForkPoint.kt` / `ChatRetry.kt` / `ChatSeqMonitor.kt` / `ChatTimeLabel.kt` / `ChatHandoff.kt` / `ChatDeliverableCards.kt` | 历史事件 → 展示项、工具块、链接、分叉、重试、断档、时间、交接、交付物 |
 | 连接 | `ConnectionCoordinator.kt` / `ConnectionLiveness.kt` / `ConnectionShare.kt` / `BridgeCapabilities.kt` | 多地址探活选路、此刻通不通、配置导入编解码、能力位解析 |
@@ -132,7 +138,7 @@ dsh-companion/
 | 流程与闸门 | `EventDebouncer.kt` / `RequestGate.kt` / `ComposerSendPolicy.kt` | 副作用去抖、请求代际、queue/steer 策略 |
 | 更新 | `UpdateChecker.kt` | 按界面语言分流（中文 Gitee / 英文 GitHub）、下载、SHA-256 校验、调起安装器 |
 
-### 3.3 `ui/`（17 个文件）与 `ui/chat/`（33 个文件）
+### 3.3 `ui/`（19 个文件）与 `ui/chat/`（37 个文件）
 
 `ui/` 是页面级容器与跨页面组件；`ui/chat/` 是会话详情页的全部拆分部件。
 拆分理由是行数预算（800/文件），**不是**新架构 —— 语义与行为在拆之前就等价。
@@ -219,7 +225,7 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/` | dir | 主题与字号缩放 |
 | `app/src/main/java/io/github/westanke/dshcompanion/web/` | dir | WebView 容器与 JS 桥 |
 | `app/src/main/java/io/github/westanke/dshcompanion/debug/` | dir | 诊断日志与探针 |
-| `app/src/test/java/` | dir | 单元测试（64 类） |
+| `app/src/test/java/` | dir | 单元测试（74 类） |
 | `app/src/androidTest/java/` | dir | 仪器测试 |
 | `app/src/main/assets/chat/` | dir | WebView 版会话页资源 |
 | `app/src/main/res/` | dir | Android 资源（含双语 values） |
@@ -241,13 +247,17 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessOperations.kt` | file | 拿活跃连接跑请求；无连接时给明确提示而不是静默返回 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessPluginsViewModel.kt` | file | 设置域：插件清单/启停与模型提供商增改查 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessNamespacesViewModel.kt` | file | 通用设置命名空间：加载、按路径提交与 404/403 降级 |
+| `app/src/main/java/io/github/westanke/dshcompanion/HarnessSchedulesViewModel.kt` | file | 定时任务域：面板数据、新建/暂停/删除与老桥 404 降级 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessSessionsViewModel.kt` | file | 会话域：会话增删改查、工作区、发消息、会话文件与模型选择 |
+| `app/src/main/java/io/github/westanke/dshcompanion/HarnessSpeechViewModel.kt` | file | 语音输入域：目录、转写、取消与重试 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessTruncationViewModel.kt` | file | 一轮边界事件：落「回答被截断」提示或清掉上一轮的 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessViewModel.kt` | file | 唯一 ViewModel：持有 HarnessState 与跨域共用基础设施 |
 | `app/src/main/java/io/github/westanke/dshcompanion/MainActivity.kt` | file | 应用入口 Activity（Compose 宿主、生命周期、Intent 处理） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/AndroidConnectionStorage.kt` | file | KeyValueStore 的 SharedPreferences 落地（存密文） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/AppPreferences.kt` | file | 轻量应用偏好（明文，丢只影响一次点击） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/BridgeCapabilities.kt` | file | connection.ready 能力位解析与必需项判据 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/BffModels.kt` | file | 分块上传/定时任务/语音的模型与上限常量 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/ChunkPlan.kt` | file | 分块计划、待传块与按块切片 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatContentParts.kt` | file | 文本 + 待发附件 → 请求体，并守住资源上限 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatDisplayGroups.kt` | file | 会话列表显示分组：过程/结论二分与折叠组 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatForkPoint.kt` | file | 这条展示项能否作为分叉点，以及给 forkSession 的 atSeq |
@@ -269,7 +279,10 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ConnectionLiveness.kt` | file | 连接页「此刻通不通」的三个纯函数判据 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ConnectionModels.kt` | file | 连接层数据模型（地基契约） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ConnectionShare.kt` | file | 配置导入编解码：连接信息 ↔ 可粘贴短文本 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/CronHint.kt` | file | cron 表达式人话解析（不拦扩展语法） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClient.kt` | file | 唯一网络边界：bridge REST 强类型客户端 + SSE 订阅 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/DshClientBff.kt` | file | 分块上传/定时任务/语音的 /api/v1 扩展端点 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/SchedulePolicy.kt` | file | 定时任务策略：开关语义、错误分类、展示排序（纯函数，可单测） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/SettingsNamespaces.kt` | file | 设置命名空间 wire 模型 + schema→控件纯函数映射（不强类型化） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ErrorMessages.kt` | file | 按错误码查的本地化出错文案 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/EventDebouncer.kt` | file | 事件驱动副作用闸门（安静一段时间再干一次） |
@@ -284,6 +297,8 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/data/RequestGate.kt` | file | 请求代际闸门：过期结果写不回状态 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/SecureConnectionStore.kt` | file | 凭据与主机存储的门面 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/SessionFileRefs.kt` | file | 会话里被 agent 提到过的文件路径提取 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/SessionAnalytics.kt` | file | 会话投影里的内核侧分析（Token 用量 / 上下文压力 / 目标 / 智能体团队） |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/CommandArgOptions.kt` | file | `/model` `/permission` 的二级菜单选项（REST 侧复原桥 command-options） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/SessionStats.kt` | file | 会话执行统计（全来自历史事件） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/Trajectory.kt` | file | 轨迹页数据：历史按轮次分组的节点 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/UpdateChecker.kt` | file | 应用内更新检查：渠道分流、下载、SHA256 校验、调起安装器 |
@@ -333,8 +348,11 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatScrollDiag.kt` | file | 滚动诊断探针与「等内容」拍数 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatScrollFreeze.kt` | file | 滚动期间冻结流式快照 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatSessionFiles.kt` | file | 「本会话的文件」面板 |
+| `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ScheduleSheet.kt` | file | 定时任务底部面板：列表、新建表单与人话 cron 预览 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatSessionPane.kt` | file | 会话列表层（窄屏整页 / 宽屏左栏 / 未选时概览） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatSheets.kt` | file | 三个底部弹层：模型与智能体、工作区管理、新建会话 |
+| `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SpeechInput.kt` | file | 麦克风按钮、录音状态条、运行时权限与转写结果插入 |
+| `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SpeechRecorder.kt` | file | AudioRecord 采集 PCM16 并封 WAV（可取消、限长） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatStatsSheet.kt` | file | 会话统计面板（执行维度） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatSuggestions.kt` | file | 输入框上方 @ 文件与 / 命令两个补全面板 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatToast.kt` | file | 一次性反馈与剪贴板助手 |
@@ -344,6 +362,7 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/AppFontScale.kt` | file | 应用内字号缩放（替换 LocalDensity） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/Theme.kt` | file | 应用主题装配（明暗三档 + 配色主题） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/ThemePalettes.kt` | file | 四套配色色板与连接语义色 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/WavHeader.kt` | file | PCM16 → WAV 头封装（16 kHz 单声道） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/AdaptiveBreakpoints.kt` | file | 宽度档位三档纯函数（840dp 具名常量） |
 | `app/src/main/java/io/github/westanke/dshcompanion/web/ActiveChatBridge.kt` | file | 当前存活的 ChatWebBridge（Activity 回调落点） |
 | `app/src/main/java/io/github/westanke/dshcompanion/web/ChatWebBridge.kt` | file | 注入 assets/chat.html 的 JS 桥（唯一登记的网络例外） |

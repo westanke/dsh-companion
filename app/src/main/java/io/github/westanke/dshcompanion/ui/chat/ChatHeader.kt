@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.List
 import androidx.compose.material.icons.outlined.ModelTraining
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.SubdirectoryArrowRight
@@ -41,9 +42,11 @@ import io.github.westanke.dshcompanion.HarnessState
 import io.github.westanke.dshcompanion.HarnessViewModel
 import io.github.westanke.dshcompanion.R
 import io.github.westanke.dshcompanion.cancelRun
+import io.github.westanke.dshcompanion.openSchedulePanel
 import io.github.westanke.dshcompanion.refreshHistory
 import io.github.westanke.dshcompanion.data.ChatSession
 import io.github.westanke.dshcompanion.data.PermissionSelect
+import io.github.westanke.dshcompanion.data.supportsSchedules
 import io.github.westanke.dshcompanion.data.supportsSessionJobs
 import io.github.westanke.dshcompanion.ui.ConnectionOfflineColor
 import io.github.westanke.dshcompanion.ui.ConnectionOnlineColor
@@ -125,6 +128,9 @@ internal fun ConversationHeader(
         // 插话仍是固定的 steer 提交（不受设置里「繁忙时默认行为」影响）。
         var moreOpen by remember { mutableStateOf(false) }
         var confirmFullAccess by remember { mutableStateOf(false) }
+        // 定时任务面板由顶栏自己持有：`ChatDetail.kt` 正好 800 行（预算线），
+        // 把「开/关一个 sheet」这种事塞进去等于逼它下次拆文件。
+        var scheduleOpen by remember { mutableStateOf(false) }
         val currentModel = state.sessionModels?.current
         val agentName = state.agentPresets.find { it.id == session.agentPreset }?.name ?: session.agentPreset
         val modelSummary = listOfNotNull(agentName, currentModel?.provider, currentModel?.model)
@@ -187,6 +193,19 @@ internal fun ConversationHeader(
                             onOpenJobs()
                         },
                         leadingIcon = { Icon(Icons.Outlined.PlayCircle, null) },
+                    )
+                }
+                // 定时任务：与会话绑定（cron 到点由电脑端触发，跑在同一个会话里）。
+                // 与「后台任务」一样按能力位显示 —— 老桥没有这条路由，入口只配换来一个 404。
+                if (supportsSchedules(state.bridgeCapabilities)) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.schedule_menu_entry)) },
+                        onClick = {
+                            moreOpen = false
+                            viewModel.openSchedulePanel(session.id)
+                            scheduleOpen = true
+                        },
+                        leadingIcon = { Icon(Icons.Outlined.Schedule, null) },
                     )
                 }
                 DropdownMenuItem(
@@ -259,6 +278,9 @@ internal fun ConversationHeader(
         }
         // 完整访问的二次确认：与原来挂在输入区那个按钮上的对话框是同一套要求 ——
         // 必须勾选 acknowledged，确认键才会亮。
+        if (scheduleOpen) {
+            ScheduleSheet(state, viewModel) { scheduleOpen = false }
+        }
         if (confirmFullAccess) {
             FullAccessConfirmDialog(
                 onDismiss = { confirmFullAccess = false },

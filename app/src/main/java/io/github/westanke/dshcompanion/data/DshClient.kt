@@ -15,6 +15,7 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
@@ -34,7 +35,7 @@ class DshClient(
 ) {
     val endpoint: String = normalizeEndpoint(endpoint)
     private val base: HttpUrl = (this.endpoint.trimEnd('/') + "/").toHttpUrl()
-    private val json = Json { ignoreUnknownKeys = true }
+    internal val json = Json { ignoreUnknownKeys = true }
 
     fun health(): HealthView = get("healthz", HealthView.serializer(), authenticated = false)
 
@@ -490,30 +491,6 @@ fun permissionPresets(): PermissionCatalog = get("chat/permission-presets", Perm
      * 取回会话历史里某个图片附件的字节。
      *
      * 为什么历史图片需要这一步：发送时图片是 **base64 内联**在消息里的，但存进历史后被
-     * 归一化成 `{type:'image', attachment:{attachmentId:'sha256:…'}}` —— 字节搬去了
-     * 服务端的附件存储。所以「显示一张历史图片」永远是两步：先读事件拿 id，再来这里取字节。
-     *
-     * `attachmentId` 形如 `sha256:<hex>`，**含冒号**；`addPathSegment` 会把它编码成
-     * `sha256%3A…`，这正是服务端 `decodeURIComponent` 期待的形式。
-     *
-     * ### 为什么必须带上 [reference] 的四项元数据
-     *
-     * 服务端拿字节时，内核 `readImage` 会做一次**完整性校验**：把引用里的
-     * `mediaType` / `bytes` / `width` / `height` 与**实测元数据**逐项比对，
-     * 任何一项对不上就抛 `ATTACHMENT_CORRUPT`。
-     *
-     * 早先这里只传 `attachmentId`，那四项全缺 —— 结果是**每一张历史图都必然校验失败**：
-     * 字节读到了却被拒之门外。症状是「附件存储里明明有数据，代码看着全对，
-     * 图片就是永远显示不出来」。官方那条路（`SessionController.attachment()`）
-     * 同样是传完整引用。
-     *
-     * 四项缺失时按「不传」处理（而不是补 0 / 空串）：补出来的假值同样过不了校验，
-     * 还会让服务端的报错更难懂。
-     */
-    /**
-     * 取回会话历史里某个图片附件的字节。
-     *
-     * 为什么历史图片需要这一步：发送时图片是 **base64 内联**在消息里的，但存进历史后被
      * 归一化成 `{type:'image', attachment:{attachmentId:'sha256:…'}}` —— 字节搬去了内核。
      * 所以「显示一张历史图片」永远是两步：先读事件拿 id，再来这里取字节。
      *
@@ -522,18 +499,11 @@ fun permissionPresets(): PermissionCatalog = get("chat/permission-presets", Perm
      *
      * ### 为什么必须带 [sessionId]
      *
-     * 服务端走内核自己的 `sessionController.attachment({sessionId, attachmentId})`：
-     * 它先读这个会话的事件，确认该会话引用了这张图、并取出**真实的附件引用**
-     * （含 mediaType/bytes/width/height），再据此做完整性校验。
-     *
-     * 这是踩了两轮坑后的正路：
-     * - 第一轮只传 id、让插件自己调 `ctx.attachments` → 完整性校验缺四项元数据，
-     *   每张图都抛 `ATTACHMENT_CORRUPT`（「字节读到了，却被拒之门外」）；
-     * - 第二轮改成客户端把四项带上来 → 真机诊断发现这条 profile 里
-     *   `ctx.attachments` 注入属性**根本不存在**（MISSING），路走不通。
-     *
-     * 内核手里本来就有真实 ref，所以正确做法是**让内核自己取**，
-     * 客户端只需说明「我在看哪个会话里的哪张图」。
+     * 服务端走内核自己的 `sessionController.attachment({sessionId, attachmentId})`：它先读
+     * 这个会话的事件、取出**真实的附件引用**（含 mediaType/bytes/width/height）再做完整性校验。
+     * 踩过两轮坑才走到这里：只传 id 让插件自己调 `ctx.attachments` → 每张图都 `ATTACHMENT_CORRUPT`；
+     * 改成客户端补齐四项元数据 → 该 profile 里 `ctx.attachments` 注入属性根本不存在（MISSING）。
+     * 结论：内核手里有真实 ref，正确做法是**让内核自己取**，客户端只说「我在看哪张图」。
      */
     fun readAttachment(sessionId: String, attachmentId: String): ByteArray {
         val url = pathUrl("attachments", attachmentId).newBuilder()
@@ -552,13 +522,13 @@ fun permissionPresets(): PermissionCatalog = get("chat/permission-presets", Perm
 
     internal fun eventsUrl(): HttpUrl = base.newBuilder().addPathSegment("events").build()
 
-    private fun <T> get(relative: String, serializer: KSerializer<T>, authenticated: Boolean = true): T =
+    internal fun <T> get(relative: String, serializer: KSerializer<T>, authenticated: Boolean = true): T =
         get(resolve(relative), serializer, authenticated)
 
-    private fun <T> get(url: HttpUrl, serializer: KSerializer<T>, authenticated: Boolean = true): T =
+    internal fun <T> get(url: HttpUrl, serializer: KSerializer<T>, authenticated: Boolean = true): T =
         executeJson(Request.Builder().url(url).get(), serializer, authenticated)
 
-    private fun <B, T> post(
+    internal fun <B, T> post(
         relative: String,
         body: B,
         bodySerializer: KSerializer<B>,
@@ -569,7 +539,7 @@ fun permissionPresets(): PermissionCatalog = get("chat/permission-presets", Perm
         return executeJson(Request.Builder().url(resolve(relative)).post(requestBody), responseSerializer, authenticated)
     }
 
-    private fun <B, T> post(
+    internal fun <B, T> post(
         url: HttpUrl,
         body: B,
         bodySerializer: KSerializer<B>,
@@ -579,7 +549,7 @@ fun permissionPresets(): PermissionCatalog = get("chat/permission-presets", Perm
         return executeJson(Request.Builder().url(url).post(requestBody), responseSerializer)
     }
 
-    private fun <B, T> put(
+    internal fun <B, T> put(
         url: HttpUrl,
         body: B,
         bodySerializer: KSerializer<B>,
@@ -589,7 +559,7 @@ fun permissionPresets(): PermissionCatalog = get("chat/permission-presets", Perm
         return executeJson(Request.Builder().url(url).put(requestBody), responseSerializer)
     }
 
-    private fun <B, T> patch(
+    internal fun <B, T> patch(
         url: HttpUrl,
         body: B,
         bodySerializer: KSerializer<B>,
@@ -609,7 +579,7 @@ fun permissionPresets(): PermissionCatalog = get("chat/permission-presets", Perm
         execute(Request.Builder().url(url).patch(requestBody)).use(::ensureSuccess)
     }
 
-    private fun <T> executeJson(
+    internal fun <T> executeJson(
         builder: Request.Builder,
         serializer: KSerializer<T>,
         authenticated: Boolean = true,
@@ -620,10 +590,24 @@ fun permissionPresets(): PermissionCatalog = get("chat/permission-presets", Perm
         }
     }
 
-    private fun execute(builder: Request.Builder, authenticated: Boolean = true): Response =
+    internal fun execute(builder: Request.Builder, authenticated: Boolean = true): Response =
         http.newCall(if (authenticated) authenticated(builder).build() else builder.build()).execute()
 
-    private fun authenticated(builder: Request.Builder): Request.Builder =
+    // 语音转写专用慢通道：服务端 180s > 共享客户端 45s。从同一个 http 派生，构造点仍只有一处。
+    private var slowHttp: OkHttpClient? = null
+
+    internal fun <T> executeSlowJson(builder: Request.Builder, serializer: KSerializer<T>): T {
+        val client = slowHttp ?: http.newBuilder()
+            .readTimeout(TRANSCRIBE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .writeTimeout(TRANSCRIBE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .build().also { slowHttp = it }
+        client.newCall(authenticated(builder).build()).execute().use { response ->
+            ensureSuccess(response)
+            return json.decodeFromString(serializer, response.body?.string() ?: "{}")
+        }
+    }
+
+    internal fun authenticated(builder: Request.Builder): Request.Builder =
         builder
             .header("Accept", "application/json")
             .header("Authorization", "Bearer ${requireNotNull(token)}")
@@ -642,17 +626,22 @@ fun permissionPresets(): PermissionCatalog = get("chat/permission-presets", Perm
     private fun interfaceLanguageTag(): String =
         AppCompatDelegate.getApplicationLocales().toLanguageTags().ifBlank { "zh-CN" }
 
-    private fun ensureSuccess(response: Response) {
+    internal fun ensureSuccess(response: Response) {
         if (response.isSuccessful) return
         val raw = response.body?.string().orEmpty()
         val error = runCatching { json.decodeFromString(ErrorEnvelope.serializer(), raw).error }.getOrNull()
-        throw DshApiException(response.code, error?.code ?: "HTTP_ERROR", error?.message ?: "HTTP ${response.code}")
+        throw DshApiException(
+            status = response.code,
+            code = error?.code ?: "HTTP_ERROR",
+            message = error?.message ?: "HTTP ${response.code}",
+            details = error?.details,
+        )
     }
 
-    private fun resolve(relative: String): HttpUrl = base.resolve(relative)
+    internal fun resolve(relative: String): HttpUrl = base.resolve(relative)
         ?: throw IllegalArgumentException("Invalid API path: $relative")
 
-    private fun pathUrl(vararg segments: String): HttpUrl = base.newBuilder().apply {
+    internal fun pathUrl(vararg segments: String): HttpUrl = base.newBuilder().apply {
         segments.forEach(::addPathSegment)
     }.build()
 
@@ -675,8 +664,8 @@ fun permissionPresets(): PermissionCatalog = get("chat/permission-presets", Perm
             "PATH_OUTSIDE_ROOTS",
         )
 
-        private val JSON_MEDIA = "application/json".toMediaType()
-        private val OCTET_STREAM = "application/octet-stream".toMediaType()
+        internal val JSON_MEDIA = "application/json".toMediaType()
+        internal val OCTET_STREAM = "application/octet-stream".toMediaType()
         private val EMPTY_BODY = ByteArray(0).toRequestBody(OCTET_STREAM)
         /**
          * 全 App 唯一的共享 OkHttp 客户端。
@@ -795,5 +784,11 @@ private class ReconnectingEvents(
 )
 @Serializable private data class CreatedSessionEnvelope(val session: CreatedSession)
 @Serializable private data class ErrorEnvelope(val error: ApiErrorBody)
-@Serializable private data class ApiErrorBody(val code: String, val message: String, val requestId: String? = null)
+// `details` 供 409 的 `missing: [3,4]` 用（分块上传据此补齐缺块，而不是整单重传）。
+@Serializable private data class ApiErrorBody(
+    val code: String = "HTTP_ERROR",
+    val message: String = "",
+    val requestId: String? = null,
+    val details: JsonElement? = null,
+)
 

@@ -9,6 +9,7 @@ import io.github.westanke.dshcompanion.data.ChatHistory
 import io.github.westanke.dshcompanion.data.ChatSession
 import io.github.westanke.dshcompanion.data.ChatWorkspace
 import io.github.westanke.dshcompanion.data.CommandDescriptor
+import io.github.westanke.dshcompanion.data.CommandArgOption
 import io.github.westanke.dshcompanion.data.CustomProviderCreate
 import io.github.westanke.dshcompanion.data.localizedErrorRes
 import io.github.westanke.dshcompanion.data.DeviceView
@@ -621,6 +622,17 @@ internal fun HarnessViewModel.selectModel(selection: ModelSelection) = withClien
     val id = mutableState.value.selectedSessionId ?: return@withClient
     api.selectModel(id, selection)
     update { copy(sessionModels = api.sessionModels(id)) }
+}
+
+/**
+ * 执行 `/model ` 或 `/permission ` 二级菜单里选中的那一项（对齐桥 `command-select`）。
+ *
+ * 两条路不同源是**桥的现状**，不是我们的选择：`permission` 是斜杠命令，
+ * `model` 是一次 selectModel RPC（桥 `ws-commands.ts` 的 `command-select` 也这么分派）。
+ */
+internal fun HarnessViewModel.applyCommandArgOption(option: CommandArgOption) = when (option) {
+    is CommandArgOption.Permission -> selectPermissionPreset(option.value)
+    is CommandArgOption.Model -> selectModel(ModelSelection(option.provider, option.model))
 }
 
 internal fun HarnessViewModel.selectAgentPreset(agentPreset: String) = withClient { api ->

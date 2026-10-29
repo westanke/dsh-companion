@@ -1,8 +1,8 @@
 # DSH WebUI 功能对等矩阵
 
-- 最后更新：**2026-10-18**（对应 v2.2.44 未发版；本轮补强：工具调用专用块
-  ReadBlock/TerminalBlock/DiffBlock 接入原生工具详情与 chat.html，发送区新增常驻权限档位 Pill。
-  执行清单见 `PLAN-2026-10-18-对比落地.md`）。
+- 最后更新：**2026-10-29**（对应 v2.2.57 未发版的 BFF 三项：分块上传 / 定时任务 / 官方语音输入；已按桥侧定稿收紧能力位单值与停用语义。
+  桥侧 REST BFF 契约见姊妹仓 `dsh-remote-bridge/docs/project/BFF-REST-CONTRACT.md`；
+  本轮三条都按「老桥 404 → 入口隐藏、不整页报错」实现，并用 `DshClientBffTest` 钉住退化行为）。
   Android 列按本轮代码复核；插件 API 列本轮**已复核**（姊妹仓 `dsh-remote-bridge` 同期完成 C 批，见其 `CHANGELOG-DEV.md`）。
 
 | 能力 | 插件 API | Android | 状态 |
@@ -20,16 +20,18 @@
 | 当前 TODO / 任务模块 | 历史 `projections.values.todos` | 聊天页显示完成进度和可折叠任务列表，随历史刷新 | done |
 | 斜杠命令 | 已有当前会话 host 命令列举/执行 BFF | 输入 `/` 即筛选、补全并受控执行，不作为模型消息发送 | done |
 | 会话权限预设 | 当前值取会话投影 `permissions.currentValue`（**需 bridge 下发 `projections`**）；候选项取 `GET /chat/permission-presets`（内核 `permissionPresets.catalog()` 的 BFF，**尚未发版**，本地 2.4.1 产物已含） | 顶栏 `⋯` 菜单可切换档位、完整访问二次确认（`PermissionMenuItems()` + `FullAccessConfirmDialog()`；v2.2.17 起入口从输入区迁入；**v2.2.44** 发送区上方新增常驻权限档位 Pill，与菜单同源同动作）。**v2.2.44 真机验收时这条的 `done` 是假的**：候选读的是投影里的 `options[]`，而内核那条 wire 视图只产 `currentValue` → `permissionSelect()` 恒为 null，Pill 与菜单权限项**从不渲染**。已改为「当前值取投影、候选项取目录接口」两路合成；候选项为空时仍显示当前档位（降级为只读标签，不再整块消失）。**2026-10-19 真机复验通过**：Pill 显示「完整访问」、⋯ 菜单显示「权限模式 · 完整访问」 | done |
-| 附件与消息队列 | 已有：附件上传/读取接口；排队与插话由客户端按设置决定 | 可发送图片（≤8 MiB，内联 base64）与文件（≤24 MiB，先换 receiptId 再引用）；会话图片按 attachmentId 取回并缓存，401/403/404 分开提示且授权类失败可重试；智能体运行时 Enter/发送键按设置排队或插话，`Ctrl/Cmd+Enter` 走相反的一种 | done |
+| 附件与消息队列 | 已有：附件上传/读取接口 + **分块上传**（`/chat/sessions/{id}/attachments/uploads`，块 1 MiB、上限 256 MiB、1 小时有效、可按 `alreadyReceived` 续传）；排队与插话由客户端按设置决定 | 可发送图片（≤8 MiB，内联 base64）与文件（≤24 MiB 走既有 base64 上传，先换 receiptId 再引用；**>4 MiB 且桥声明 `attachment-chunked-upload-v1` 时改走分块**：`UploadProgressChip` 显示「已传块/总块」与续传标记，失败可重试，409 缺块按 `details.missing` 补一次）；会话图片按 attachmentId 取回并缓存，401/403/404 分开提示且授权类失败可重试；智能体运行时 Enter/发送键按设置排队或插话，`Ctrl/Cmd+Enter` 走相反的一种 | done |
 | 工具详情、审批与问题回答 | 审批与提问 BFF 已有；**连接即重放**（`interaction-replay-v1`：新连接会补推仍待处理的审批/提问）；**能力位** `approvals-v1` / `questions-v1` | 显示待审批状态、脱敏命令、"允许一次/拒绝"及完整访问二次确认；连接与亮屏时主动刷新；**缺关键能力位时明说"插件过旧、卡片不会出现"**（不再静默）；**单胜方**：身份比对与迟到响应 `not-pending` 已有，并行下发待拍板（ADR-0009）；**v2.2.44**：工具详情按 name 分发专用块（read 路径头+行号正文 / bash `$ cmd`+暗底输出（ANSI 已剥）/ edit·write `-`/`+` 对照），解析失败回落通用渲染，chat.html 同步 | in-progress |
 | DSH 工作区发现与会话归属 | 已有，按授权根过滤 | 已实现选择和会话标题/工作区标题显示 | done |
 | DSH 工作区创建 | 已有，限授权目录 | App 目录选择器可登记并立即用于新会话 | done |
 | DSH 工作区管理与会话归档 | 工作区重命名/移除、会话归档与**已归档列表**（`GET /chat/sessions?archived=true`）已有；**取消归档缺失** | 工作区管理页可重命名/移除，会话子项可归档；**面板可切到「已归档」查看并打开**；归档恢复**不做** —— 内核是否提供 unarchive 从本仓不可证（界面已明说"需在电脑端 WebUI 调整"）；自定义排序待后续 | in-progress |
 | 服务端能力探测 | `connection.ready` 带 `bridgeVersion` + **26 项能力位** | 客户端解析能力位做**运行时**特性判据（不再靠版本号）；缺关键能力时给出可见提示 | done |
 | 交付物 / 文件卡片 | 持久事件 `deliverables/presented` + 实时事件 `chat.deliverables.presented` | 会话文件面板显示智能体**明确交付**的文件（带 agent 写的说明）；历史与实时都覆盖 | done |
-| 会话统计（执行维度） | 无（客户端从历史算） | ⋯ 菜单「会话统计」：轮次 / 助手消息 / 工具调用 / 事件总数 / 数据截至 `#seq`。**Token 用量与上下文压力不做** —— 内核 usage 不可证，且**拒绝给估算值** | done |
+| 会话统计 | 无（客户端从历史算） | ⋯ 菜单「会话统计」：**执行维度**（轮次 / 助手消息 / 工具调用 / 事件总数 / 数据截至 `#seq`）+ **内核投影维度**（目标 objective/phase/revision/rounds、内核步数/LLM 耗时/解码 token、Token 用量五项与缓存命中率、上下文压力 fraction/窗口/占用/表层、智能体团队成员数与任务数、子代理目录条数）。投影值**只显示内核自己写在 `history` 的 `projections.values` 里的数字**，客户端不做任何估算；投影缺失时面板只留执行维度并显示「用量与上下文暂不可用」 | done |
 | 轨迹（按轮次时间轴） | 无（客户端从历史算） | ⋯ 菜单「轨迹」：按轮次分组的时间轴（含每轮耗时与工具数），**点节点展开原始 JSON**；不认得的事件类型也保留 | done |
-| 目标、子代理、技能和后台任务 | 缺失 | 等待 BFF | planned |
+| 目标、子代理与后台任务 | 目标 / 智能体团队 / 子代理目录投影写在 `history` 的 `projections.values` 里（`goal`、`agentTeam`、`subagentCatalog`），由内核算、App 只读；后台任务面板自 v2.2.46 已有 | **只读投影**：会话统计面板展示目标阶段与轮次上限、团队成员数 / 任务数、子代理目录条数；后台任务面板独立。**目标与子代理的创建/改/删仍是 `/ws/mobile` 专属**，App 不发 —— 只消费投影，不做管理 | done（只读） |
+| 官方语音输入 | 新增 BFF：`GET /chat/speech/catalog`、`POST /chat/speech/transcriptions`、`PUT /chat/speech/config`（`BFF-REST-CONTRACT.md` §3） | 输入区麦克风：AudioRecord 采 16 kHz 单声道 PCM16 → 封 WAV → 整段转写 → **插入输入框（不自动发送）**；权限三态（拒绝/永久拒绝→引导系统设置）、录音可取消、转写可取消；`available:false` 时禁用并显示服务端 `reason`；无能力位或老桥 404 时按钮不渲染 | done |
+| 定时任务 | 新增 BFF：`/chat/schedules` 列表/新建/改/删（`BFF-REST-CONTRACT.md` §2，时间一律 epoch 毫秒；**内核无暂停语义，停用 = DELETE**，`enabled:false` 会被桥回 400） | 会话顶栏 `⋯` →「定时任务」底部面板：列出本会话任务（cron、时区、下次运行、启用开关），可新建（文本 + cron + 时区）、启用（`enabled:true`，已结束 409 给专用文案）、**停用 = 删除**（二次确认文案点明「停用等于删除」）、删除（二次确认）；列表按 `nextRunAt` 排序（`createdAt` 恒 null，不可用）；cron 输入给**人话预览**（如「每天 08:00」），时间按本地时区格式化；老桥 404 显示「需要升级插件」而不是报红 | done |
 | Provider、凭据与设置 | 已有细粒度 scope、有效配置投影和自定义创建 | 可查看已填配置/继承模型、编辑配置、只写/清除凭据、发现模型并创建完全自定义供应商；这些配置项集中在独立的「模型」导航页（v2.2.19 从设置页拆出，`ui/ModelsScreen.kt`） | done |
 
 “对等”的判据是「用户能读到同一状态、并能完成同一用户动作」，**不限定实现路径**：Android 原生、WebView 页（`app/src/main/assets/chat.html`）或两者混用都算，只要该能力在 Android 端实际可用、且走的是插件公开接口。WebView 与原生存量共用本矩阵，任一实现达成即记为达成；直接调用 DSH 私有 `/api` 仍不计为完成。

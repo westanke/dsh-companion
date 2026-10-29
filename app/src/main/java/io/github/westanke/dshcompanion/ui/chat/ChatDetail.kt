@@ -199,7 +199,6 @@ import io.github.westanke.dshcompanion.data.CommandDescriptor
 import io.github.westanke.dshcompanion.data.FileEntry
 import io.github.westanke.dshcompanion.data.MentionQuery
 import io.github.westanke.dshcompanion.data.ComposerSendPolicy
-import io.github.westanke.dshcompanion.data.ModelSelection
 import io.github.westanke.dshcompanion.data.ModelView
 import io.github.westanke.dshcompanion.data.PendingApproval
 import io.github.westanke.dshcompanion.data.PendingQuestionSet
@@ -240,6 +239,7 @@ import io.github.westanke.dshcompanion.retryMentionEntries
 import io.github.westanke.dshcompanion.openSessionFile
 import io.github.westanke.dshcompanion.refreshHistory
 import io.github.westanke.dshcompanion.removePendingAttachment
+import io.github.westanke.dshcompanion.applyCommandArgOption
 import io.github.westanke.dshcompanion.selectPermissionPreset
 import io.github.westanke.dshcompanion.sendMessage
 import io.github.westanke.dshcompanion.setComposerOverlay
@@ -269,14 +269,9 @@ internal fun ChatDetail(
     wide: Boolean = false,
 ) {
     // ── 诊断插桩（debug 包独有，release 下 DiagLog 全静默）───────────────
-    // 与 `ui/ChatScreen.kt` 的路由日志配对：那条记「声明要走原生」，
-    // 这条记「原生页真的被组合了」。两条都出现 = 原生页确实在渲染，
-    // 那么「effect 没跑」就是原生页内部的问题；只有路由那条而没有这条，
-    // 说明用户看到的其实是 WebView 页（`state.useWebChat` 为真），
-    // 上一轮加在这里的 Log.i 探针一条不打是必然结果。
-    //
-    // 每进入/切走一次会话打一条：selectedSessionId 是判据，与下方
-    // `remember(selected.id)`、`key(selected.id)` 的重建时机天然对齐。
+    // 与 `ui/ChatScreen.kt` 的路由日志配对（那条记「声明要走原生」，这条记「原生页真的被组合了」）：
+    // 两条都出现 = 原生页在渲染；只有路由那条 = 用户看到的是 WebView 页（`state.useWebChat`）。
+    // 每进/切一次会话打一条：判据是 selectedSessionId，与下方 `remember/key(selected.id)` 重建时机对齐。
     val selected = state.sessions.find { it.id == state.selectedSessionId }
     if (selected == null) {
         // 空态也要留证据，但它只在「真的没选中会话」时出现一次 —— 用 effect 打，
@@ -751,8 +746,8 @@ internal fun ChatDetail(
                 value = message,
                 onValueChange = { message = it },
                 state = state,
-                // 判据是「这个会话的 agent 是否在运行」，不是全局 busy ——
-                // 后者连一次后台刷新都会置位，会让用户在任何请求期间都发不出消息。
+                viewModel = viewModel,
+                // 判据是「这个会话的 agent 是否在运行」，不是全局 busy（后者连后台刷新都置位）。
                 sessionRunning = viewModel.selectedSessionRunning(),
                 attachments = state.pendingAttachments,
                 attachmentUploading = state.attachmentUploading,
@@ -761,7 +756,10 @@ internal fun ChatDetail(
                 onRemoveAttachment = viewModel::removePendingAttachment,
                 onSubmit = { steer -> viewModel.sendMessage(message, steer); message = "" },
                 onRetryMention = { viewModel.retryMentionEntries() },
+                onPickCommandOption = { viewModel.applyCommandArgOption(it); message = "" },
                 onCancel = viewModel::cancelRun,
+                // 转写文本插到已有文字后面：用户可能先打了半句再想起来用语音。
+                onSpeechText = { message = message + it },
                 physicalKeyboard = physicalKeyboard,
             )
             ApprovalUiState.Loading -> ApprovalLoading()

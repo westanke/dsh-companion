@@ -100,6 +100,43 @@ internal fun supportsSessionJobs(capabilities: Set<String>): Boolean =
     "job-list-v1" in capabilities
 
 /**
+ * 三项 BFF 能力的能力位（分块上传 / 定时任务 / 官方语音）。
+ *
+ * **这些名字是跨仓契约**，桥侧 `tests/capabilities.spec.ts` 有对应钉子，两边任何一侧单方面
+ * 改名都会让另一个仓库的功能**静默消失**（不是报错，是入口根本不出现——见 `PITFALLS.md`
+ * §bridge 版本基线的那次教训）。
+ *
+ * 2026-10-29 起**不再接受别名**：桥侧已定稿，客户端按单值判定。曾经为了「桥没定稿时能连上」
+ * 做过一组近义名容忍表，定稿后收紧成单值 —— 行为只变严不变松，且现在「桥发了位但名字对不上」
+ * 会明确表现为入口消失，而不是变成一台「看起来支持、点进去 404」的假象。
+ */
+private const val CHUNKED_UPLOAD_CAPABILITY = "attachment-chunked-upload-v1"
+private const val SCHEDULE_CAPABILITY = "chat-schedules-v1"
+private const val SPEECH_CAPABILITY = "speech-transcription-v1"
+
+/** 服务端是否支持**分块上传**。缺省 false：老桥只有 base64 单请求上传，走那条路径即可。 */
+internal fun supportsChunkedUpload(capabilities: Set<String>): Boolean =
+    CHUNKED_UPLOAD_CAPABILITY in capabilities
+
+/**
+ * 服务端是否支持**定时任务**面板。
+ *
+ * 读不到能力清单（空集）返回 false → 藏入口。方向与 `supportsSessionJobs` 一致：
+ * 老桥这条路由是 404，显示入口只会让用户点进去看报错。
+ */
+internal fun supportsSchedules(capabilities: Set<String>): Boolean =
+    SCHEDULE_CAPABILITY in capabilities
+
+/**
+ * 服务端是否支持**官方语音输入**。
+ *
+ * 注意这是「路由在不在」，不是「语音服务可不可用」—— 后者要看 `GET /chat/speech/catalog`
+ * 的 `available`（内核可能没注入语音服务，那时路由在、服务不可用）。
+ */
+internal fun supportsSpeech(capabilities: Set<String>): Boolean =
+    SPEECH_CAPABILITY in capabilities
+
+/**
  * 本 App 依赖、但服务端**没有声明**的能力位；空列表 = 没缺。
  *
  * 注意：调用方必须先确认「拿到了能力清单」（[parseBridgeCapabilities] 返回非 null），

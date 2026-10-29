@@ -183,6 +183,8 @@ import io.github.westanke.dshcompanion.data.ChatWorkspace
 import io.github.westanke.dshcompanion.data.AgentPreset
 import io.github.westanke.dshcompanion.data.BusySendMode
 import io.github.westanke.dshcompanion.data.CommandDescriptor
+import io.github.westanke.dshcompanion.data.CommandArgOption
+import io.github.westanke.dshcompanion.data.commandArgOptions
 import io.github.westanke.dshcompanion.data.FileEntry
 import io.github.westanke.dshcompanion.data.MentionQuery
 import io.github.westanke.dshcompanion.data.ComposerSendPolicy
@@ -232,6 +234,9 @@ internal fun Composer(
     value: String,
     onValueChange: (String) -> Unit,
     state: HarnessState,
+    // 语音输入要用 ViewModel 的动作（转写在 VM 里，录音在 UI 层）。参数只加一个，
+    // 与 ChatJobsSheet / ChatHeader 的既有约定一致：**Compose 不自发请求，只调 VM 动作**。
+    viewModel: HarnessViewModel,
     sessionRunning: Boolean,
     attachments: List<PendingAttachment>,
     attachmentUploading: Boolean,
@@ -240,10 +245,16 @@ internal fun Composer(
     onRemoveAttachment: (String) -> Unit,
     onSubmit: (steer: Boolean) -> Unit,
     onRetryMention: () -> Unit,
+    // `/model ` / `/permission ` 的二级菜单：选中即执行，不在输入框里留痕。
+    onPickCommandOption: (CommandArgOption) -> Unit = {},
     onCancel: () -> Unit = {},
+    // 语音转写出的文本：由调用方**插进输入框**（不自动发送 —— 转写有错字，得让人先看一眼）。
+    onSpeechText: (String) -> Unit = {},
     physicalKeyboard: Boolean = false,
 ) {
     val canWrite = "chat.write" in state.device?.scopes.orEmpty()
+    // 录音状态（麦克风句柄 + 计时）挂在这里：转屏时 Composer 重组，`remember` 保它不被重建。
+    val speechUi = rememberSpeechUiState()
     // 刻意**不**把 state.busy 放进可提交条件：全局 busy 连一次刷新都会置位。
     // 防重复提交靠「提交后立即清空输入框与待发附件」——清空后两者都空，按钮自然失效。
     // 同理：附件上传中也不禁用发送键（那会重犯「运行中就发不出消息」的老毛病），
@@ -259,10 +270,16 @@ internal fun Composer(
             }
         }
     }
+    // 记住「上一次选的那个文件怎么再打开一次」：分块上传失败后重试时，服务端按同名同大小
+    // 复用同一个 uploadId 并带回已收块，于是重试天然是断点续传，用户不用重新挑文件。
+    var retryUpload by remember { mutableStateOf<(() -> Unit)?>(null) }
     val fileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
             val name = attachmentName(context, uri)
-            onAttachFile(name, attachmentSize(context, uri)) { requireNotNull(context.contentResolver.openInputStream(uri)) }
+            val size = attachmentSize(context, uri)
+            val open: () -> InputStream = { requireNotNull(context.contentResolver.openInputStream(uri)) }
+            retryUpload = { onAttachFile(name, size, open) }
+            onAttachFile(name, size, open)
         }
     }
     val defaultMode = ComposerSendPolicy.resolve(sessionRunning, state.busySendMode)
@@ -304,6 +321,18 @@ internal fun Composer(
         // 两个补全面板**互斥**：`/` 只在整行以斜杠开头时才出（官方命令是行首语法），
         // `@` 只在光标落在一个提及词里时才出。同一时刻两者不可能同时成立 ——
         // 但万一将来判据放宽，这里先立规矩：斜杠优先，避免两个列表叠在一起。
+        // `/model ` / `/permission ` 的参数位：先出二级菜单（选中即执行）。
+        // 参数已经开始打字的就不出 —— 用户明确要自己敲时别挡着（判据见 data/CommandArgOptions.kt）。
+        val argOptions = commandArgOptions(value, state.history, state.sessionModels, state.permissionCatalog)
+        CommandArgOptionsPanel(
+            title = if (value.takeWhile { !it.isWhitespace() } == "/model") {
+                stringResource(R.string.command_options_model)
+            } else {
+                stringResource(R.string.command_options_permission)
+            },
+            options = argOptions,
+            onPick = onPickCommandOption,
+        )
         val mentioning = MentionQuery.activeStart(value) != null
         if (mentioning) {
             // 会话目录的两种形态都要：相对根的 `cwd` 用来在条目路径里做前缀替换，
@@ -323,6 +352,8 @@ internal fun Composer(
         } else {
             CommandSuggestions(value, state.commands, onValueChange)
         }
+        // 语音状态条（录音中 / 转写中 / 失败可重试）：空闲时零高度，所以常驻不占位。
+        SpeechStatusBar(state = state, viewModel = viewModel, speech = speechUi, onText = onSpeechText)
         // 一整条药丸（网页版 #row）：边框 + 圆角 22dp 由它统一画，
         // + / 输入框 / 发送都在里面，输入框自己不再画边框和圆角。
         Surface(
@@ -344,20 +375,11 @@ internal fun Composer(
                         attachments.forEach { attachment ->
                             AttachmentChip(attachment) { onRemoveAttachment(attachment.id) }
                         }
-                        if (attachmentUploading) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                CircularProgressIndicator(Modifier.size(15.dp), strokeWidth = 2.dp)
-                                Text(
-                                    stringResource(R.string.attachment_uploading),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.labelSmall,
-                                )
-                            }
-                        }
+                        UploadProgressChip(
+                            progress = state.chunkUpload,
+                            uploading = attachmentUploading,
+                            onRetry = { retryUpload?.invoke() },
+                        )
                     }
                 }
                 Row(
@@ -404,6 +426,8 @@ internal fun Composer(
                             }
                         }
                     }
+                    // 麦克风：能力位没有（老插件）时这个 composable 自己 return，不留空位。
+                    SpeechInputButton(state = state, viewModel = viewModel, speech = speechUi)
                     /* 输入区高度：**随内容长高**（网页版 #ta 是 min-height:36px / max-height:120px）。
                      *
                      * 早先写死 height(34.dp)：敲到第二行文字就被裁掉下半截，看着像控件坏了

@@ -1,4 +1,14 @@
-- 日期：2026-10-25
+- 日期：2026-10-28
+- **BFF 三项能力接入（未发版，对应 `BFF-001`）**：按桥 `BFF-REST-CONTRACT.md` 补齐 **分块上传 / 定时任务 / 官方语音输入**。
+  数据层新增 `data/DshClientBff.kt`（12 个 `DshClient` 扩展端点，复用唯一 OkHttp 客户端与鉴权）、`BffModels.kt`、`ChunkPlan.kt`、
+  `CronHint.kt`、`WavHeader.kt`；VM 新增 `HarnessSchedulesViewModel.kt` / `HarnessSpeechViewModel.kt`，附件域 `attachFile` 在
+  >4 MiB 且能力位允许时改走分块（进度、续传、409 缺块补传一次）；UI 新增 `ScheduleSheet.kt` / `SpeechInput.kt` / `SpeechRecorder.kt`，
+  `ChatHeader` 加「定时任务」入口、`ChatComposer` 加麦克风与上传进度条。权限只加了 `RECORD_AUDIO`。
+  > **2026-10-29 跨仓对齐**：桥侧实现落地后复核出三处不一致并已修 —— 停用改走 DELETE（内核无暂停语义）、
+  > `createdAt` 恒 null 不再用于排序、能力位收紧成定稿单值（`attachment-chunked-upload-v1` 等）。
+  > 单测 **75 类 / 711 用例**。
+  门禁：`assembleDebug` 成功、单测 **74 类 / 702 用例 / 0 失败**、docsCheck 仅剩 README 版本号等待发版回填。
+  **未真机验收**：录音链路、权限拒绝/永久拒绝流程、老桥 404 隐藏入口都只有单测与编译层证据。
 - **运维（2026-10-25，未发版）**：**删除 `upstream` 远端**。原 `Hakunm/dsh-android-app`
   原作者早已停止更新，该远端从建仓起就没再 fetch 过，留着只是让 `git remote -v` 多一行噪音。
   删的是 **git 远端**，不是署名 —— 代码血缘与 AGPL 归属仍在 README 双站、`NOTICE`、

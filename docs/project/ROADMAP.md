@@ -10,6 +10,7 @@
 
 | ID | 状态 | 验收条件 |
 | --- | --- | --- |
+| BFF-001 | done | 三项 bridge REST BFF 能力在 App 侧可用：分块上传（>4 MiB、进度/续传/缺块补传，`DshClientBff.kt` + `ChunkPlan.kt`）、定时任务面板（列表/新建/暂停/删除，cron 人话预览）、官方语音输入（录音→转写→插入输入框，权限三态与取消）。**未真机验收**（权限流程与录音兼容性只在单测与编译层确认）；老桥 404 一律隐藏入口并以 `DshClientBffTest` 钉住 |
 | APP-001 | done | Compose/Material 3 独立工程、包名、双语、图标与正式签名 Release 构建通过 |
 | APP-002 | in-progress | HTTP/HTTPS 健康检查、配对、Keystore 令牌保存、自动恢复和断开可用 |
 | APP-003 | in-progress | 会话列表/创建、历史、实时增量、发送/steer/取消可用 |

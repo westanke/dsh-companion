@@ -299,7 +299,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.55.apk
+DSH伴侣-companion-v2.2.57.apk
 ```
 
 Requirements:
@@ -589,41 +589,53 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.55` (`versionCode` 10080)
+- Version: `v2.2.57` (`versionCode` 10082)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
-- Unit tests: 69 test classes / 636 cases at the last run (0 failures). The counts move with the code, so
+- Unit tests: 75 test classes / 711 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.55.apk`, **3,188,276 bytes**, SHA-256
-  `7afe646f2c8f76cb825268e984784fbe09d10bca8ed9bad0f6bf39a782703c90` (kept in sync in
-  `artifacts/SHA256SUMS.txt`).   **Released on Gitee + GitHub** (tag `v2.2.55`) —
-  what changed in this release: **aligns with bridge v2.7.0 — the model picker shows context
-  capacity, and New Session reuses the blank session**.
-  **Why**: bridge v2.7.0 filled in `contextWindow` / `maxTokens` in the model catalog and added an
-  optional `reuseBlank` to `POST /chat/sessions`. The app had both slots reserved but unwired:
-  ① the model data class has deserialised `contextWindow` since v2.2.49, yet only the "edit provider"
-  form consumed it — **the model picker never showed it**, so you could not see how much room a
-  model has; ② `createSession` never sends `sessionId`, so under bridge v2.6.x every tap on New
-  Session minted another blank session and one workspace accumulated several of them.
-  **What changed**: ① each model row now renders a small line with the context capacity (only when
-  present), formatted by the new `data/ModelCapacityLabel.kt` (base 1024, `1048576 → 1.0M`,
-  `131072 → 128K`); ② `CreateSessionRequest` gains a `reuseBlank` field and `createSession` a
-  matching optional parameter, **defaulting to `null`** — kotlinx omits nulls, so an older bridge
-  receives a byte-identical request body.
-  **Why `null` rather than `true`**: it lets the bridge decide whether it supports the semantics —
-  bridge v2.7.0 treats an omission as `true` (matching DSH 0.2.1 desktop behaviour), while older
-  bridges simply ignore the field. Hard-coding `true` would put a field an old bridge does not know
-  into the body; `ignoreUnknownKeys` would absorb it, but that is leaning on the other side's
-  tolerance, not on a contract.
-  **Verified**: 69 test classes / 636 cases green (the new `ModelCapacityLabelTest` adds 7,
-  including `1024 → 1.0K` but `1000 → 1000` to pin the radix); `docsCheck` consistent in both
-  directions; `lintDebug` reports 0 errors.
-  **Not verified on a device**: the capacity line's layout still needs a look once installed (model
-  name + two description lines + capacity line may feel cramped).
+- Current APK: `DSH伴侣-companion-v2.2.57.apk`, **3,278,012 bytes**, SHA-256
+  `d8c133b8a9f6dccb3dfe40218e24c5694c71c54d398f0b911b03da6d1f542973` (kept in sync in
+  `artifacts/SHA256SUMS.txt`).   **Pending release on Gitee + GitHub** (tag `v2.2.57`) —
+  what changed in this release: **aligns with bridge v2.8.0 — chunked upload, schedules and
+  official speech, three new REST BFF surfaces**.
+  **Why**: chunked upload, schedules and official speech lived **only in `/ws/mobile` frames**,
+  and the app consumes `/api/v1` REST without a WS client, so they were unreachable. Bridge v2.8.0
+  added **additive-only** REST endpoints for all three (contract: the bridge repo's
+  `docs/project/BFF-REST-CONTRACT.md`), which is what lets the app reach the same capabilities
+  without a WS transport.
+  **What changed**:
+  ① **Chunked upload**: above 4 MiB, when the capability bit is present, the app switches to
+  `POST …/attachments/uploads` → `GET …/chunks/{i}` / `PUT …/chunks/{i}` → `POST …/complete`
+  (failure → `DELETE …/chunks/{i}`), with 1 MiB slices, a 256 MiB per-file ceiling, resume across
+  restarts, and a single 409 retry for a missing chunk; the UI shows "N / M chunks". Small
+  attachments keep `POST …/attachments` (32 KiB JSON ceiling).
+  ② **Schedules**: `…/schedules` GET / POST / PATCH / DELETE, five-field Vixie cron plus IANA
+  time zones, entered from the chat toolbar's `⋯` menu. **"Disable" means delete** — the kernel has
+  no pause semantics, so a confirmation is shown first that states it cannot be undone; "Enable"
+  is PATCH `enabled:true` (409 `SCHEDULE_ENDED` gets its own message). `createdAt` is always
+  `null`, so ordering uses `nextRunAt` only.
+  ③ **Official speech**: `GET …/speech/catalog` plus `POST /chat/speech/transcriptions` — the
+  microphone button in the composer records to PCM16, wraps it in WAV and uploads it, with a 180 s
+  timeout and a 4 MiB post-decode ceiling. A `200 {available:false}` reply is shown as a normal
+  result, strictly distinct from "the route does not exist".
+  **Capability bits** (final single names): `attachment-chunked-upload-v1`, `chat-schedules-v1`,
+  `speech-transcription-v1`; an older bridge that does not advertise them simply keeps the
+  corresponding entries hidden.
+  **Verified**: 75 test classes / 711 cases / 0 failures (the new `DshClientBffTest`,
+  `ChunkPlanTest`, `CronHintTest`, `WavHeaderTest`, `BffCapabilitiesTest` and `SchedulePolicyTest`
+  add six classes); `docsCheck` consistent in both directions; `lintDebug` reports 0 errors.
+  **Not verified on a device**: recording compatibility, the three-way permission state on vivo
+  ROMs, and chunked upload against a real bridge (the unit tests use MockWebServer).
+  **Degradation pinned**: a 404 from an older bridge → `isRouteMissing()` → the entry stays hidden;
+  `available:false` is a normal result, not an error.
+  (The previous release, v2.2.56, is documented in `docs/project/CHANGELOG-DEV.md`: the model
+  picker showing context capacity and New Session reusing the blank session. v2.2.55 shipped with
+  its own release notes.)
 - Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25). The key did not change, but the
   **package name did in v2.2.41**, so `v2.2.40` and earlier still require an uninstall first
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)
 - License: [GNU Affero General Public License v3.0](./LICENSE)
-- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.7** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+; **approval and question cards need 2.3.7+**; gap resync / subscription baseline / live deliverable cards need 2.3.8+; the "response truncated" notice needs bridge **≥ 2.4.1**; the background-jobs panel needs bridge **≥ 2.4.3**; the model page's catalog add and restore-default-models need bridge **≥ 2.5.0**; **showing the device name as "platform · model" needs bridge ≥ 2.6.1** (below that the app still works — the device table just keeps the placeholder name); **the model context capacity needs bridge ≥ 2.7.0** (below that the model row omits it); **"New Session reuses the blank session" needs bridge ≥ 2.7.0** (below that every new session adds another blank one))
+- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.7** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+; **approval and question cards need 2.3.7+**; gap resync / subscription baseline / live deliverable cards need 2.3.8+; the "response truncated" notice needs bridge **≥ 2.4.1**; the background-jobs panel needs bridge **≥ 2.4.3**; the model page's catalog add and restore-default-models need bridge **≥ 2.5.0**; **showing the device name as "platform · model" needs bridge ≥ 2.6.1** (below that the app still works — the device table just keeps the placeholder name); **the model context capacity needs bridge ≥ 2.7.0** (below that the model row omits it); **"New Session reuses the blank session" needs bridge ≥ 2.7.0** (below that every new session adds another blank one); **chunked upload / schedules / official speech need bridge ≥ 2.8.0** (below that the corresponding entries stay hidden))
   (formerly [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace))

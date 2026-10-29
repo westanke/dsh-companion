@@ -907,7 +907,7 @@ android {
         //     （144px = 48dp，符合设计系统触控区下限）；中/英 × 浅/深四组截图均无裁切。
         //   已知遗留：诊断浮层打开时压住 BrandMark 左下角（`DiagProbe` 固定在 TopStart）。
         //     按 PITFALLS.md「浮层不调死坐标」的既有教训不改坐标 —— 浮层本就可拖动。
-        // v2.2.55（versionCode 10080）：**对齐桥 v2.7.0：模型上下文容量显示 + 空白会话复用**（2026-10-25）。
+        // v2.2.56（versionCode 10081）：**模型容量显示 + 空白会话复用正式发版**（2026-10-28）。
         //   基于什么：桥 v2.7.0 补上了模型目录的 contextWindow / maxTokens，并给
         //     POST /chat/sessions 加了可选的 reuseBlank。安卓端两处都早就留了位却没接：
         //     ①ModelView 从 v2.2.49 起就反序列化 contextWindow，但 ui/ 里只有编辑供应商的
@@ -928,8 +928,32 @@ android {
         //     1024→1.0K 但 1000→1000 钉住进制）；单测 69 类 / 634 用例全绿；docsCheck
         //     137 锚点 / 118 源文件双向一致；lintDebug 0 error。
         //   真机验了什么：未验 —— 需要桥 v2.7.0 部署后，模型选择器里应出现「上下文 1.0M tokens」。
-        versionCode = 10080
-        versionName = "2.2.55"
+        // v2.2.57（versionCode 10082）：**对齐桥 v2.8.0 —— 分块上传 / 定时任务 / 官方语音三项 REST BFF**（2026-10-29）。
+        //   基于什么：桥 v2.8.0 为三项原本只有 /ws/mobile 帧的能力补了 REST 端点（只增不改），
+        //     契约见桥仓 docs/project/BFF-REST-CONTRACT.md。App 没有 /ws/mobile 客户端，
+        //     走 REST 才能在不依赖 WS 帧的前提下拿到同语义能力。
+        //   干了什么：
+        //     ① 数据层新增 DshClientBff.kt（12 个扩展端点，复用 DshClient 唯一 OkHttp 客户端）、
+        //        BffModels.kt（上限常量：块 1 MiB / 文件 256 MiB / 音频 4 MiB / 转写超时 180 s）、
+        //        ChunkPlan.kt（分块计划与切片）、CronHint.kt（cron → 人话）、WavHeader.kt（PCM16 → WAV）；
+        //     ② VM：HarnessSchedulesViewModel / HarnessSpeechViewModel；HarnessAttachmentsViewModel
+        //        对 >4 MiB 且能力位支持的附件走分块（续传 + 409 补块一次 + 上传进度 chip）；
+        //     ③ UI：ScheduleSheet（⋯ 菜单入口）、SpeechInput + SpeechRecorder（麦克风按钮、
+        //        录音状态条、RECORD_AUDIO 运行时权限与永久拒绝引导）；
+        //     ④ BridgeCapabilities 三个能力位（**定稿单值名** attachment-chunked-upload-v1 /
+        //        chat-schedules-v1 / speech-transcription-v1，桥侧 tests/capabilities.spec.ts 有对应钉子）；
+        //     ⑤ 双语 strings.xml 各 52 键；清单只新增 RECORD_AUDIO。
+        //   跨仓对齐（桥侧实现落地后复核）：内核没有 ScheduleRecord 暂停语义，所以「停用」= 删除
+        //     （先弹确认框，正文点明不可恢复），「启用」= PATCH enabled:true，409 单独文案；
+        //     Schedule.createdAt 恒 null，不可据此排序（排序走 nextRunAt）。这两条按内核行为写成
+        //     @patch 五要素，until 写明「内核补上 pause/resume 后改回 PATCH」。
+        //   测了什么：新增 DshClientBffTest(17) / ChunkPlanTest(8) / CronHintTest(11) / WavHeaderTest(4) /
+        //     BffCapabilitiesTest(5) / SchedulePolicyTest(7)；单测 75 类 / 711 用例 / 0 失败；
+        //     lintDebug 0 error；docsCheck 双向一致。
+        //   真机验了什么：未验 —— 录音兼容性、权限三态在 vivo ROM、分块对真实桥（单测用 MockWebServer 模拟）。
+        //     退化行为已钉住：老桥 404 → isRouteMissing() → 入口隐藏；available:false 是正常结果不是错误。
+        versionCode = 10082
+        versionName = "2.2.57"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。

@@ -3,7 +3,64 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
-## v2.2.55 · 对齐桥 v2.7.0：模型上下文容量显示 + 空白会话复用（2026-10-25）
+## v2.2.57（未发版）· 桥 REST BFF 三项：分块上传 / 定时任务 / 官方语音（2026-10-28）
+
+### 基于什么
+桥 `dsh-remote-bridge` 为三项原本只有 `/ws/mobile` 帧的能力补了 REST BFF，
+契约 `BFF-REST-CONTRACT.md` 定稿；App 按契约接入，**不依赖桥侧实现已完成**。
+
+### 干了什么
+- **数据层**：`data/DshClientBff.kt`（`DshClient` 扩展，12 个端点，复用唯一 OkHttp 客户端与 `authenticated()`）、
+  `data/BffModels.kt`（模型与上限常量）、`data/ChunkPlan.kt`（分块计划/待传块/切片）、
+  `data/CronHint.kt`（cron → 人话，扩展语法不拦）、`data/WavHeader.kt`（PCM16 → WAV 头）。
+  `BridgeCapabilities` 增加三组能力位别名判据；`ApiErrorBody`/`DshApiException` 带 `details`（409 缺块要用）。
+- **VM**：`HarnessSchedulesViewModel.kt`、`HarnessSpeechViewModel.kt`；`HarnessAttachmentsViewModel.attachFile`
+  超过 4 MiB 且能力位支持时走分块（`UploadProgressChip` 显示已传块/总块，续传与失败重试）。
+- **UI**：`ui/chat/ScheduleSheet.kt`（⋯ 菜单入口在 `ChatHeader`）、`ui/chat/SpeechInput.kt` + `SpeechRecorder.kt`
+  （麦克风按钮、录音状态条、`RECORD_AUDIO` 运行时权限与永久拒绝引导设置）、`ChatAttachments.UploadProgressChip`。
+- 双语 `strings.xml` 各 52 个新键；清单只新增 `RECORD_AUDIO`。
+
+### 测了什么
+- 新增 `DshClientBffTest`(17) / `ChunkPlanTest`(8) / `CronHintTest`(11) / `WavHeaderTest`(4) /
+  `BffCapabilitiesTest`(5) / `SchedulePolicyTest`(7)；单测 **75 类 / 711 用例 / 0 失败**，`assembleDebug` 成功。
+- 退化行为钉住：老桥 404 → `isRouteMissing()` → 入口隐藏；`available:false` 是正常结果不是错误。
+- docsCheck 双向一致（149 STRUCTURE 锚点 / 130 源文件全登记、INTERFACES 92 锚点）；仅剩 README 版本号待发版回填。
+
+### 跨仓对齐修订（2026-10-29，桥侧实现已落地后复核）
+- **停用语义**：内核 `ScheduleRecord` 没有暂停操作，`PATCH {"enabled":false}` 会被回
+  `400 ENABLED_UNSUPPORTED`。客户端改为「关掉开关 = 删除（先确认，文案点明会删除）」，
+  打开开关仍走 `PATCH {"enabled":true}`，已结束任务的 `409 details.reason=SCHEDULE_ENDED` 给专用文案。
+  这套判断抽到新文件 `data/SchedulePolicy.kt`（纯函数 + `@patch schedule-pause-as-delete`），由 `SchedulePolicyTest` 钉住。
+- **`createdAt` 恒为 null**（内核无该字段）：模型改成可空并在注释里写明「不可据此排序」；
+  列表展示顺序改用 `displayOrder`（启用在前、`nextRunAt` 由近到远、null 最后、同刻按 id 稳定）。
+- **能力位收口成单值**：`attachment-chunked-upload-v1` / `chat-schedules-v1` / `speech-transcription-v1`，
+  删除别名容忍表；`BffCapabilitiesTest` 反向钉住「老名字不再接受」。
+- 顺带修正：`GET /chat/schedules?sessionId=` 对**不存在的会话**也回 404，
+  所以「路由不存在」与「会话没了」改由能力位区分（`classifyScheduleReadFailure`，各有文案）。
+
+### 未做 / 风险
+真机未验：录音兼容性（部分机型 AudioRecord 权限/采样率差异）、权限拒绝与永久拒绝流程、
+分块上传对真实桥的端到端。
+
+## v2.2.56 · 模型容量显示 + 空白会话复用正式发版（2026-10-28）
+
+### 基于什么
+继 v2.2.55 接入桥 `dsh-remote-bridge` v2.7.0 的两项能力后，正式推给用户：
+1. `GET /chat/sessions/{sessionId}/models` 模型带的 `contextWindow / maxTokens`；
+2. `POST /chat/sessions` 的 `reuseBlank`（新会话回到那个空白会话）。
+
+### 干了什么
+- `ui/chat/ChatSheets.kt` 的 `ModelRow` 增加容量行（`data/ModelCapacityLabel.kt`，1024 进制）；
+- `data/DshClient.kt`：`createSession` 增加可选 `reuseBlank: Boolean? = null`；
+- 双语 `strings.xml`：`model_context_window` 两版；`settings` 关于页新增「桥版本」行（`state.bridgeVersion`，参见 `data/HarnessModels.kt`）。
+
+### 测了什么
+- `ModelCapacityLabelTest` 7 例（M/K/原值三档进位点，`1024 → 1.0K` 而 `1000 → 1000` 独立钉住）；
+- 门禁：docsCheck 双向一致、lintDebug 0 error、单测 69 类 / 634 用例 / 0 失败（v2.2.55 已具备）；
+- 界面：`assembleDebug` 成功，**真机 V2080A 一条**——模型行容量字符不溢出；可手敲 `reuseBlank` 复用空白会话（需桥 v2.7.0 部署后闭环）。
+
+### 版本
+- 应用版本 10081（`versionCode`），`BuildConfig.VERSION_NAME` 与 `gradle.properties` 双轨同步。
 
 > **状态：v2.2.55 已发版。** 真机未验 —— 需要桥 v2.7.0 部署后，模型选择器里应出现「上下文 1.0M tokens」。
 

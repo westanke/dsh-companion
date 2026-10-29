@@ -588,4 +588,11 @@ class DshApiException(
     val status: Int,
     val code: String,
     override val message: String,
+    /**
+     * 契约错误体里的可选结构化补充（`error.details`）。
+     *
+     * 分块上传的 `409 CONFLICT` 靠它带回 `missing: [3,4]`；其余错误通常没有。
+     * 默认 null：既有的构造点（`ensureSuccess` 之外还有测试）不必改。
+     */
+    val details: JsonElement? = null,
 ) : RuntimeException(message)

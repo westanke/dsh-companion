@@ -7,6 +7,9 @@
     <!-- 应用内更新检查（设置页「关于」→「检查更新」）：调起系统安装器装 APK。
          minSdk 26 起，未经此权限授权的应用无法调起安装器，故必须声明。 -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- 语音输入（输入区麦克风）：录音后整段送转写。dangerous 级，首次点麦克风时运行时申请；
+         被永久拒绝时引导去系统设置（见 ui/chat/SpeechInput.kt）。除此之外不申请任何录音相关权限。 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
         android:allowBackup="false"

@@ -181,6 +181,7 @@ import io.github.westanke.dshcompanion.data.ChatWorkspace
 import io.github.westanke.dshcompanion.data.AgentPreset
 import io.github.westanke.dshcompanion.data.BusySendMode
 import io.github.westanke.dshcompanion.data.CommandDescriptor
+import io.github.westanke.dshcompanion.data.CommandArgOption
 import io.github.westanke.dshcompanion.data.FileEntry
 import io.github.westanke.dshcompanion.data.MentionQuery
 import io.github.westanke.dshcompanion.data.ComposerSendPolicy
@@ -436,4 +437,80 @@ internal fun localizedCommandDescription(command: CommandDescriptor): String? = 
     "permission" -> stringResource(R.string.command_permission_description)
     "plan" -> stringResource(R.string.command_plan_description)
     else -> null
+}
+
+/**
+ * `/model ` 与 `/permission ` 的二级菜单（对齐桥 `command-options` / `command-select`）。
+ *
+ * 与上面的 [CommandSuggestions] 是**两个不同层级**：那个选命令本身，这个选命令的参数。
+ * 同时只有一层的判据成立（参数位要求命令名后面已经跟了空白，而命令补全要求整行没有空白），
+ * 所以不会叠着出现 —— 但调用处仍按顺序渲染，先参数位再命令补全，避免将来判据放宽后打架。
+ *
+ * 选中即执行（不是把文本填进输入框）：桥的 `command-select` 语义就是「点了就生效」，
+ * 填文本再让用户按发送会多一步，而且 `/model` 在桥侧本来就是一次 RPC、不是斜杠命令。
+ */
+@Composable
+internal fun CommandArgOptionsPanel(
+    title: String,
+    options: List<CommandArgOption>,
+    onPick: (CommandArgOption) -> Unit,
+) {
+    AnimatedVisibility(visible = options.isNotEmpty()) {
+        Surface(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            shadowElevation = 2.dp,
+        ) {
+            Column(Modifier.padding(vertical = 5.dp)) {
+                Text(
+                    title,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                // 选项可能几十条（模型目录），限高 + 内部滚动：面板不该把消息区挤没。
+                Column(Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState())) {
+                    options.forEach { option ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                                .clickable(enabled = !option.selected) { onPick(option) }
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            if (option.selected) {
+                                Icon(
+                                    Icons.Outlined.Check,
+                                    null,
+                                    Modifier.size(19.dp),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                            } else {
+                                Icon(
+                                    Icons.Outlined.RadioButtonUnchecked,
+                                    null,
+                                    Modifier.size(19.dp),
+                                    tint = MaterialTheme.colorScheme.outline,
+                                )
+                            }
+                            Column(Modifier.weight(1f)) {
+                                Text(option.label, style = MaterialTheme.typography.labelLarge)
+                                option.detail?.takeIf(String::isNotBlank)?.let { detail ->
+                                    Text(
+                                        detail,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

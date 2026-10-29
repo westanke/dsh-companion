@@ -16,6 +16,8 @@ import io.github.westanke.dshcompanion.data.CustomProviderCreate
 import io.github.westanke.dshcompanion.data.localizedErrorRes
 import io.github.westanke.dshcompanion.data.DeviceView
 import io.github.westanke.dshcompanion.data.DirectoryPage
+import io.github.westanke.dshcompanion.data.ScheduleItem
+import io.github.westanke.dshcompanion.data.SpeechCatalog
 import io.github.westanke.dshcompanion.data.DshApiException
 import io.github.westanke.dshcompanion.data.DshClient
 import io.github.westanke.dshcompanion.data.DshConnectionException
@@ -211,6 +213,79 @@ data class JobsPanelState(
     val outputLoading: Boolean = false,
 )
 
+/**
+ * 定时任务面板（`ScheduleSheet`）的状态。形状照 [JobsPanelState]：数据进共享状态，
+ * 而不是留在 Sheet 局部 —— 新建/暂停/删除都是「请求 → 刷新清单」两步，Compose 重组
+ * 随时可能重建 Sheet，状态留在局部会被打回初始值。
+ *
+ * [unsupported] 是老桥的退化位：`GET /chat/schedules` 回 404 时置 true，面板显示
+ * 「这台电脑的插件还不支持定时任务」，**不是**报错 —— 桥与 App 分批发版时这是常态。
+ */
+data class SchedulePanelState(
+    val sessionId: String,
+    val loading: Boolean = false,
+    val items: List<ScheduleItem> = emptyList(),
+    /** 读清单失败的人话原因；null = 没失败。 */
+    val error: String? = null,
+    /** 服务端没有这条路由（老插件）。与 [error] 分开：它不是故障。 */
+    val unsupported: Boolean = false,
+    /** 新建表单是否展开。 */
+    val creating: Boolean = false,
+    /** 新建/修改请求在飞。 */
+    val saving: Boolean = false,
+    /** 表单校验或提交失败的原因（就地显示在表单下方，不占全局错误条）。 */
+    val formError: String? = null,
+    /** 正在暂停/启用/删除的任务 id（按钮转圈用）。 */
+    val pendingId: String? = null,
+)
+
+/**
+ * 官方语音输入的状态。
+ *
+ * 录音本身（`MediaRecorder` 生命周期、计时）留在 UI 层：它是**设备资源**不是协议状态，
+ * 进 ViewModel 只会让「横竖屏切换要不要继续录」变成一个没人答得上来的问题。
+ * 这里只放两件必须跨重组的东西：目录（网络）与转写中/待插入文本。
+ */
+data class SpeechState(
+    /** 目录；null = 还没取，或老 bridge 没这条路由（404）。 */
+    val catalog: SpeechCatalog? = null,
+    val loadingCatalog: Boolean = false,
+    val transcribing: Boolean = false,
+    /** 转写失败的人话原因（null = 没失败）。 */
+    val error: String? = null,
+    /** 失败后是否还能重试（音频仍在手里）。 */
+    val retryable: Boolean = false,
+    /** 最近一次成功转写、等待插入输入框的文本；UI 消费后清空。 */
+    val pendingText: String? = null,
+    /**
+     * 最近一次录音（WAV 字节）。留着是为了「转写失败可重试」——
+     * 失败后让用户重录一遍是最让人火大的交互。
+     */
+    val audio: ByteArray? = null,
+    /**
+     * 取消代际。转写是 180s 的长请求，取消时**丢弃结果**而不是杀 HTTP 连接
+     * （契约的超时是服务端的；客户端提前断开对服务端没有意义，对用户倒是立刻见效）。
+     * 回来的结果代际不符即丢。
+     */
+    val generation: Int = 0,
+)
+
+/**
+ * 分块上传的真实进度（`3/7 块`）。
+ *
+ * 为什么不用一个布尔 + 转圈：大文件在手机网络下能传几十秒，用户看不出「到底在动没动」。
+ * 失败时保留这条状态（[error] 非空、[failed] = true），附件条上出现「重试」。
+ */
+data class ChunkUploadProgress(
+    val name: String,
+    val sent: Int,
+    val total: Int,
+    /** 断点续传：服务端已收过一部分块，本次只补剩下的。 */
+    val resumed: Boolean = false,
+    val failed: Boolean = false,
+    val error: String? = null,
+)
+
 data class HarnessState(
     val restoring: Boolean = true,
     val busy: Boolean = false,
@@ -333,6 +408,10 @@ data class HarnessState(
      * 不然用户点开一条任务的输出、一刷新就整个收回去。
      */
     val jobsPanel: JobsPanelState? = null,
+    /** 定时任务面板；null = 没打开。 */
+    val schedulePanel: SchedulePanelState? = null,
+    /** 官方语音输入（目录 + 转写状态）。 */
+    val speech: SpeechState = SpeechState(),
     /**
      * 输入框上方是否**开着补全面板**（`@` 文件补全，或 `/` 命令补全）。
      *
@@ -461,6 +540,8 @@ data class HarnessState(
     val pendingAttachments: List<PendingAttachment> = emptyList(),
     /** 有文件正在上传换 `receiptId`。只用来显示进度，不用来禁用发送键。 */
     val attachmentUploading: Boolean = false,
+    /** 分块上传的真实进度（仅 >4 MiB 的文件）；null = 当前没有分块上传。 */
+    val chunkUpload: ChunkUploadProgress? = null,
     val error: String? = null,
 )
 
