@@ -290,7 +290,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.57.apk
+DSH伴侣-companion-v2.2.58.apk
 ```
 
 安装要求：
@@ -536,42 +536,49 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.57`（`versionCode` 10082）
+- 当前版本：`v2.2.58`（`versionCode` 10083）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：86 个测试类 / 866 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.57.apk`，**3,278,012 字节**，
-  SHA-256 `d8c133b8a9f6dccb3dfe40218e24c5694c71c54d398f0b911b03da6d1f542973`（`artifacts/SHA256SUMS.txt` 同步）。
-  **待发 Gitee + GitHub**（tag `v2.2.57`）——
-  本版改动：**对齐桥 v2.8.0 —— 分块上传 / 定时任务 / 官方语音三项 REST BFF**。
-  **为什么要做**：分块上传、定时任务、官方语音这三项能力原本**只存在于 `/ws/mobile` 帧里**，
-  App 只消费 `/api/v1` REST、没有 WS 客户端，拿不到。桥 v2.8.0 为它们补了**只增不改**的
-  REST 端点（契约见桥仓 `docs/project/BFF-REST-CONTRACT.md`），App 才能在 WS 之外拿到同语义能力。
-  **做法**：
-  ① **分块上传**：>4 MiB 且能力位支持时改走 `POST …/attachments/uploads` →
-  `GET …/chunks/{i}` / `PUT …/chunks/{i}` → `POST …/complete`（失败 `DELETE …/chunks/{i}`），
-  1 MiB 切片、单文件上限 256 MiB、断点续传、409 补块一次，界面显示「已传 N / M 块」；
-  小附件维持 `POST …/attachments`（32 KiB JSON 上限）；
-  ② **定时任务**：`…/schedules` 的 GET / POST / PATCH / DELETE，五段 Vixie cron + IANA 时区，
-  聊天顶栏 `⋯` 菜单入口；**「停用」= 删除**（内核没有暂停语义，先弹确认框点明不可恢复），
-  「启用」= PATCH `enabled:true`（409 `SCHEDULE_ENDED` 单独文案）；`createdAt` 恒 `null`，
-  排序只用 `nextRunAt`；
-  ③ **官方语音**：`GET …/speech/catalog` + `POST /chat/speech/transcriptions`，
-  输入框麦克风按钮录音 → PCM16 → WAV → 上传转写，180 s 超时、解码后 4 MiB 上限，
-  返回 `200 {available:false}` 时按正常结果展示（与「路由不存在」严格区分）。
-  **能力位**（**定稿单值名**）：`attachment-chunked-upload-v1` / `chat-schedules-v1` /
-  `speech-transcription-v1`；老桥不发位 → 对应入口不出现。
-  **验证**：单测 75 类 / 711 用例 / 0 失败（新增 `DshClientBffTest`、`ChunkPlanTest`、
-  `CronHintTest`、`WavHeaderTest`、`BffCapabilitiesTest`、`SchedulePolicyTest` 六个测试类）；
-  `docsCheck` 双向一致；`lintDebug` 0 error。
-  **真机未验**：录音兼容性、权限三态在 vivo ROM、分块对真实桥（单测用 MockWebServer 模拟）。
-  **降级已钉**：老桥 404 → `isRouteMissing()` → 入口隐藏；`available:false` 是正常结果不是错误。
+- 当前 APK：`DSH伴侣-companion-v2.2.58.apk`，**3,324,284 字节**，
+  SHA-256 `6bc69f376ddf67fe1ac6416d6aae933c0d35336cba4cb676bad4bba7d4f3ba76`（`artifacts/SHA256SUMS.txt` 同步）。
+  **待发 Gitee + GitHub**（tag `v2.2.58`）——
+  本版改动：**会话通道切到 `/ws/mobile` —— WS 优先、REST 兜底**（配套桥 **v2.8.1**）。
+  **为什么要做**：此前 App **一条 WS 帧都没发过**（`DshClient.eventsUrl()` 拼的是
+  `/api/v1/events`，全仓 `ws/mobile` 只出现在两行注释里），而桥的 `/ws/mobile` 网关早已跑通，
+  缺的只是客户端与对外契约。用户拍板「C 档：全量 WS 优先 + REST 兜底」后，一次拉齐。
+  **做法**（P1–P3 只是换通道，**P4 才是唯一真正的新功能**）：
+  ① **P1 传输层基座** `data/ws/`：`MobileWsTransport`（**复用 `DshClient.defaultHttpClient`**，
+  唯一网络边界不变）、`ChannelState` 四态（`WsReady` / `WsDegraded` / `WsDown` / `RestOnly`，
+  降级判据的唯一真理源）、`WsFrames`、`WsRequestRouter`（requestId 配对 + 按 kind 兜底，
+  兜底时同 kind 串行）、`WsPorts` 按域切端口；
+  ② **P2** Session / Message / Event 三域；③ **P3** HITL / Command / Model 三域；
+  ④ **P4 目标写操作**：`goal-edit` / `goal-pause` / `goal-resume` / `goal-clear`
+  （桥侧 compare-and-set，必须带 `ref:{id, revision}`）—— 此前 REST 路由里 `goal` 零命中，
+  手机上根本没法改目标，这是全程唯一真正新增的用户能力；
+  ⑤ **补齐两处「最后一米」**（桥侧同步改）：首屏 `history` 带 `projections`（此前被丢，
+  导致首屏只能走 REST）、`session-create` 带 `workspaceId` / `agentPreset` / `reuseBlank`、
+  `select-agent-preset` 接入（原注释写「桥侧无此帧」是错的，已改正）；
+  ⑥ **接收侧两条**：认桥的背压告知 `connection-resync-required`（重取历史 + 清 seq 基线）、
+  429 认 `Retry-After`（`data/ws/RetryAfter.kt`，只认 delta-seconds，夹 1s..60s，与退避取 max）。
+  **两条关键判据**：读失败一律回落 REST，**写失败只在「帧没发出去」时回落**（写超时意味着
+  不知道服务端做没做，重试可能改两次名、归档两次、分叉出两个会话）；回落判据**不看版本号**
+  （能力位里没有「是否回显 requestId」这种位，靠「发了有没有回」自适应）。
+  **按设计继续留 REST 的三条**：归档列表（桥 `session-archives` 无生产者）、读附件字节
+  （WS `attachment` 帧是上传语义）、待审批清单（不轮询，换通道省不了请求）。
+  **验证**：单测 86 类 / 866 用例 / 0 失败；`lintDebug` 0 error；`assembleDebug` 成功；
+  `docsCheck` 双向一致（STRUCTURE 162 锚点 / INTERFACES 136 锚点）。
+  **真机验了**（V2080A）：P2 顶栏绿点「已连接」+ 104 会话 + 正文实时更新；P3 模型域读+写；
+  P4 四项写操作全过（`revision` 每次 +1，判据取桥侧 WS 回读而非界面自报）。
+  **真机未验**：`approval-response`、`command-execute`；桥侧心跳 / 连接上限 / 背压三条新行为
+  要重启插件才生效，本次未重启宿主。
+  **降级已钉**：老桥不发能力位或 upgrade 404 → `RestOnly` → 整条回落 REST，行为与发版前一致。
   （上一个版本 v2.2.56 的改动见 `docs/project/CHANGELOG-DEV.md`：模型选择器显示上下文容量、
   新会话复用空白会话。v2.2.55 的改动已随该版本发布。）
 - 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用。证书没变，但 **v2.2.41 起包名变了**，
   `v2.2.40` 及更早仍需先卸载）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)
 - 许可证：[GNU Affero General Public License v3.0](./LICENSE)
-- 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.7**（「加载更早消息」需要 2.3.1+；「插件」页清单与启停需要 2.3.2+ / 2.3.3+；**审批 / 问答卡片需要 2.3.7+**；**断档重同步 / 订阅基线 / 交付物实时卡片需要 2.3.8+**；「回答被截断」提示需 bridge **≥ 2.4.1**；后台任务面板需 bridge **≥ 2.4.3**；模型页目录添加 / 恢复默认模型需 bridge **≥ 2.5.0**；**设备名显示为「平台 · 机型」需 bridge ≥ 2.6.1**（低于此版本时 App 照样能用，只是设备表里仍是占位名）；**模型上下文容量显示需 bridge ≥ 2.7.0**（低于此版本时模型行不显示容量）；**「新会话复用空白会话」需 bridge ≥ 2.7.0**（低于此版本时每次新建都会多一个空会话）；**分块上传 / 定时任务 / 官方语音需 bridge ≥ 2.8.0**（低于此版本时对应入口不出现））
+- 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.7**（「加载更早消息」需要 2.3.1+；「插件」页清单与启停需要 2.3.2+ / 2.3.3+；**审批 / 问答卡片需要 2.3.7+**；**断档重同步 / 订阅基线 / 交付物实时卡片需要 2.3.8+**；「回答被截断」提示需 bridge **≥ 2.4.1**；后台任务面板需 bridge **≥ 2.4.3**；模型页目录添加 / 恢复默认模型需 bridge **≥ 2.5.0**；**设备名显示为「平台 · 机型」需 bridge ≥ 2.6.1**（低于此版本时 App 照样能用，只是设备表里仍是占位名）；**模型上下文容量显示需 bridge ≥ 2.7.0**（低于此版本时模型行不显示容量）；**「新会话复用空白会话」需 bridge ≥ 2.7.0**（低于此版本时每次新建都会多一个空会话）；**分块上传 / 定时任务 / 官方语音需 bridge ≥ 2.8.0**（低于此版本时对应入口不出现）；**WS 双通道（会话/消息/事件/审批/命令/模型/目标写操作）需 bridge ≥ 2.8.1**（低于此版本时自动回落 REST，功能不减））
   （旧名 [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace)）

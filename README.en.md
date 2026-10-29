@@ -299,7 +299,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.57.apk
+DSH伴侣-companion-v2.2.58.apk
 ```
 
 Requirements:
@@ -589,47 +589,59 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.57` (`versionCode` 10082)
+- Version: `v2.2.58` (`versionCode` 10083)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
 - Unit tests: 86 test classes / 866 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.57.apk`, **3,278,012 bytes**, SHA-256
-  `d8c133b8a9f6dccb3dfe40218e24c5694c71c54d398f0b911b03da6d1f542973` (kept in sync in
-  `artifacts/SHA256SUMS.txt`).   **Pending release on Gitee + GitHub** (tag `v2.2.57`) —
-  what changed in this release: **aligns with bridge v2.8.0 — chunked upload, schedules and
-  official speech, three new REST BFF surfaces**.
-  **Why**: chunked upload, schedules and official speech lived **only in `/ws/mobile` frames**,
-  and the app consumes `/api/v1` REST without a WS client, so they were unreachable. Bridge v2.8.0
-  added **additive-only** REST endpoints for all three (contract: the bridge repo's
-  `docs/project/BFF-REST-CONTRACT.md`), which is what lets the app reach the same capabilities
-  without a WS transport.
-  **What changed**:
-  ① **Chunked upload**: above 4 MiB, when the capability bit is present, the app switches to
-  `POST …/attachments/uploads` → `GET …/chunks/{i}` / `PUT …/chunks/{i}` → `POST …/complete`
-  (failure → `DELETE …/chunks/{i}`), with 1 MiB slices, a 256 MiB per-file ceiling, resume across
-  restarts, and a single 409 retry for a missing chunk; the UI shows "N / M chunks". Small
-  attachments keep `POST …/attachments` (32 KiB JSON ceiling).
-  ② **Schedules**: `…/schedules` GET / POST / PATCH / DELETE, five-field Vixie cron plus IANA
-  time zones, entered from the chat toolbar's `⋯` menu. **"Disable" means delete** — the kernel has
-  no pause semantics, so a confirmation is shown first that states it cannot be undone; "Enable"
-  is PATCH `enabled:true` (409 `SCHEDULE_ENDED` gets its own message). `createdAt` is always
-  `null`, so ordering uses `nextRunAt` only.
-  ③ **Official speech**: `GET …/speech/catalog` plus `POST /chat/speech/transcriptions` — the
-  microphone button in the composer records to PCM16, wraps it in WAV and uploads it, with a 180 s
-  timeout and a 4 MiB post-decode ceiling. A `200 {available:false}` reply is shown as a normal
-  result, strictly distinct from "the route does not exist".
-  **Capability bits** (final single names): `attachment-chunked-upload-v1`, `chat-schedules-v1`,
-  `speech-transcription-v1`; an older bridge that does not advertise them simply keeps the
-  corresponding entries hidden.
-  **Verified**: 86 test classes / 866 cases / 0 failures (the new `DshClientBffTest`,
-  `ChunkPlanTest`, `CronHintTest`, `WavHeaderTest`, `BffCapabilitiesTest` and `SchedulePolicyTest`
-  add six classes); `docsCheck` consistent in both directions; `lintDebug` reports 0 errors.
-  **Not verified on a device**: recording compatibility, the three-way permission state on vivo
-  ROMs, and chunked upload against a real bridge (the unit tests use MockWebServer).
-  **Degradation pinned**: a 404 from an older bridge → `isRouteMissing()` → the entry stays hidden;
-  `available:false` is a normal result, not an error.
+- Current APK: `DSH伴侣-companion-v2.2.58.apk`, **3,324,284 bytes**, SHA-256
+  `6bc69f376ddf67fe1ac6416d6aae933c0d35336cba4cb676bad4bba7d4f3ba76` (kept in sync in
+  `artifacts/SHA256SUMS.txt`).   **Pending release on Gitee + GitHub** (tag `v2.2.58`) —
+  what changed in this release: **the session channel moves to `/ws/mobile` — WS first, REST
+  fallback** (companion bridge **v2.8.1**).
+  **Why**: the app had **never sent a single WS frame** (`DshClient.eventsUrl()` builds
+  `/api/v1/events`; `ws/mobile` appeared only in two comments), while the bridge's `/ws/mobile`
+  gateway had been working for a long while. What was missing was the client and the public
+  contract. After the call for "option C: full WS first with REST fallback", all of it lands at once.
+  **What changed** (P1–P3 only swap the transport; **P4 is the only genuinely new capability**):
+  ① **P1 transport base** in `data/ws/`: `MobileWsTransport` (**reuses `DshClient.defaultHttpClient`**
+  — the single network boundary does not move), `ChannelState` with four states (`WsReady` /
+  `WsDegraded` / `WsDown` / `RestOnly`, the one source of truth for degradation), `WsFrames`,
+  `WsRequestRouter` (requestId pairing with a per-kind fallback that serialises per kind), and
+  `WsPorts` split by domain;
+  ② **P2** Session / Message / Event; ③ **P3** HITL / Command / Model;
+  ④ **P4 goal write operations**: `goal-edit` / `goal-pause` / `goal-resume` / `goal-clear`
+  (compare-and-set on the bridge side, `ref:{id, revision}` required) — the REST router had zero
+  hits for `goal`, so the phone could not touch a goal at all; this is the only real new capability;
+  ⑤ **two "last metre" gaps closed** (bridge side changed in step): the first-screen `history`
+  now carries `projections` (it was dropped, which forced the first screen onto REST),
+  `session-create` takes `workspaceId` / `agentPreset` / `reuseBlank`, and `select-agent-preset`
+  is wired up (the old comment claiming "the bridge has no such frame" was wrong and is fixed);
+  ⑥ **two receive-side gaps**: honouring the bridge's backpressure notice
+  `connection-resync-required` (reload history + reset the seq baseline) and honouring
+  `Retry-After` on 429 (`data/ws/RetryAfter.kt`, delta-seconds only, clamped to 1s..60s, taking the
+  max with the backoff).
+  **Two key rules**: reads fall back to REST on any WS failure, while **writes fall back only when
+  the frame never left** (a write timeout means "unknown whether the server did it", and retrying
+  could rename twice, archive twice or fork two sessions); and the fallback decision **never looks
+  at a version number** (no capability bit says "echoes requestId", so it adapts by observing
+  whether a reply comes back).
+  **Three things deliberately stay on REST**: the archived-session list (the bridge's
+  `session-archives` has no producer), reading attachment bytes (the WS `attachment` frame means
+  *upload*), and the pending-approval list (the app does not poll, so switching transports saves
+  no requests).
+  **Verified**: 86 test classes / 866 cases / 0 failures; `lintDebug` reports 0 errors;
+  `assembleDebug` succeeds; `docsCheck` consistent in both directions (STRUCTURE 162 anchors /
+  INTERFACES 136 anchors).
+  **Verified on a device** (V2080A): P2 — green "connected" dot, 104 sessions, live message
+  updates; P3 model domain, both read and write; P4 — all four write operations pass (`revision`
+  increments each time, judged from the bridge's WS read-back rather than the UI's own report).
+  **Not verified on a device**: `approval-response` and `command-execute`; the bridge-side
+  heartbeat, connection cap and backpressure notice need a plugin restart to take effect, and the
+  host was not restarted this round.
+  **Degradation pinned**: an older bridge that omits the capability bits, or an upgrade that 404s,
+  yields `RestOnly` and the whole app falls back to REST — behaviour matches the previous release.
   (The previous release, v2.2.56, is documented in `docs/project/CHANGELOG-DEV.md`: the model
   picker showing context capacity and New Session reusing the blank session. v2.2.55 shipped with
   its own release notes.)
@@ -637,5 +649,5 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
   **package name did in v2.2.41**, so `v2.2.40` and earlier still require an uninstall first
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)
 - License: [GNU Affero General Public License v3.0](./LICENSE)
-- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.7** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+; **approval and question cards need 2.3.7+**; gap resync / subscription baseline / live deliverable cards need 2.3.8+; the "response truncated" notice needs bridge **≥ 2.4.1**; the background-jobs panel needs bridge **≥ 2.4.3**; the model page's catalog add and restore-default-models need bridge **≥ 2.5.0**; **showing the device name as "platform · model" needs bridge ≥ 2.6.1** (below that the app still works — the device table just keeps the placeholder name); **the model context capacity needs bridge ≥ 2.7.0** (below that the model row omits it); **"New Session reuses the blank session" needs bridge ≥ 2.7.0** (below that every new session adds another blank one); **chunked upload / schedules / official speech need bridge ≥ 2.8.0** (below that the corresponding entries stay hidden))
+- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.7** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+; **approval and question cards need 2.3.7+**; gap resync / subscription baseline / live deliverable cards need 2.3.8+; the "response truncated" notice needs bridge **≥ 2.4.1**; the background-jobs panel needs bridge **≥ 2.4.3**; the model page's catalog add and restore-default-models need bridge **≥ 2.5.0**; **showing the device name as "platform · model" needs bridge ≥ 2.6.1** (below that the app still works — the device table just keeps the placeholder name); **the model context capacity needs bridge ≥ 2.7.0** (below that the model row omits it); **"New Session reuses the blank session" needs bridge ≥ 2.7.0** (below that every new session adds another blank one); **chunked upload / schedules / official speech need bridge ≥ 2.8.0** (below that the corresponding entries stay hidden); **the WS dual channel (sessions / messages / events / approvals / commands / models / goal writes) needs bridge ≥ 2.8.1** (below that the app falls back to REST automatically and loses nothing))
   (formerly [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace))

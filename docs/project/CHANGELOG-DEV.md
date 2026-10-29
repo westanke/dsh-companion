@@ -3,7 +3,55 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
-## v2.2.57（未发版）· 桥 REST BFF 三项：分块上传 / 定时任务 / 官方语音（2026-10-28）
+## v2.2.58 · 会话通道切到 `/ws/mobile`：WS 优先、REST 兜底（2026-10-30）
+
+### 基于什么
+用户拍板「C 档：全量 WS 优先 + REST 兜底」。此前 App **一条 WS 帧都没发过** ——
+`DshClient.eventsUrl()` 拼的是 `/api/v1/events`，全仓 `ws/mobile` 只出现在两行注释里。
+而桥的 `/ws/mobile` 网关早已跑通（握手、鉴权、13 个域处理器），缺的只是客户端与对外契约。
+配套桥版本 **v2.8.1**。
+
+### 干了什么（分五个阶段，P1-P3 只是换通道，P4 才是唯一的新功能）
+- **P1 传输层基座**：新增 `data/ws/` —— `MobileWsTransport`（**复用 `DshClient.defaultHttpClient`**，
+  唯一网络边界不变）、`ChannelState` 四态（`WsReady` / `WsDegraded` / `WsDown` / `RestOnly`，
+  降级判据唯一真理源）、`WsFrames`、`WsRequestRouter`（requestId 配对 + 按 kind 兜底，
+  兜底时同 kind 串行）、`WsPorts` 按域切端口。
+- **P2** Session / Message / Event 三域接入。
+- **P3** HITL / Command / Model 三域接入。
+- **P4 目标写操作**：`goal-edit` / `goal-pause` / `goal-resume` / `goal-clear`（桥侧 `ws-goals.ts`
+  compare-and-set，必须带 `ref:{id, revision}`）。**这是全程唯一真正新增的用户能力** ——
+  此前 REST 路由里 `goal` 零命中，手机上根本没法改目标。
+- **补齐两处「最后一米」**（桥侧同步改）：首屏 `history` 带 `projections`（此前被丢，导致
+  首屏只能走 REST）、`session-create` 带 `workspaceId` / `agentPreset` / `reuseBlank`、
+  `select-agent-preset` 接入（此前注释写「桥侧无此帧」是错的，已改正）。
+- **接收侧两条缺口**：认桥的背压告知 `connection-resync-required`（重取历史 + 清 seq 基线）；
+  429 认 `Retry-After`（`data/ws/RetryAfter.kt`，只认 delta-seconds，夹 1s..60s，与退避取 max）。
+
+### 关键决策与为什么
+- **读失败一律回落 REST，写失败只在「帧没发出去」时回落**：写操作超时意味着不知道服务端
+  做没做，重试可能改两次名、归档两次、分叉出两个会话。
+- **回落判据不看版本号**：能力位里没有「是否回显 requestId」这种位，靠「发了有没有回」自适应。
+- **`sent` 这个共用 kind 有五个生产者**，判别收敛成 `NON_MESSAGE_SENT_TYPES` 一张表而非条件链
+  —— 每接一个新帧所有旧判别式都要回头改，条件链必漏。
+- **按设计继续留 REST 的三条**：归档列表（桥 `session-archives` 无生产者）、读附件字节
+  （WS `attachment` 帧是上传语义）、待审批清单（不轮询，换通道省不了请求）。
+
+### 测了什么
+- 单测 **86 类 / 866 用例 / 0 失败**；`lintDebug` 0 error；`assembleDebug` 成功；
+  `docsCheck` 双向一致（STRUCTURE 162 锚点 / INTERFACES 136 锚点）。
+- 新增回归：`WsSessionPortTest`(9) / `WsDomainPortsTest`(13) / `WsDomainPortsDegradeTest`(12) /
+  `GoalPortTest`(15) / `RetryAfterTest`(12) / `SnapshotCarryOverTest`(5) / `MobileWsTransportTest`、
+  `ChannelStateTest`、`WsFramesTest` 等。
+
+### 真机验了什么（V2080A，2026-10-29）
+- P2：顶栏绿点「已连接」，104 个会话，正文实时更新。
+- P3 模型域：读（`models` 帧）+ 写（选 `DeepSeek-V4-Pro` 后桥侧回读 `current.model` 变了）。
+- P4 四项写操作全过（暂停 / 恢复 / 编辑轮次 / 清除），`revision` 每次 +1 证明 compare-and-set
+  真带过去了，判据一律取桥侧 WS 回读而非界面自报。
+- **未验**：`approval-response`（没构造真实审批）、`command-execute`（`/permission` 会改权限档位）；
+  桥侧心跳 / 连接上限 / 背压三条新行为要重启插件才生效，本次未重启宿主。
+
+## v2.2.57 · 桥 REST BFF 三项：分块上传 / 定时任务 / 官方语音（2026-10-28）
 
 ### 基于什么
 桥 `dsh-remote-bridge` 为三项原本只有 `/ws/mobile` 帧的能力补了 REST BFF，

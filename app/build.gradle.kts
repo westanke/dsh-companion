@@ -952,8 +952,30 @@ android {
         //     lintDebug 0 error；docsCheck 双向一致。
         //   真机验了什么：未验 —— 录音兼容性、权限三态在 vivo ROM、分块对真实桥（单测用 MockWebServer 模拟）。
         //     退化行为已钉住：老桥 404 → isRouteMissing() → 入口隐藏；available:false 是正常结果不是错误。
-        versionCode = 10082
-        versionName = "2.2.57"
+        // v2.2.58（versionCode 10083）：**会话通道切到 /ws/mobile —— WS 优先、REST 兜底**（2026-10-30）。
+        //   基于什么：用户拍板「C 档：全量 WS 优先 + REST 兜底」。此前 App 一条 WS 帧都没发过，
+        //     DshClient.eventsUrl() 拼的是 /api/v1/events，全仓 ws/mobile 只出现在两行注释里；
+        //     而桥的 /ws/mobile 网关早已跑通，缺的是客户端与对外契约。配套桥 v2.8.1。
+        //   干了什么（P1-P3 只是换通道，P4 才是唯一的新功能）：
+        //     ① P1 传输层基座 data/ws/：MobileWsTransport（复用 DshClient.defaultHttpClient，
+        //        唯一网络边界不变）、ChannelState 四态（降级判据唯一真理源）、WsFrames、
+        //        WsRequestRouter（requestId 配对 + 按 kind 兜底，兜底时同 kind 串行）、WsPorts 按域切端口；
+        //     ② P2 Session/Message/Event；③ P3 HITL/Command/Model；
+        //     ④ P4 目标写操作 goal-edit/pause/resume/clear（桥侧 compare-and-set，必须带
+        //        ref:{id, revision}）—— 这是全程唯一真正新增的用户能力，此前 REST 路由里 goal 零命中；
+        //     ⑤ 补齐两处「最后一米」（桥侧同改）：首屏 history 带 projections、session-create 带
+        //        workspaceId/agentPreset/reuseBlank、select-agent-preset 接入（原注释「桥侧无此帧」是错的）；
+        //     ⑥ 接收侧两条：认 connection-resync-required（重取历史 + 清 seq 基线）、429 认 Retry-After。
+        //   为什么「读失败一律回落、写失败只在帧没发出去时回落」：写操作超时意味着不知道服务端
+        //     做没做，重试可能改两次名、归档两次、分叉出两个会话。
+        //   为什么回落判据不看版本号：能力位里没有「是否回显 requestId」这种位，靠「发了有没有回」自适应。
+        //   测了什么：单测 86 类 / 866 用例 / 0 失败；lintDebug 0 error；assembleDebug 成功；
+        //     docsCheck 双向一致（STRUCTURE 162 锚点 / INTERFACES 136 锚点）。
+        //   真机验了什么：P2 顶栏绿点 + 104 会话 + 正文实时更新；P3 模型域读+写；
+        //     P4 四项写操作全过（revision 每次 +1，判据取桥侧 WS 回读）。
+        //     未验：approval-response、command-execute；桥侧心跳/连接上限/背压要重启插件才生效。
+        versionCode = 10083
+        versionName = "2.2.58"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。
