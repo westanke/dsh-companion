@@ -96,12 +96,30 @@ sealed interface ChannelState {
 
 ### 3.3 请求-响应关联
 
-`/ws/mobile` 的响应帧靠 `requestId` 回显关联（`src/host/ws-goals.ts:258-262`、`ws-team.ts:37-38` 已是此约定）。客户端：
+**先说一个实测出来的坑：`/ws/mobile` 的 requestId 回显曾经是不统一的。**
 
-- 每请求生成 `requestId = UUID`；
-- `Map<String, CompletableDeferred<JsonObject>>` 挂起等待；
-- 收到无 `requestId` 的帧（`event` / `question-requested` / `approval-requested` / `hello` / `pong`）走推送路径，不进 map；
-- **超时**：默认 15s，文件传输类 120s；超时即 `close(1001)` 触发重连 + 该请求抛 `DshApiException`。
+原设计（以及桥仓 `asyncapi.yaml` 的初版描述）都写着「响应帧靠 `requestId` 回显关联」。2026-10-29 用真实 token 连运行中的桥逐帧实测后发现**这是错的**：
+
+| 请求 `type` | 响应 `frame.requestId` | 响应 `frame.data.requestId` |
+|---|---|---|
+| `sessions` / `history` / `workspaces` / `models` / `commands` | 无 | 无 |
+| `goal`（及 team / files / speech / schedule） | 无 | **有** |
+
+根因在桥的 `src/host/ws-handler.ts`：`sendFrame(webSocket, frame: { kind, data? })` —— **外层信封没有 requestId 的位置**，只有各域处理器自己往 `data` 里塞的处理才会回显。而 `ws-sessions.ts` / `ws-models.ts` / `ws-commands.ts` / `ws-hitl.ts` 等文件里 `requestId` 出现 0 次。
+
+后果：`MobileWsTransport.send()` 若发这些帧，会等满 15s → `abandon()` 断连重连 → 再超时。
+
+**处置（两侧同时做）**：
+1. 桥侧补统一回显（`ws-handler.ts` 注入 + async 上下文隔离，因为帧分发是 `void this.handleMessage(...)` 的**并发**模型，用实例字段暂存会串号）。
+2. 客户端做**双兼容**：优先按 `requestId` 配对；没有则退化为**按响应 `kind` 配对**（兼容老桥）。退化路径必须**按 kind 串行化**——同 kind 同时只有一条在途，否则同 kind 并发会拿错响应。
+3. `error` 帧不带 `requestId`，只带 `data.requestType`（是**请求帧的 type**，不是响应 kind），所以只能失败该 type 下**最老的那条**在途请求。
+
+客户端侧规则：
+
+- 每请求生成 `requestId = UUID`，`Map<String, CompletableDeferred<JsonObject>>` 挂起等待（主路径）；
+- 回帧无 `requestId` 时按 `kind` 兜底配对（退化路径，按 kind 串行化）；
+- 收到确实无法归属的帧（`event` / `question-requested` / `approval-requested` / `hello` / `pong` / `speech-state` 等推送类）走推送路径，不进 map；
+- **超时**：默认 15s，文件传输类 120s；超时清理 pending 后由调用方决定是否降级（**不要**因为一次静默帧超时就 `close(1001)` 断连——那是把"这一帧不会回显"误判成"连接坏了"）。
 
 ### 3.4 投影域的特殊性
 

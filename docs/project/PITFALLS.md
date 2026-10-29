@@ -1120,3 +1120,37 @@ GFM 允许这种紧凑写法，**这颗解析器比 GitHub 更严格**。
 判据：以后凡是写 `WebSocketListener`，**先问「对端正常 close 时我怎么知道」**。
 只挂 `onClosed` 就是没答案。测试上也要用「服务端 `onOpen` 里发完帧就 `close`」
 这种最朴素的场景压一遍——这正是 MockWebServer 的默认行为，反而最容易暴露。
+
+### 契约文档写着「requestId 回显」，实测一半的帧不回显
+
+**症状**：按桥的 `asyncapi.yaml` 和本项目设计文档实现 WS 请求-响应关联（发 `requestId`、
+等 id 匹配的回帧），结果 `sessions` / `history` / `workspaces` / `models` / `commands`
+这几类**全部等满超时**；而 `goal` / `agent-team` / 文件类 / 语音类却正常。
+客户端表现为「一进会话列表就卡 15 秒然后连接断开重连」，看起来像网络问题。
+
+**根因**：桥 `src/host/ws-handler.ts` 的 `sendFrame(webSocket, frame: { kind: string; data?: unknown })`
+—— **外层信封结构里没有 `requestId` 的位置**。只有各域处理器自己往 `data` 里塞的处理才回显。
+实测统计：`ws-sessions.ts` / `ws-models.ts` / `ws-commands.ts` / `ws-hitl.ts` / `ws-presets.ts` /
+`ws-host.ts` / `ws-settings.ts` 里 `requestId` 出现 **0 次**；只有 `ws-goals.ts` / `ws-team.ts` /
+`ws-files.ts` / `ws-file-transfer.ts` / `ws-speech.ts` / `ws-schedule.ts` 有。
+**而 `asyncapi.yaml` 初版与设计文档都写着「统一回显」** —— 文档描述的是“本应有的样子”，
+不是“现在的样子”。
+
+**怎么发现的**：不是读代码发现的，是**用真实 token 连运行中的桥逐帧发请求、打印回帧的
+`requestId` 位置**发现的。裸 WS 探针（`ws` 包 + 子协议 `dsh-mobile-v1, dsh-auth.<token>`）
+跑一遍十分钟，比读 13 个域处理器一百行注释快得多。
+**MockWebServer 测不出来**：它老老实实回显你伪造的回帧，永远「通过」。
+
+**现在怎么办**：
+
+1. **凡是"另一个进程发的"协议，先拿探针实测再写代码**，不要从契约文档反推行为。
+   验收判据是「回帧里那个字段真的在」，不是「文档说它会在」。
+2. 客户端做**双兼容**：优先按 `requestId` 配对，没有则按响应 `kind` 兜底；
+   兜底路径**必须按 kind 串行化**（同 kind 并发会拿错响应）。
+3. `error` 帧不带 `requestId`，只带 `data.requestType`（是**请求帧的 type**，不是响应 kind），
+   所以只能失败该 type 下最老的那条在途请求。
+4. **不要因为一次静默帧超时就 `close(1001)` 断连** —— 那是把「这一帧本来就不回显」
+   误判成「连接坏了」，会引发无谓的重连风暴。
+
+判据：以后凡是写「等某个 id 匹配的响应」，先问一句**「对端真的会回这个 id 吗，
+我怎么验证的」**。答不上来就先去实测。
