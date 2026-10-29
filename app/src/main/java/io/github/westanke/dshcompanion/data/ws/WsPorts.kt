@@ -34,15 +34,13 @@ import java.util.TimeZone
  *
  * 硬判据是「[ChannelState] 为 RestOnly / WsDown 时行为与改造前**逐字节一致**」。所以：
  *
- * - `createSession` 保留 `workspaceId` + `agentPreset` + `reuseBlank` 三个参数，
- *   **故意不迁 WS**：桥的 `session-create` 只认 `rootId` + `cwd`，且内部写死
- *   `reuseBlank: false`（`ws-sessions.ts` 的 `handleSessionCreate`），与 REST 的
- *   `createSessionInWorkspace` 语义不可互换。迁过去会让"新建会话带上指定 agent 预设"
- *   静默失效，也会让"复用空白会话"变成"每次都新建"。
+ * - `createSession` 保留 `workspaceId` + `agentPreset` + `reuseBlank` 三个参数。**现在能走 WS 了**：
+ *   桥的 `session-create` 在 2026-10-29 补上了 `workspaceId` 寻址与 `agentPreset`，与 REST 的
+ *   `createSessionInWorkspace` 语义对齐（此前它只认 `rootId` + `cwd` 且写死 `reuseBlank: false`）。
  * - `sendMessage` 收 `List<PromptPart>` 而不是 `JsonArray`：REST 侧要交给
  *   `DshClient.sendMessage` 的正是这个类型，中间不做一次 JSON 往返，才能保证退化路径
  *   **字节级**等同今天。
- * - `history` 的 `beforeSeq` 决定走哪条通道（见 [WsSessionPort.history]）。
+ * - `history` 两条通道都带投影（桥于 2026-10-29 补上首屏 `projections`），所以首屏也能走 WS。
  */
 internal interface SessionPort {
     /** 会话列表。WS 帧 `sessions`。`archived = true` **恒走 REST**（设计 §4.1）。 */
@@ -51,17 +49,24 @@ internal interface SessionPort {
     /**
      * 历史事件与投影。
      *
-     * `beforeSeq == null`（首屏/刷新）**恒走 REST**：桥的 `handleHistory` 只解构
-     * `{events, hasMore}`，把 `projections` 丢掉了（`chat-adapter.ts` 明明返回了它）。
-     * 投影是待办清单、会话统计、WebView 页的数据源（`ChatPresentation.todoItems()`、
-     * `SessionAnalytics`、`ChatWebScreen`），丢掉就是整块面板变空。
-     *
-     * `beforeSeq != null`（翻页）走 WS：分页本来就不需要投影。
+     * 两条通道都带投影：REST 一直原样透传，WS 的 `history` 帧自 2026-10-29 起对**首屏**
+     * （不带 `beforeSeq`）也附 `projections`（`ws-handler.ts` 的 `handleHistory`）。投影是待办
+     * 清单、会话统计、WebView 页的数据源（`ChatPresentation.todoItems()`、`SessionAnalytics`、
+     * `ChatWebScreen`），丢一次就是整块面板变空 —— 所以「首屏必须走 REST」这条已经站不住了。
      */
     suspend fun history(sessionId: String, beforeSeq: Int? = null, maxMessages: Int? = null): ChatHistory
 
-    /** 新建会话，返回 sessionId。**恒走 REST**（理由见接口 KDoc）。 */
+    /** 新建会话，返回 sessionId。WS 帧 `session-create` → 应答 `session-created`（带新 `sessionId`）。 */
     suspend fun createSession(workspaceId: String, agentPreset: String? = null, reuseBlank: Boolean? = null): String
+
+    /**
+     * 会话级切 agent 预设。WS 帧 `select-agent-preset`。
+     *
+     * 应答 kind 是 `sent`（`data.type == "select-agent-preset"` + `data.sessionId`），
+     * 与 `message` / `select-model` / `session-agent-preset` / `unsubscribe` 同 kind，
+     * 判别见 [WsMessagePort.sendMessage] 的 matcher。
+     */
+    suspend fun selectAgentPreset(sessionId: String, agentPreset: String)
 
     /** 重命名。WS 帧 `session-rename` → 应答 `session-renamed`（带 `data.sessionId`，可安全配对）。 */
     suspend fun renameSession(sessionId: String, title: String)
@@ -159,16 +164,47 @@ internal class WsSessionPort(
             json.decodeFromJsonElement(ListSerializer(HistoryEntry.serializer()), events)
         }
         val hasMore = (data["hasMore"] as? JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull() ?: false
-        // projections 恒为 null：WS 帧不带它，而需要投影的调用点（beforeSeq == null）走 REST。
-        return ChatHistory(events = entries, hasMore = hasMore, projections = null)
+        // 首屏（无 beforeSeq）的应答带 projections，翻页不带 —— 原样交给上层，别在这里判「要不要」：
+        // 需要投影的调用点自己知道，而我们一旦丢掉就再也补不回来（只能是整块面板变空）。
+        return ChatHistory(events = entries, hasMore = hasMore, projections = data["projections"])
     }
 
-    override suspend fun createSession(workspaceId: String, agentPreset: String?, reuseBlank: Boolean?): String =
-        throw DshApiException(
-            0,
-            "WS_UNSUPPORTED",
-            "session-create 不走 WS：桥侧帧只认 rootId+cwd 且强制 reuseBlank=false，与 REST 语义不等价",
+    override suspend fun createSession(workspaceId: String, agentPreset: String?, reuseBlank: Boolean?): String {
+        val frame = router.request(
+            requestType = WsClientFrame.SESSION_CREATE,
+            expectedKind = WsServerFrame.SESSION_CREATED,
+            payload = buildMap {
+                put("workspaceId", JsonPrimitive(workspaceId))
+                if (agentPreset != null) put("agentPreset", JsonPrimitive(agentPreset))
+                if (reuseBlank != null) put("reuseBlank", JsonPrimitive(reuseBlank))
+            }.let(::JsonObject),
         )
+        // 应答的 `data.sessionId` 是**新**会话 id，不是判别字段（同 kind 已串行，够了）。
+        val created = WsFrames.dataOf(frame).sessionIdOf()
+        if (created.isNullOrBlank()) {
+            throw DshApiException(0, "WS_BAD_FRAME", "session-created 没有带 sessionId")
+        }
+        return created
+    }
+
+    override suspend fun selectAgentPreset(sessionId: String, agentPreset: String) {
+        router.request(
+            requestType = WsClientFrame.SELECT_AGENT_PRESET,
+            expectedKind = WsServerFrame.SENT,
+            payload = JsonObject(
+                mapOf(
+                    "sessionId" to JsonPrimitive(sessionId),
+                    "agentPresetId" to JsonPrimitive(agentPreset),
+                ),
+            ),
+            // `sent` 有五个生产者（见 WsFrames 里 SELECT_AGENT_PRESET 的 KDoc），必须靠
+            // `data.type` + `data.sessionId` 双重认定：只看 kind 会跟别的写操作互相抢应答。
+            matcher = {
+                val data = WsFrames.dataOf(it)
+                data.sentTypeOf() == WsClientFrame.SELECT_AGENT_PRESET && data.sessionIdOf() == sessionId
+            },
+        )
+    }
 
     override suspend fun renameSession(sessionId: String, title: String) {
         router.request(
@@ -248,19 +284,20 @@ internal class WsMessagePort(
             requestType = WsClientFrame.MESSAGE,
             expectedKind = WsServerFrame.SENT,
             payload = payload,
-            // `sent` 是个**共用 kind**，至少三个生产者：
+            // `sent` 是个**共用 kind**，一共五个生产者（数据都长得像，只差 `data.type`）：
             //   1. 本帧（`message`）的确认：`{type:'message', sessionId, accepted:true}`；
             //   2. `unsubscribe` 的确认：`{type:'unsubscribe', acknowledged:true}`（无 sessionId）；
-            //   3. P3 的 `select-model` 确认：`{type:'select-model', sessionId, accepted:true, selected}`
-            //      （ws-models.ts:80 —— 应答 kind 同样是 `sent`，字段与 message 几乎一样）。
-            // 所以判据是「sessionId 对上 + 有 accepted + **不是** select-model」。
-            // 少了最后那一项，一条迟到的 select-model 帧就能把一条在途的发消息"确认"掉：
-            // 调用方以为消息发出去了，实际服务端只切了个模型。
+            //   3. `select-model`（ws-models.ts:80）：`{type:'select-model', sessionId, accepted:true, selected}`；
+            //   4. `session-agent-preset`（ws-presets.ts:73）与 5. `select-agent-preset`（:82）
+            //      —— 后两者的 `accepted:true` 与 message 无可区分特征，只能靠 `data.type`。
+            // 判据因此是「sessionId 对上 + 有 accepted + type 不在**非 message** 的那几个里」。
+            // 少排一个，一条迟到的写操作确认就能把一条在途发消息"确认"掉：调用方以为消息发出去了，
+            // 实际服务端只切了个模型/预设。将来再接新的 `sent` 生产者，只需往这张表里加一行。
             matcher = { frame ->
                 val data = WsFrames.dataOf(frame)
                 data.sessionIdOf() == sessionId &&
                     data.containsKey("accepted") &&
-                    (data["type"] as? JsonPrimitive)?.contentOrNull != WsClientFrame.SELECT_MODEL
+                    data.sentTypeOf() !in NON_MESSAGE_SENT_TYPES
             },
         )
     }
@@ -316,6 +353,10 @@ internal class RestSessionPort(private val api: () -> DshClient) : SessionPort {
     override suspend fun createSession(workspaceId: String, agentPreset: String?, reuseBlank: Boolean?): String =
         withContext(Dispatchers.IO) { api().createSession(workspaceId, agentPreset, reuseBlank).id }
 
+    override suspend fun selectAgentPreset(sessionId: String, agentPreset: String) {
+        withContext(Dispatchers.IO) { api().selectAgentPreset(sessionId, agentPreset) }
+    }
+
     override suspend fun renameSession(sessionId: String, title: String) {
         withContext(Dispatchers.IO) { api().renameSession(sessionId, title) }
     }
@@ -344,6 +385,22 @@ internal class RestMessagePort(private val api: () -> DshClient) : MessagePort {
 
 /** `data.sessionId` 读成字符串；缺失返回 null。 */
 private fun JsonObject.sessionIdOf(): String? = (this["sessionId"] as? JsonPrimitive)?.contentOrNull
+
+/** `data.type`（请求帧的名字回显）；缺失返回 null。`sent` 的五个生产者就靠它区分。 */
+private fun JsonObject.sentTypeOf(): String? = (this["type"] as? JsonPrimitive)?.contentOrNull
+
+/**
+ * `sent` 这个共用 kind 里**不是** `message` 确认的那几个 `data.type`。
+ *
+ * 一处集中，别在 matcher 里继续堆 `!=`：漏一个的表现是「别的写操作把发消息确认掉了」，
+ * 而症状是「消息看起来发出去了、其实模型被切了」—— 排查时几乎不可能想到是这里。
+ */
+private val NON_MESSAGE_SENT_TYPES: Set<String> = setOf(
+    WsClientFrame.SELECT_MODEL,
+    WsClientFrame.SELECT_AGENT_PRESET,
+    WsClientFrame.SESSION_AGENT_PRESET,
+    "unsubscribe",
+)
 
 @Serializable
 private data class SessionList(val items: List<ChatSession>)

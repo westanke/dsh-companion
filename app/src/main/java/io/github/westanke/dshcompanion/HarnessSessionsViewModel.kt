@@ -669,12 +669,12 @@ internal fun HarnessViewModel.applyCommandArgOption(option: CommandArgOption) = 
     is CommandArgOption.Model -> selectModel(ModelSelection(option.provider, option.model))
 }
 
-internal fun HarnessViewModel.selectAgentPreset(agentPreset: String) = withClient { api ->
+internal fun HarnessViewModel.selectAgentPreset(agentPreset: String) = withClient { _ ->
     val id = mutableState.value.selectedSessionId ?: return@withClient
-    api.selectAgentPreset(id, agentPreset)
+    // 桥侧**有**这条帧（`ws-presets.ts:35` 的 `select-agent-preset`，应答 `sent` + `data.type`），
+    // 此前这里写的「WS 侧没有帧」是错的，于是这一笔一直白走 REST。
+    sessionPort().selectAgentPreset(id, agentPreset)
     val sessions = sessionPort().sessions()
-    // `agent-preset` 在桥的 WS 侧没有帧（不在本阶段范围），所以那一笔仍走 REST；
-    // 后面这两笔是读，照常切端口。
     val models = modelPort().sessionModels(id)
     val commands = commandPort().commands(id)
     update { copy(sessions = sessions, sessionModels = models, commands = commands) }

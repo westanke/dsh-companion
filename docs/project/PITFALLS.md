@@ -1229,3 +1229,49 @@ diag.log 末尾赫然是 `事件连状态 → false` —— 一个**没人该发
 
 **同类**：`### busy 只在 launchOperation 里收尾`（同一个模式的另一面）、
 `### 两个事件通道交接时，旧通道的「告别」会把新通道的状态改回断开`（同一次排查中发现）。
+
+### 共用 kind 的应答：靠 data.type 判别，漏一个就会互相把请求「确认」掉
+
+**症状**：调用方报成功，但服务端实际做了另一件事。具体见过的形状：
+发消息返回成功、可消息没发出去 —— 其实是一条迟到的「切模型」确认把它认领了。
+症状出现在**用户层**（"我发的话没了"），而代码层每一层都自认为成功了，
+所以排查通常从网络、从后端、从数据库一路查到底也查不到这里。
+
+**根因**：`/ws/mobile` 的应答通道复用了几个"通用 kind"，同一个 `kind` 下
+不同请求的应答字段长得几乎一样，只能靠 `data.type`（请求帧名字的回显）区分。
+`sent` 这个 kind 目前有 **五个** 生产者（`src/host` 侧逐个核对过）：
+
+| 请求帧 | 应答 | `data` 形状 |
+|---|---|---|
+| `message` | `sent` | `{type:'message', sessionId, accepted:true}` |
+| `unsubscribe` | `sent` | `{type:'unsubscribe', acknowledged:true}`（**无 sessionId**） |
+| `select-model` | `sent` | `{type:'select-model', sessionId, accepted:true, selected}` |
+| `session-agent-preset` | `sent` | `{type:'session-agent-preset', sessionId, accepted:true}` |
+| `select-agent-preset` | `sent` | `{type:'select-agent-preset', sessionId, accepted:true, agentPresetId}` |
+
+后四者的 `sessionId + accepted` 与 `message` **完全同形**。所以只要判别式是
+「sessionId 对上 + 有 accepted」，就必然互相抢 —— 谁先到谁赢，而"赢"的一方
+拿到的是别人的成功回执。
+
+**怎么发现的**：P3 接 `select-model` 时只数出三个生产者，用
+`data.type != "select-model"` 挡了一下；后来接 agent 预设时才发现是五个 ——
+也就是说**每接一个新帧，所有旧判别式都要回头改一遍**。这个结构注定漏。
+
+**现在怎么办（铁律）**：
+
+1. **判别式写成"排除表"，不写成条件链**。`data/ws/WsPorts.kt` 有
+   `NON_MESSAGE_SENT_TYPES` 一处集中列出"不是 message 确认"的那些 `type`，
+   matcher 写成 `data.sentTypeOf() !in NON_MESSAGE_SENT_TYPES`。
+   新增一个 `sent` 生产者只需往表里加一行，不用去翻每个 matcher。
+2. **每个新帧都要双向钉**：不只测"我的应答能完成我的请求"，还要测
+   「别人的应答**不许**完成我的请求」—— 后者才是真正会静默出错的那一半
+   （`WsSessionPortTest` 里两两各一条）。
+3. **判别字段优先选"只有我有"的**：有 `approvalId`/`callId` 就别靠 `sessionId`；
+   实在没有（如 `session-create` 的应答只有新 id）就承认它没有判别字段，
+   靠 `WsRequestRouter` 的同 kind 串行兜住，并在注释里写明这个取舍。
+
+**判据**：写 `matcher` 时先问「这个 kind 还有谁能发」，把答案列完再写。
+回答不出来就去 `src/host/` 里 `grep "kind: '"` 数一遍 —— 别凭印象数。
+
+**同类**：`### 契约文档写着「requestId 回显」，实测一半的帧不回显`
+（同一条通道的另一半问题：应答根本拿不到稳定的关联 id）。

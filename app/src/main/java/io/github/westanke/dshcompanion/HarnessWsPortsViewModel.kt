@@ -526,18 +526,19 @@ internal class AdaptiveSessionPort(
     }
 
     override suspend fun history(sessionId: String, beforeSeq: Int?, maxMessages: Int?): ChatHistory {
-        // 首屏（beforeSeq == null）恒走 REST：WS 的 history 帧会把 projections 丢掉
-        //（桥 handleHistory 只解构 {events, hasMore}），而待办清单/会话统计/WebView 页
-        // 全靠它。丢了就是整块面板变空 —— 比省一条连接重要得多。
-        if (beforeSeq == null) return rest.history(sessionId, null, maxMessages)
+        // 首屏也走 WS：桥的 `handleHistory` 自 2026-10-29 起对不带 `beforeSeq` 的请求附
+        // `projections`（与 REST 同源）。在此之前这里必须恒走 REST，否则待办/统计/WebView
+        // 三块面板会整块变空 —— 那条限制现在没了，而「打开会话」正是 WS 最该省的地方。
         return readViaWs({ ws.history(sessionId, beforeSeq, maxMessages) }) {
             rest.history(sessionId, beforeSeq, maxMessages)
         }
     }
 
     override suspend fun createSession(workspaceId: String, agentPreset: String?, reuseBlank: Boolean?): String =
-        // WS 的 session-create 只认 rootId+cwd 且写死 reuseBlank:false，带不了 agentPreset。
-        rest.createSession(workspaceId, agentPreset, reuseBlank)
+        // 新建会话是**写**操作：帧发出去之后才失败绝不重试（重试会建出两个会话）。
+        writeViaWs({ ws.createSession(workspaceId, agentPreset, reuseBlank) }) {
+            rest.createSession(workspaceId, agentPreset, reuseBlank)
+        }
 
     override suspend fun renameSession(sessionId: String, title: String) {
         writeViaWs({ ws.renameSession(sessionId, title) }) { rest.renameSession(sessionId, title) }
@@ -553,6 +554,15 @@ internal class AdaptiveSessionPort(
 
     override suspend fun forkSession(sessionId: String, atSeq: Int?): String =
         writeViaWs({ ws.forkSession(sessionId, atSeq) }) { rest.forkSession(sessionId, atSeq) }
+
+    override suspend fun selectAgentPreset(sessionId: String, agentPreset: String) {
+        // 写操作：切预设不幂等吗？其实幂等（切两次还是同一个），但超时后重发会让
+        // 「已切到目标」看起来像失败又重来一次，用户看到的是提示闪两下。
+        // 统一按写操作处理更稳：只有帧根本没发出去才回落 REST。
+        writeViaWs({ ws.selectAgentPreset(sessionId, agentPreset) }) {
+            rest.selectAgentPreset(sessionId, agentPreset)
+        }
+    }
 
     private suspend fun <T> readViaWs(viaWs: suspend () -> T, viaRest: suspend () -> T): T {
         if (!state().usesWs) return viaRest()

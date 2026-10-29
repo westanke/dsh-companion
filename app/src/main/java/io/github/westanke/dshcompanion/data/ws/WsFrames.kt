@@ -127,6 +127,25 @@ internal object WsClientFrame {
      * `data.type` / `data.accepted` 互相排除，见 [WsMessagePort] 与 [WsModelPort] 的 matcher。
      */
     const val SELECT_MODEL: String = "select-model"
+
+    /**
+     * 会话级切 agent 预设。
+     *
+     * **应答 kind 也是 `sent`**（`ws-presets.ts:82`），且 `data.type` 就是 `select-agent-preset`。
+     * 至此 `sent` 这个 kind 有 **五个** 生产者：`message`、`unsubscribe`、`select-model`、
+     * [SESSION_AGENT_PRESET]、[SELECT_AGENT_PRESET] —— 判别一律看 `data.type`，见
+     * [WsMessagePort] 的 matcher 表。
+     */
+    const val SELECT_AGENT_PRESET: String = "select-agent-preset"
+
+    /**
+     * 给会话**锁定** agent 预设（与 [SELECT_AGENT_PRESET] 的「切一次」不同，这条会写进会话配置）。
+     *
+     * 应答同样是 `sent` + `data.type == "session-agent-preset"`（`ws-presets.ts:73`）。
+     * App 目前没有「锁定」入口（只切一次），列在这里是为了让 `sent` 的判别表保持完整 ——
+     * 少列一个，将来谁接了就会莫名抢走 `message` 的应答。
+     */
+    const val SESSION_AGENT_PRESET: String = "session-agent-preset"
 }
 
 /**

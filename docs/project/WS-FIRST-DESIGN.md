@@ -224,6 +224,19 @@ data/ws/
 
 两条都不改 `ChannelState` 的四态语义：429 仍进 `WsDown`（重连中），`RestOnly` 依然只留给「这条通道不存在」。
 
+**2026-10-29 晚补齐的三条「最后一米」**（此前都以「桥侧没有对等面」为由留在 REST，
+复核代码后发现其中三条其实是桥侧只差一点点）：
+
+| 原结论 | 复核结果 | 落地 |
+|---|---|---|
+| 首屏历史必须走 REST（WS 的 `history` 帧丢 `projections`） | 桥 `handleHistory` 只解构 `{events, hasMore}`，而 `chat-adapter` 明明返回了 `projections` —— 属「最后一米」 | 桥：首屏（无 `beforeSeq`）的应答附 `projections`，翻页不带（那帧有 1 MiB 上限）；App：`WsSessionPort.history` 读 `data["projections"]`，`AdaptiveSessionPort` 不再按 `beforeSeq == null` 分叉 —— **「打开会话」这条最热的路现在真走 WS 了** |
+| 新建会话必须走 REST（WS 帧只认 `rootId`+`cwd` 且写死 `reuseBlank:false`） | 属实，但可以补齐而不是放弃 | 桥：`session-create` 新增 `workspaceId` 寻址（内部 `createSessionInWorkspace`）与 `agentPreset`/`reuseBlank`；App：`WsSessionPort.createSession` 发该帧并按写操作回落（帧没发出去才回落，避免建出两个会话） |
+| 切 agent 预设必须走 REST（「桥无对应帧」） | **结论错误** —— `ws-presets.ts:35` 有 `select-agent-preset`，应答 `sent` + `data.type` | App：`SessionPort.selectAgentPreset` + WS 实现；`sent` 判别收敛成 `NON_MESSAGE_SENT_TYPES` 一张表（生产者从 3 个变 5 个，继续堆 `!=` 必漏） |
+
+继续留 REST 的三条及理由（**不是漏做**）：归档会话列表（`session-archives` 全仓无生产者）、
+读附件字节（WS 的 `attachment` 帧是上传语义，下载要走 `file-download-*` 分片状态机）、
+待审批/待提问清单（App 只对当前会话发一次、不轮询，换通道省不了请求）。
+
 ### 7.1.1 P2 真机验收记录（2026-10-29，V2080A + 桥 v2.8.0）
 
 探活 1.5 s → 快照 3.5 s → `hello` 到达 → WS 接管事件流，界面顶栏绿点「已连接」，

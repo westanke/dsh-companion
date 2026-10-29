@@ -238,6 +238,8 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `fun resyncDroppedOf` / `resyncReasonOf` | `data/ws/WsFrames.kt` | 读丢帧数与原因；字段缺失给 `null` 而非 `0`（诊断日志里 `0` 会误导） |
 | `fun HarnessViewModel.onResyncHint(frame: JsonObject)` | `HarnessWsPortsViewModel.kt` | 收到背压告知 → 清 `lastEventSeq` 基线 + 重取当前会话历史（无选中会话则跳过） |
 | `interface SessionPort` / `MessagePort` / `EventPort` | `data/ws/WsPorts.kt` | 三个高频域端口；每域两套实现（`Ws*` 走 `/ws/mobile`、`Rest*` 走 `DshClient`） |
+| `const val SELECT_AGENT_PRESET` / `SESSION_AGENT_PRESET` | `data/ws/WsFrames.kt` | 切/锁 agent 预设的帧名；两者应答 kind 都是 `sent`，只能靠 `data.type` 认 |
+| `fun SessionPort.selectAgentPreset(sessionId, agentPreset)` | `data/ws/WsPorts.kt` | 会话级切预设；WS 帧 `select-agent-preset`，应答 `sent` + `data.type` + `data.sessionId` 双重认定 |
 | `interface HitlPort` / `CommandPort` / `ModelPort` | `data/ws/WsDomainPorts.kt` | P3 三域端口（审批决定、提问答复、命令清单与执行、会话模型与切模型）；同样每域两套实现 |
 | `class WsHitlPort` / `WsCommandPort` / `WsModelPort` | `data/ws/WsDomainPorts.kt` | WS 实现：`select-model` 的应答 kind 是 `sent`，靠 `data.type == "select-model"` 与发消息的确认互斥 |
 | `class AdaptiveSessionPort` / `AdaptiveMessagePort` | `HarnessWsPortsViewModel.kt` | 按 `ChannelState` 选通道；读操作任何 WS 失败都回落，写操作只在「帧没发出去」时回落 |
@@ -432,6 +434,8 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `fun retryAfterMillis` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/RetryAfter.kt` | function |
 | `fun reconnectWaitMillis` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/RetryAfter.kt` | function |
 | `interface SessionPort` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsPorts.kt` | interface |
+| `const val SELECT_AGENT_PRESET` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsFrames.kt` | val |
+| `const val SESSION_AGENT_PRESET` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsFrames.kt` | val |
 | `interface MessagePort` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsPorts.kt` | interface |
 | `interface EventPort` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsPorts.kt` | interface |
 | `interface HitlPort` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsDomainPorts.kt` | interface |
