@@ -213,7 +213,7 @@ data/ws/
 | **P2 三域接入** | **已完成（本阶段）** | `WsRequestRouter.kt`（配对层）、`HarnessWsPortsViewModel.kt`（装配层 + 端口适配）、`SessionPort` / `MessagePort` / `EventPort` 的 WS 实现与 REST 兜底 |
 | P3 HITL/命令/模型 | 已完成（模型域的**读+写**已真机验证） | `data/ws/WsDomainPorts.kt`、`HarnessDomainPortsViewModel.kt`；`sent` kind 三生产者双向互斥 |
 | P4 目标写操作 | 已完成（四项写操作全部真机验证） | `data/ws/GoalPort.kt`、`HarnessGoalPortViewModel.kt`、`ChatStatsSheet` 目标区可操作 |
-| P5 真机验收 + 发版 | **P2/P3/P4 部分的真机验收已完成**（2026-10-29） | V2080A 对真桥 v2.8.0 跑通 7.2 的第 1/2/3/6/7 步 + §7.1.2 的 P3/P4 验收；HITL 与 `command-execute` 未单独验，发版未做 |
+| P5 真机验收 + 发版 | **已完成**（2026-10-29/30，桥 v2.8.0 → v2.8.2） | V2080A 对真桥跑通 7.2 各步；P2/P3/P4 见 §7.1.2；v2.8.2 补齐 HITL 与 `command-execute`（§7.1.3）并修掉 sessions 裸数组解码 bug（§7.1.4）。两仓均已发版：bridge v2.8.2（npm + 双站 Release）、companion v2.2.58（双站 Release） |
 
 **2026-10-29 晚补的两条接收侧缺口**（不是新阶段，是 P1/P2 留给后续阶段的账）：
 
@@ -279,16 +279,41 @@ P3（模型域）：
 这一条是 P3 里风险最高的（`sent` 是 `message`/`unsubscribe`/`select-model` 三个生产者共用的 kind），
 真机通过说明双向互斥的 matcher 写对了：既没把在途发消息确认掉，也没让模型切换被吞。
 
-**未真机验证的两项**（原因写明，避免下次误以为验过）：
-- `approval-response`：要触发一次真实的审批弹窗，得让内核在会话里发起审批；本次没构造。
-  单测里按 `sessionId + approvalId` 配对、`approval-resolved` 当推送都已钉住。
-- `command-execute`：斜杠命令执行本身在 v2.2.57 验过，但当时走的是 REST；切到 `command-execute`
-  帧后没单独跑一遍（`/permission` 切换会改权限档位，真机上验它会影响后续操作）。
+**2026-10-29 当晚标注的两项「未真机验证」，在 2026-10-30 桥 v2.8.2 上补齐**（见 §7.1.3）。
 
 > 本次真机对的是**已发布的**桥 v2.8.0 —— 它还不回显 requestId，所以配对走的是
 > `WsRequestRouter` 的按 kind 兜底路径（清单第 3 步）。桥侧统一回显已在
 > `dsh-remote-bridge` 实现（未发版），发版后第 5 步的 `requestId 快路` 会自然生效，
 > 客户端无需改代码 —— 这是 §3.3「不靠版本号猜，靠回帧里那个字段在不在」的直接兑现。
+
+### 7.1.3 v2.8.2 补齐 HITL / command-execute 真机验收（2026-10-30，V2080A + 桥 v2.8.2）
+
+升级宿主到 `dsh-remote-bridge@2.8.2`（该版本修了审批决策恒 409，见桥仓
+`PITFALLS.md`「把事件信封的外层 rpcId 当成结算句柄」），diag 里所有配对从
+「按 kind 兜底」变成「**requestId 快路**」，证明统一回显在真桥生效、客户端零改动。
+
+- **`command-execute`（App UI + 桥回读双重通过）**：App 发 `/permission read-only`，
+  diag `requestId 快路 command-execute ← command-executed`；独立 WS 探针回读
+  `{commandId, result:{kind:"success",text:"preset read-only"}}`，read-only/workspace-write/danger
+  三档全部 success。**注意帧字段是 `line` 不是 `command`**（用错桥回 `INTERNAL_ERROR`）。
+- **`approval-response`（协议闭环通过，文件真落地）**：在只读会话触发内核提权 →
+  真实审批卡（full-access）→ 取**真 approvalId**（薄事件信封里的 id 是事件 id 不是审批 id，
+  从 REST 清单取）→ WS 应答 `approval-response {accepted:true}` + `approval-resolved`，
+  随后放行的 `touch /tmp/dsh-appr5.txt` 真被创建。v2.8.1 同路径恒回
+  `409 APPROVAL_NOT_PENDING`（桥 bug，与 App 无关，App 端帧编解码与 matcher 由单测钉住）。
+  纯「手指点 UI 确认按钮」这一下在 v2.8.2 没重走：当时这台 vivo 的自动化注入唤不起搜狗 IME
+  （浏览器地址栏可弹、DSH 框不弹，`mShowRequested` 恒 false，重启后仅首次 tap 聚焦），
+  属测试环境输入法问题，非 App 回归 —— 待真人手指或换设备点一次即可闭环最后这一下。
+
+### 7.1.4 v2.8.2 真机抓到并修掉的一个解码 bug：sessions 帧是裸数组（2026-10-30）
+
+App UI「新建会话」成功后立刻报
+`JsonDecodingException: Expected JsonObject, but had JsonArray … serialized body of …SessionList`。
+根因：**同一份会话列表，REST 包 `{items:[…]}`，WS `sessions` 帧的 `data.sessions` 直接是数组**，
+而 `WsSessionPort.sessions()` 复用了 REST 的 `SessionList(items)` 模型去解 JsonArray。
+修法：WS 侧改用 `ListSerializer(ChatSession.serializer())` 直接解数组（见
+`PITFALLS.md`「同一份列表，REST 包 items、WS 直接给数组」），补了一条真形状回归用例。
+单测此前漏掉是因为只手造了「自己以为的」回帧形状 —— 真桥才拆穿假设。
 
 ### 7.2 P2 真机自检清单
 

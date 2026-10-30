@@ -182,7 +182,7 @@ web/           ← WebView 容器（chat.html 兜底路径）
 
 | 层 | 命令 | 说明 |
 |---|---|---|
-| 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 86 类 / 866 用例（随代码变化，勿当常量） |
+| 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 86 类 / 867 用例（随代码变化，勿当常量） |
 | 文档 | `scripts/build.sh docsCheck` | 10 文档 / ROADMAP 任务 / STATUS 引用 / 根 README 双站 / 目录与接口锚点双向 |
 | 真机 | 人工 | **单测绿 ≠ 行为对**。涉及手势、键盘、WebView、耗电、断流的一律要真机确认 |
 
@@ -264,6 +264,7 @@ web/           ← WebView 容器（chat.html 兜底路径）
 - `两个事件通道交接时，旧通道的「告别」会把新通道的状态改回断开`
 - `整份状态重建只填服务端字段，其余五十多个字段被打回默认值`
 - `共用 kind 的应答：靠 data.type 判别，漏一个就会互相把请求「确认」掉`
+- `同一份列表，REST 包 items、WS 直接给数组：套同一个反序列化模型必炸`
 
 > 新坑位：名字加进上面清单 + 原文写进 `PITFALLS.md` 并补 `### 同名` 锚点。
 

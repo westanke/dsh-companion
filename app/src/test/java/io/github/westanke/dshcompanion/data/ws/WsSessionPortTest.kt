@@ -70,6 +70,44 @@ class WsSessionPortTest {
         )
     }
 
+    // ------------------------------------------------------------- sessions
+
+    @Test
+    fun `sessions 回帧里 sessions 直接是数组（不是 REST 的 items 包裹）`() = case {
+        // 真机 v2.8.2 取证：桥发 data:{sessions:[...]}，App 曾按 {items:[...]} 解码，
+        // 报 JsonDecodingException Expected JsonObject but had JsonArray，新建会话后列表必炸。
+        val link = Link()
+        val port = WsSessionPort(link.router, json)
+
+        val job = async { port.sessions(archived = false) }
+        link.awaitSent(1)
+        assertEquals(WsClientFrame.SESSIONS, link.sentTypes().single())
+
+        link.reply(
+            WsServerFrame.SESSIONS,
+            buildJsonObject {
+                put(
+                    "sessions",
+                    kotlinx.serialization.json.buildJsonArray {
+                        add(
+                            buildJsonObject {
+                                put("id", "s-1")
+                                put("rootId", "r-1")
+                                put("cwd", "")
+                                put("updatedAt", 123L)
+                                put("running", false)
+                                put("blank", false)
+                            },
+                        )
+                    },
+                )
+            },
+        )
+        val list = withTimeout(2_000) { job.await() }
+        assertEquals(1, list.size)
+        assertEquals("s-1", list.single().id)
+    }
+
     // ------------------------------------------------------------- history
 
     @Test

@@ -539,7 +539,7 @@ keyPassword=...
 - 当前版本：`v2.2.58`（`versionCode` 10083）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
-- 单元测试：86 个测试类 / 866 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
+- 单元测试：86 个测试类 / 867 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
 - 当前 APK：`DSH伴侣-companion-v2.2.58.apk`，**3,324,284 字节**，
   SHA-256 `6bc69f376ddf67fe1ac6416d6aae933c0d35336cba4cb676bad4bba7d4f3ba76`（`artifacts/SHA256SUMS.txt` 同步）。
@@ -567,7 +567,7 @@ keyPassword=...
   （能力位里没有「是否回显 requestId」这种位，靠「发了有没有回」自适应）。
   **按设计继续留 REST 的三条**：归档列表（桥 `session-archives` 无生产者）、读附件字节
   （WS `attachment` 帧是上传语义）、待审批清单（不轮询，换通道省不了请求）。
-  **验证**：单测 86 类 / 866 用例 / 0 失败；`lintDebug` 0 error；`assembleDebug` 成功；
+  **验证**：单测 86 类 / 867 用例 / 0 失败；`lintDebug` 0 error；`assembleDebug` 成功；
   `docsCheck` 双向一致（STRUCTURE 162 锚点 / INTERFACES 136 锚点）。
   **真机验了**（V2080A）：P2 顶栏绿点「已连接」+ 104 会话 + 正文实时更新；P3 模型域读+写；
   P4 四项写操作全过（`revision` 每次 +1，判据取桥侧 WS 回读而非界面自报）。

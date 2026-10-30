@@ -1275,3 +1275,51 @@ diag.log 末尾赫然是 `事件连状态 → false` —— 一个**没人该发
 
 **同类**：`### 契约文档写着「requestId 回显」，实测一半的帧不回显`
 （同一条通道的另一半问题：应答根本拿不到稳定的关联 id）。
+
+### 同一份列表，REST 包 `{items}`、WS 直接给数组：套同一个反序列化模型必炸
+
+**症状**（真机 v2.8.2，2026-10-30）：新建会话后会话列表立刻报错
+`SEND 请求失败：JsonDecodingException: Expected JsonObject, but had JsonArray as the
+serialized body of ...data.ws.SessionList`。会话其实**创建成功了**（diag 里
+`session-create ← session-created` 正常），死在紧接着刷列表那一步。桥一切正常，
+REST `GET /chat/sessions` 也正常 —— 只有走 WS 的列表炸。
+
+**根因**：两条通道对「列表」的包裹不一样：
+
+- REST：`GET /chat/sessions` → `{ "items": [ {...}, {...} ] }`（对象包一层 `items`）。
+- WS：`sessions` 帧 → `{ kind:'sessions', data:{ sessions: [ {...} ] } }`，
+  `data.sessions` **直接就是数组**（桥 `ws-handler.ts` 的 `handleSessions`：
+  `data: { sessions }`，`sessions = await chat.listSessions(...)` 本就是数组）。
+
+`WsSessionPort.sessions()` 却复用了 REST 的 `SessionList(val items: List<ChatSession>)`
+去解 `data.sessions` —— 拿 JsonArray 喂一个期望 JsonObject 的 data class，必抛
+JsonDecodingException。修复：WS 侧直接
+`decodeFromJsonElement(ListSerializer(ChatSession.serializer()), items)`，
+不再套 `SessionList`。
+
+**为什么单测漏了**：`WsSessionPortTest` 之前**根本没有 sessions 帧的用例**
+（只测了 history / createSession / select-agent-preset），读码时 `data:{sessions}`
+看着和 REST 的 `{sessions:{items:[]}}`「差不多」，就顺手复用了模型。补了
+`sessions 回帧里 sessions 直接是数组（不是 REST 的 items 包裹）` 一条钉住。
+
+**怎么发现的**：真机 diag.log 里 `#570/#573` 连续两条同样的解码异常，且都紧跟在
+`session-create ← session-created`、`sessions ← sessions` 之后 —— 创建成功、列表失败，
+把锅精准定位到解码。再用裸 WS 探针打印真帧：`data keys=[sessions,requestId]`、
+`Array.isArray(sessions)=true`，一分钟定案。**又是「手造回帧测不出来」那一类**：
+你喂什么形状测试就过什么形状，只有真桥给的帧才会拆穿假设。
+
+**现在怎么办（铁律）**：
+
+1. **WS 帧的每个数组字段都按桥源码的真实形状解**，不要因为「语义都是列表」就复用
+   REST 的包裹模型。接入前 `grep "kind: 'xxx'" src/host/ws-*.ts` 看它 data 里放的
+   是数组还是 `{items}`。
+2. **每接一个 WS 帧就配一条「真帧形状」用例**：数组就喂数组，别喂对象。
+   词汇表（帧名对不对）测不出形状错，形状必须单独钉。
+3. 已核实同模块的 `workspaces` 帧也是 `data:{workspaces:[...]}` 裸数组，但 App 的
+   工作区列表目前仍走 REST（没接 WS 帧），暂不受影响；将来接入时照此办理，别再踩。
+
+**判据**：凡是「换了条通道复用旧反序列化模型」，先问一句「这条通道对同一个概念
+包不包裹、用什么键名」，并用真帧（或读桥源码）确认，别让模型替你假设形状。
+
+**同类**：`### 契约文档写着「requestId 回显」，实测一半的帧不回显`
+（都是「想当然以为两条通道行为一致」，真帧才拆穿）。

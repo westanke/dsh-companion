@@ -13,7 +13,6 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.encodeToJsonElement
 import java.io.IOException
@@ -139,8 +138,11 @@ internal class WsSessionPort(
             expectedKind = WsServerFrame.SESSIONS,
             payload = if (archived) JsonObject(mapOf("archived" to JsonPrimitive(true))) else JsonObject(emptyMap()),
         )
+        // 桥发的是 `data: { sessions: [...] }` —— sessions 直接就是数组，不是 {items:[...]}
+        // （真机 v2.8.2 取证：JsonDecodingException Expected JsonObject but had JsonArray）。
+        // REST 才包一层 {items}，两条通道形状不同，别套同一个 SessionList。
         val items = WsFrames.dataOf(frame)["sessions"] ?: return emptyList()
-        return json.decodeFromJsonElement(SessionList.serializer(), items).items
+        return json.decodeFromJsonElement(kotlinx.serialization.builtins.ListSerializer(ChatSession.serializer()), items)
     }
 
     override suspend fun history(sessionId: String, beforeSeq: Int?, maxMessages: Int?): ChatHistory {
@@ -401,6 +403,3 @@ private val NON_MESSAGE_SENT_TYPES: Set<String> = setOf(
     WsClientFrame.SESSION_AGENT_PRESET,
     "unsubscribe",
 )
-
-@Serializable
-private data class SessionList(val items: List<ChatSession>)
