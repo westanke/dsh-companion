@@ -1276,7 +1276,7 @@ diag.log 末尾赫然是 `事件连状态 → false` —— 一个**没人该发
 **同类**：`### 契约文档写着「requestId 回显」，实测一半的帧不回显`
 （同一条通道的另一半问题：应答根本拿不到稳定的关联 id）。
 
-### 同一份列表，REST 包 `{items}`、WS 直接给数组：套同一个反序列化模型必炸
+### 同一份列表，REST 包 items、WS 直接给数组：套同一个反序列化模型必炸
 
 **症状**（真机 v2.8.2，2026-10-30）：新建会话后会话列表立刻报错
 `SEND 请求失败：JsonDecodingException: Expected JsonObject, but had JsonArray as the
