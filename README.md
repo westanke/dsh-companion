@@ -290,7 +290,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.60.apk
+DSH伴侣-companion-v2.2.61.apk
 ```
 
 安装要求：
@@ -536,25 +536,25 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.60`（`versionCode` 10085）
+- 当前版本：`v2.2.61`（`versionCode` 10086）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
-- 单元测试：86 个测试类 / 867 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
+- 单元测试：88 个测试类 / 874 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.60.apk`，**3,324,284 字节**，
-  SHA-256 `9eb61b91d0e13a555e36b2e73f0e0e243af8f90a6fa87f81bd9b987de6901671`（`artifacts/SHA256SUMS.txt` 同步）。
-  **本版（v2.2.60，纯文档一致性修复重打包）**：v2.2.59 的发布包功能正确，但 GitHub `verify`
-  红在 `ArchitectureGuardTest` 的「坑位索引与 PITFALLS 正文双向一致」——坑位索引条目不允许内嵌
-  反引号，而正文标题把 REST 包裹写成了 `` `{items}` ``，触发词字面不等。本版只统一这一行标题，
-  无代码/资源改动，APK 与 v2.2.59 内容等价；不改写已发布的 v2.2.59 tag/Release，故另发本版，
-  让发版 tag 落在绿 CI 上。
-  **上一版 v2.2.59（配套桥 v2.8.2）的功能修复**：WS 双通道在「新建会话」后列表必现的解码崩溃
-  （`JsonDecodingException: … SessionList … JsonArray`）。根因是 REST `GET /chat/sessions`
-  包一层 `{items:[…]}`、WS `sessions` 帧的 `data.sessions` 直接是数组；WS 侧改用
-  `ListSerializer(ChatSession.serializer())` 直接解数组并补真形状回归用例。同轮真机
-  （V2080A + 桥 v2.8.2）确认 `command-execute` 三档 success、`approval-response`
-  `accepted:true` 且放行命令真落地。
-  **验证**：86 类 / 867 用例 / 0 失败；`docsCheck`、`lintDebug`、`assembleRelease` 全绿。
+- 当前 APK：`DSH伴侣-companion-v2.2.61.apk`，**3,358,308 字节**，
+  SHA-256 `a5eaaaf213b8d3f915d9bf5d9ca57c972549ce106ed9c83c9800db4ffe7cbcca`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
+  **本版（v2.2.61，智能团队只读面板 + 自然语言指挥条 + 权限档位分色）**：对照官方 Web 智能团体
+  的只读监工形态，新增会话级团队面板——成员名册（角色 + 在岗/组建中/失败状态）、共享任务板
+  （四态/负责人/前置依赖/写范围）、子会话目录三节只读卡，数据全部来自首屏 history 已下发的
+  `agentTeam` / `subagentCatalog` 投影，**桥零改动**；「新成员/派任务/问进度」三枚指挥 chips
+  以普通队列消息发给 Lead，由 Lead 自己调模型工具，对齐官方「人只旁观+下自然语言指令」的设计。
+  入口两处：会话 ⋯ 菜单一级「智能团队」项、标题副行权限胶囊后的品牌色「智能团队」胶囊。
+  权限三档同步分色分图标：只读=信息蓝锁、工作区写入=琥珀笔、完整访问=危险红警示。
+  **上一版 v2.2.60**：纯文档一致性修复重打包（GitHub `verify` 的坑位索引标题反引号问题），
+  APK 与 v2.2.59 内容等价；**v2.2.59（配套桥 v2.8.2）**修复 WS 双通道新建会话后
+  `JsonDecodingException: … SessionList … JsonArray` 裸数组解码崩溃。
+  **验证**：88 类 / 874 用例 / 0 失败；`docsCheck`、`lintDebug`、`assembleDebug` 全绿；
+  真机 V2080A 已验两胶囊、团队面板与指挥对话框。
   （WS 双通道大改造在 **v2.2.58**：P1 传输层基座 + P2 Session/Message/Event +
   P3 HITL/Command/Model + P4 目标写操作，配套桥 v2.8.1；明细见 `docs/project/CHANGELOG-DEV.md`。）
 - 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用。证书没变，但 **v2.2.41 起包名变了**，

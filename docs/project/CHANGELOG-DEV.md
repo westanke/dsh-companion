@@ -3,6 +3,68 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## v2.2.61 · 智能团队只读面板 + 自然语言指挥条 + 权限档位分色（2026-10-30）
+
+### 基于什么
+《手机端智能团体管理与会话功能研究报告 2026-10-30》给出 P0/P1/P2 裁剪方案。对照官方
+`dsh-experimental-client-ui-agent-team` 包核实：官方 Web 的团队 UI 本身就是**只读监工面板**
+（一个头部入口、roster + 任务板两张只读表，唯一动作 `openTeammate` 跳进成员子会话），
+建成员、派任务、私信全部由 Lead agent 持有的 9 个模型工具（`spawn_teammate`/`send_message`/
+`team_task_*`）经自然语言触发。所以手机端对齐官方体验**不需要任何桥侧写协议**：
+投影数据随首屏 `history.projections.values` 已经下发，「管理」走给 Lead 发普通消息即可。
+同日用户两条界面要求：入口提到会话 ⋯ 菜单一级（不藏子菜单）；随后再要求把入口做成
+「完整访问」权限 Pill **后面**的胶囊，并给三档权限分颜色、配对应图标。
+
+### 干了什么
+- **数据层** `data/AgentTeamProjection.kt`（新文件，162 行）：`agentTeamProjectionOf(history)`
+  容错解析 `agentTeam`（members/tasks/failure）与 `subagentCatalog` 两个投影键：
+  缺 name 退 id、role 默认 teammate、phase 默认 active、status 默认 pending、ready 默认 true；
+  子会话 id 同时认官方 `id` 与 bridge 测试夹具里的 `sessionId` 键；members/tasks/subagents
+  全空且无 failure 时返回 null（空团队与无投影同等待遇，统计面板不出现幽灵分节）。
+  既有 `SessionAnalytics.AgentTeamInfo(memberCount,taskCount)` 两计数保持不动，
+  「会话统计」面板语义不变，详细数据走新模型。
+- **UI 层** `ui/chat/TeamPanelSheet.kt`（新文件，465 行）：ModalBottomSheet 三节只读卡片——
+  成员名册（角色徽标 负责人/成员 + 状态徽标 在岗/组建中/失败，失败原因红字）；
+  共享任务板（待办/进行中/已完成/已删除四态徽标 + 描述 + 负责人 + 前置依赖 + 写范围 + 未就绪警示）；
+  子会话目录（标签/id + 一次性/可续用/外部/未知模式徽标）；failure 时顶部错误卡。
+  底部「指挥负责人」三枚 FilterChip（新成员/派任务/问进度）→ AlertDialog 多行输入框
+  预填话术模板，确认后以**队列普通消息**（`sendMessage(text, steer=false)`）发给 Lead，
+  由 Lead 自己调模型工具——不发任何团队写协议帧；无 `chat.write` scope 时 chips 禁用。
+- **入口两处**：① 会话 ⋯ 菜单「会话统计」之后新增一级「智能团队」项（Icons.Outlined.Groups，
+  无能力位门控，投影始终随 history 可得）；② 标题副行权限 Pill 之后新增品牌色
+  （primaryContainer/onPrimaryContainer）「智能团队」胶囊，点击直达同一面板。
+  `ChatHeader.kt` 新增 `onOpenTeam` 参数与私有 `TeamEntryPill`；`ChatDetail.kt` 持
+  `teamSheet` 状态并挂载面板（该文件维持 800 行预算压线，未超）。
+- **权限档位分色分图标**（`ui/chat/ChatPermissionPill.kt`）：新增纯函数
+  `permissionTone(value): PermissionTone`（INFO/WARN/DANGER/NEUTRAL），Pill 底色与文字色
+  从写死的 surfaceContainerHigh + Lock 改为按档位取语义色容器：只读=信息蓝容器（Lock）、
+  工作区写入=琥珀容器（Edit）、完整访问=危险红容器（WarningAmber）、未知/自定义=中性灰。
+  图标直接复用菜单侧既有的 `permissionIcon()`，菜单与 Pill 不再两处漂移；颜色全部走 App
+  统一语义色板 `SemanticInfo/Warn/ErrContainer`（明暗双主题均已调校），不硬编码 hex。
+- **资源/文档**：中英 `strings.xml` 各新增 38 个 `team_*` 键；`STRUCTURE.md` 锚点登记两个新文件；
+  `PARITY.md` 新增「智能团队面板」行（只读 + 自然语言指挥 done，子会话直连标 P2 待桥侧）；
+  README 中英双站与 AGENTS.md 测试计数同步为 88 类 / 874 用例。
+
+### 测了什么 / 真机验了什么
+- 新增 7 个用例：`AgentTeamProjectionTest`（5 个：全字段解析、bridge 极简夹具兜底、
+  仅 subagentCatalog 且用 sessionId 键、无投影/空团队返回 null、脏数组元素跳过）；
+  `PermissionToneTest`（2 个：三档→INFO/WARN/DANGER、custom/未知/null/空串→NEUTRAL）。
+- 单测 **88 类 / 874 用例**全绿；`docsCheck` 绿（STRUCTURE 164 锚点 / 144 源文件双向一致）；
+  `lintDebug` 0 error；`assembleDebug` 成功。
+- 真机 V2080A（serial 9540718532001JR）覆盖安装验收（17:52:45 lastUpdateTime）：
+  本调研会话副行从左到右为绿点「已连接」、红色「⚠ 完整访问」胶囊、品牌色「👥 智能团队」胶囊；
+  点团队胶囊直达面板——lead/负责人/在岗、任务板空态文案、两个「可续用」子会话卡
+  （调研 bridge 暴露面 e083dffc…、调研 companion 现状 d7a2b050…，标签来自 subagentCatalog.label）；
+  「新成员」chip 弹出指挥对话框且预填话术模板正确（未实际发送，点取消）。
+  ⋯ 菜单一级入口在 15:52 首轮验收时已实测可达。
+
+### 明确未做（P2，需桥侧改造，本轮按约定不碰桥）
+- 官方 `openTeammate` 同款「点成员跳进成员子会话」：桥 `dsh-0.2-bridge.ts` 的 sessions.list
+  过滤掉 `origin:'subagent'` 会话（内核 0.2.x 会列出但宿主拒绝当普通会话激活），且
+  REST/WS 发消息均不透传 `parentSessionId`。打通需：新增受成员关系校验的只读子会话窄口
+  （推荐新端点而非拆 origin 过滤）+ 安全测试，或 parentSessionId 入站透传 + capability 位 +
+  openapi/asyncapi/SDK/合约测试五处同改。
+
 ## v2.2.60 · 纯文档一致性修复重打包（2026-10-30，补丁版）
 
 ### 基于什么

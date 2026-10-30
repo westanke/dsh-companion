@@ -1,3 +1,15 @@
+- 日期：2026-10-30
+- **v2.2.61（versionCode 10086，发）**：**智能团队只读面板 + 自然语言指挥条 + 权限档位分色**。
+  依据《手机端智能团体管理与会话功能研究报告 2026-10-30》P0/P1 方案（官方 Web 团队 UI 本身只读，
+  管理靠 Lead agent 的模型工具，故桥零改动）。新增 `data/AgentTeamProjection.kt`（容错解析
+  agentTeam/subagentCatalog 投影，id 与 sessionId 双键都认）与 `ui/chat/TeamPanelSheet.kt`
+  （成员名册/共享任务板/子会话三节只读卡 + 「新成员/派任务/问进度」指挥 chips，以普通队列消息
+  发给 Lead）；入口为会话 ⋯ 菜单一级项 + 标题副行权限 Pill 后的品牌色「智能团队」胶囊。
+  权限三档分色分图标：只读=信息蓝 Lock、工作区写入=琥珀 Edit、完整访问=危险红 WarningAmber
+  （新增纯函数 permissionTone，颜色走语义色板）。门禁：docsCheck（164 锚点/144 源文件）、
+  单测 **88 类 / 874 用例**（新增 7 例）、lintDebug 0 error、assembleDebug 全绿。
+  **真机已验**（V2080A，17:52 覆盖安装）：两胶囊并排、团队面板三节数据正确（lead + 2 个可续用子会话）、
+  指挥对话框预填正确。P2（点成员直跳子会话）受阻于桥侧 origin:subagent 过滤与 parentSessionId 不透传，未做。
 - 日期：2026-10-28
 - **BFF 三项能力接入（未发版，对应 `BFF-001`）**：按桥 `BFF-REST-CONTRACT.md` 补齐 **分块上传 / 定时任务 / 官方语音输入**。
   数据层新增 `data/DshClientBff.kt`（12 个 `DshClient` 扩展端点，复用唯一 OkHttp 客户端与鉴权）、`BffModels.kt`、`ChunkPlan.kt`、

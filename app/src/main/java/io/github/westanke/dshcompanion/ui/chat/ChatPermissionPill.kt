@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -20,11 +18,38 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import io.github.westanke.dshcompanion.R
 import io.github.westanke.dshcompanion.data.PermissionSelect
+import io.github.westanke.dshcompanion.ui.SemanticErrContainer
+import io.github.westanke.dshcompanion.ui.SemanticInfoContainer
+import io.github.westanke.dshcompanion.ui.SemanticWarnContainer
+import io.github.westanke.dshcompanion.ui.OnSemanticErrContainer
+import io.github.westanke.dshcompanion.ui.OnSemanticInfoContainer
+import io.github.westanke.dshcompanion.ui.OnSemanticWarnContainer
+
+/**
+ * 权限档位的**语义色调**（2026-10-30 用户要求：三档权限分颜色、图标对应）。
+ *
+ * - 只读 = 信息蓝（Lock）：锁住但无害，蓝色是「知情」色；
+ * - 工作区写入 = 警告琥珀（Edit）：能改文件，需要留意；
+ * - 完整访问 = 危险红（WarningAmber）：无审批全权，红色是「刹车」色；
+ * - 未知/自定义档位退回中性灰，不冒充认识它。
+ *
+ * 图标本身沿用既有的 [permissionIcon]（菜单与 Pill 同一套，避免两处漂移）。
+ */
+internal enum class PermissionTone { INFO, WARN, DANGER, NEUTRAL }
+
+/** 纯函数：档位 value → 色调；UI 不可测的部分（取色）留在 @Composable 层。 */
+internal fun permissionTone(value: String?): PermissionTone = when (value) {
+    "read-only" -> PermissionTone.INFO
+    "workspace-write" -> PermissionTone.WARN
+    "danger-full-access" -> PermissionTone.DANGER
+    else -> PermissionTone.NEUTRAL
+}
 
 /**
  * 发送区常驻的**权限档位 Pill**（对标官方 Web 的 PermissionIcon 系列与「档位 Pill」设计，
@@ -34,7 +59,12 @@ import io.github.westanke.dshcompanion.data.PermissionSelect
  * 切换动作也与顶栏同源（`selectPermissionPreset`，走 `/permission <preset>` 命令）——
  * Pill 只是**第三个入口**，不是第二套语义。完整访问仍必须过 [FullAccessConfirmDialog]。
  *
- * 位置：输入药丸**上方**的一条窄带（与 ChatStatusBar 同层），点击弹档位菜单。
+ * 位置：会话顶栏标题副行，「已连接/已断开」状态之后的小胶囊，点击弹档位菜单。
+ *
+ * ## 颜色与图标随档位走（2026-10-30）
+ *
+ * 三档各有语义色容器底 + 同色实心图标：只读蓝、工作区写入琥珀、完整访问红；
+ * 未知档位保持中性灰。颜色取 App 统一语义色板（明暗双主题均已调校），不硬编码 hex。
  *
  * ## 候选项为空时仍要渲染
  *
@@ -62,35 +92,48 @@ internal fun PermissionPill(
     val current = permission.options.find { it.value == permission.currentValue }
     val label = permissionLabel(permission.currentValue, current?.name)
 
-    // 紧凑形态：**不再独占一行**（原来 `.fillMaxWidth()` 让它在输入区上方占了整条，
-    // 用户 2026-10-19 反馈「影响页面可视区域」）。现在它是贴在会话顶栏
-    // 「已连接/已断开」后面的一个小胶囊，宽度自适应。
+    val container: Color
+    val content: Color
+    when (permissionTone(permission.currentValue)) {
+        PermissionTone.INFO -> {
+            container = SemanticInfoContainer
+            content = OnSemanticInfoContainer
+        }
+        PermissionTone.WARN -> {
+            container = SemanticWarnContainer
+            content = OnSemanticWarnContainer
+        }
+        PermissionTone.DANGER -> {
+            container = SemanticErrContainer
+            content = OnSemanticErrContainer
+        }
+        PermissionTone.NEUTRAL -> {
+            container = MaterialTheme.colorScheme.surfaceContainerHigh
+            content = MaterialTheme.colorScheme.onSurfaceVariant
+        }
+    }
+    // 禁用态（连接不可写/无候选项）只降内容色透明度，底色保留——档位仍一眼可辨。
+    val tint = if (enabled) content else content.copy(alpha = 0.5f)
+
     Box(modifier) {
         Row(
             modifier = Modifier
-                .background(
-                    MaterialTheme.colorScheme.surfaceContainerHigh,
-                    RoundedCornerShape(999.dp),
-                )
+                .background(container, RoundedCornerShape(999.dp))
                 .clickable(enabled = enabled && switchable) { menuOpen = true }
                 .padding(horizontal = 8.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                Icons.Outlined.Lock,
+                permissionIcon(permission.currentValue),
                 contentDescription = stringResource(R.string.tool_permission_pill),
                 modifier = Modifier
                     .padding(end = 4.dp)
                     .size(12.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = tint,
             )
             Text(
                 label,
-                color = if (enabled) {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                },
+                color = tint,
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,

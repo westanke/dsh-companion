@@ -304,6 +304,7 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/data/SecureConnectionStore.kt` | file | 凭据与主机存储的门面 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/SessionFileRefs.kt` | file | 会话里被 agent 提到过的文件路径提取 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/SessionAnalytics.kt` | file | 会话投影里的内核侧分析（Token 用量 / 上下文压力 / 目标 / 智能体团队） |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/AgentTeamProjection.kt` | file | 智能团队只读投影：成员名册 / 共享任务板 / 子会话目录（agentTeam、subagentCatalog） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/CommandArgOptions.kt` | file | `/model` `/permission` 的二级菜单选项（REST 侧复原桥 command-options） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/SessionStats.kt` | file | 会话执行统计（全来自历史事件） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/Trajectory.kt` | file | 轨迹页数据：历史按轮次分组的节点 |
@@ -368,6 +369,7 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SpeechInput.kt` | file | 麦克风按钮、录音状态条、运行时权限与转写结果插入 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SpeechRecorder.kt` | file | AudioRecord 采集 PCM16 并封 WAV（可取消、限长） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatStatsSheet.kt` | file | 会话统计面板（执行维度） |
+| `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/TeamPanelSheet.kt` | file | 智能团队只读面板（成员 / 任务 / 子会话 + 自然语言指挥条） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatSuggestions.kt` | file | 输入框上方 @ 文件与 / 命令两个补全面板 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatToast.kt` | file | 一次性反馈与剪贴板助手 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatToolBlocks.kt` | file | 工具调用专用块渲染（Read/Terminal/Diff） |

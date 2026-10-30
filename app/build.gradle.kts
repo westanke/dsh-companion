@@ -1000,8 +1000,32 @@ android {
         //     是因为已发布的 tag/Release 不改写。
         //   测了什么：ArchitectureGuardTest 定向复跑通过；docsCheck + testDebugUnitTest + lintDebug +
         //     assembleDebug 四项 --rerun-tasks 全绿（867 用例 0 失败）。
-        versionCode = 10085
-        versionName = "2.2.60"
+        //
+        // v2.2.61（versionCode 10086）：**智能团队只读面板 + 自然语言指挥条 + 权限档位分色**（2026-10-30）。
+        //   基于什么：《手机端智能团体管理与会话功能研究报告 2026-10-30》P0/P1 裁剪方案；
+        //     官方 Web 的智能团体 UI 本身就是只读监工面板（一个入口、两张只读表，唯一动作 openTeammate），
+        //     建成员/派任务全靠 Lead agent 持有的模型工具，因此手机端无需新增任何桥写协议。
+        //   干了什么：
+        //     ① 数据层 data/AgentTeamProjection.kt：容错解析 history 投影 agentTeam（members/tasks/failure）
+        //        与 subagentCatalog（id 与 bridge fixture 的 sessionId 双键都认，缺字段全有兜底）；
+        //     ② UI 层 ui/chat/TeamPanelSheet.kt：成员名册（角色+在岗/组建中/失败状态）、共享任务板
+        //        （四态/负责人/前置依赖/写范围/未就绪）、子会话目录三节只读卡片，底部「新成员/派任务/
+        //        问进度」三枚指挥 chips → 预填话术对话框 → 作为普通消息发给 Lead（队列消息，不是插话）；
+        //     ③ 入口两处：会话 ⋯ 菜单一级「智能团队」项（用户 2026-10-30 要求不藏子菜单），
+        //        以及标题副行权限 Pill 之后的「智能团队」胶囊（primaryContainer 品牌色，与三档语义色区分）；
+        //     ④ 权限三档分色分图标（用户 2026-10-30 要求）：只读=信息蓝 Lock、工作区写入=琥珀 Edit、
+        //        完整访问=危险红 WarningAmber，未知档位中性灰；图标复用菜单侧既有 permissionIcon()，
+        //        颜色取 App 统一语义色板（SemanticInfo/Warn/Err Container），不硬编码 hex。
+        //   测了什么：新增 AgentTeamProjectionTest（5 用例：全字段/极简 fixture/sessionId 键/空投影/脏数据）
+        //     与 PermissionToneTest（2 用例：三档映射+未知回退）；单测 88 类 / 874 用例全绿；
+        //     docsCheck（STRUCTURE 164 锚点双向一致）、lintDebug 0 error、assembleDebug 全绿。
+        //   真机验了什么：V2080A 覆盖安装（lastUpdateTime 17:52）——本会话副行依次为绿点「已连接」、
+        //     红色「完整访问」胶囊、品牌色「智能团队」胶囊；点团队胶囊直达面板，lead/负责人/在岗、
+        //     任务板空态、2 个「可续用」子会话（两个调研子智能体 id 正确）、指挥对话框预填正确。
+        //     未做（报告 P2，需桥侧改造）：点成员跳进子会话（桥滤掉 origin:subagent 会话）、
+        //     parentSessionId 入站透传。
+        versionCode = 10086
+        versionName = "2.2.61"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。

@@ -339,6 +339,7 @@ internal fun ChatDetail(
     var modelSheet by remember(selected.id) { mutableStateOf(false) }
     var filesSheet by remember(selected.id) { mutableStateOf(false) }
     var statsSheet by remember(selected.id) { mutableStateOf(false) }
+    var teamSheet by remember(selected.id) { mutableStateOf(false) }
     var trajectorySheet by remember(selected.id) { mutableStateOf(false) }
     var jobsSheet by remember(selected.id) { mutableStateOf(false) }
     var tasksExpanded by rememberSaveable(selected.id) { mutableStateOf(true) }
@@ -587,6 +588,7 @@ internal fun ChatDetail(
                 onOpenFiles = { filesSheet = true },
                 onModelClick = { modelSheet = true },
                 onOpenStats = { statsSheet = true },
+                onOpenTeam = { teamSheet = true },
                 onOpenTrajectory = { trajectorySheet = true },
                 onOpenJobs = { viewModel.openJobsPanel(selected.id); jobsSheet = true },
                 permission = permission,
@@ -786,6 +788,7 @@ internal fun ChatDetail(
     }
     if (modelSheet) ModelSheet(state, viewModel) { modelSheet = false }
     if (statsSheet) ChatStatsSheet(state, viewModel) { statsSheet = false }
+    if (teamSheet) TeamPanelSheet(state, viewModel) { teamSheet = false }
     if (trajectorySheet) ChatTrajectorySheet(state) { trajectorySheet = false }
     if (jobsSheet) ChatJobsSheet(state, viewModel) { jobsSheet = false }
     if (filesSheet) {

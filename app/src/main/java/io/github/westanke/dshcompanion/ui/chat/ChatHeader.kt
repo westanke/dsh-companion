@@ -3,16 +3,21 @@ package io.github.westanke.dshcompanion.ui.chat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.List
 import androidx.compose.material.icons.outlined.ModelTraining
@@ -36,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.westanke.dshcompanion.HarnessState
@@ -68,6 +74,7 @@ internal fun ConversationHeader(
     onOpenFiles: () -> Unit,
     onModelClick: () -> Unit,
     onOpenStats: () -> Unit,
+    onOpenTeam: () -> Unit,
     onOpenTrajectory: () -> Unit,
     onOpenJobs: () -> Unit,
     permission: PermissionSelect?,
@@ -110,6 +117,9 @@ internal fun ConversationHeader(
                     inactiveColor = ConnectionOfflineColor,
                 )
                 PermissionPill(permission, permissionEnabled, onPermissionSelect)
+                // 「智能团队」胶囊（2026-10-30 用户要求：紧跟权限档位 Pill 之后，
+                // 与三档权限同排；一点直达只读团队面板，不用再翻 ⋯ 菜单）。
+                TeamEntryPill(onClick = onOpenTeam)
             }
             if (session.pendingInteraction == "approval") ApprovalStatusLabel(Modifier.padding(top = 2.dp))
         }
@@ -182,6 +192,16 @@ internal fun ConversationHeader(
                         onOpenStats()
                     },
                     leadingIcon = { Icon(Icons.Outlined.Info, null) },
+                )
+                // 智能团队：会话 ⋯ 菜单一级直达（用户 2026-10-30 要求不藏在统计面板里）。
+                // 无能力位门控：数据随 history.projections 始终返回，老桥/未启用团队时面板自己显示空态。
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.team_menu_entry)) },
+                    onClick = {
+                        moreOpen = false
+                        onOpenTeam()
+                    },
+                    leadingIcon = { Icon(Icons.Outlined.Groups, null) },
                 )
                 // 后台任务入口按能力位显示：老 bridge 上这条路由是 404，
                 // 显示入口只会让用户点进去看报错（见 BridgeCapabilities.supportsSessionJobs）。
@@ -292,4 +312,42 @@ internal fun ConversationHeader(
         }
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+}
+
+/**
+ * 标题副行的「智能团队」快捷胶囊（2026-10-30）。
+ *
+ * 用户要求紧跟权限档位 Pill 之后：权限回答「这个会话能动多大」，
+ * 团队胶囊回答「这个会话里有谁在干活」，两者并排语义自洽。
+ * 品牌主色容器底，与三档语义色（蓝/琥珀/红）拉开区分；点击打开 [TeamPanelSheet]
+ * （状态由 `ChatDetail.kt` 的 teamSheet 持有，本胶囊只发回调）。
+ */
+@Composable
+private fun TeamEntryPill(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .background(
+                MaterialTheme.colorScheme.primaryContainer,
+                RoundedCornerShape(999.dp),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            Icons.Outlined.Groups,
+            contentDescription = stringResource(R.string.team_menu_entry),
+            modifier = Modifier
+                .padding(end = 4.dp)
+                .size(12.dp),
+            tint = MaterialTheme.colorScheme.onPrimaryContainer,
+        )
+        Text(
+            stringResource(R.string.team_menu_entry),
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+            maxLines = 1,
+        )
+    }
 }

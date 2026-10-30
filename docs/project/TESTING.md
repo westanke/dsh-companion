@@ -145,6 +145,18 @@ export ANDROID_HOME=/media/wangke/OFFICE/workspace/android-toolchain/sdk
 apksigner verify --verbose app\build\outputs\apk\release\app-release.apk
 ```
 
+- **2026-10-30 `v2.2.61` 智能团队只读面板 + 自然语言指挥条 + 权限档位分色**：**单测从 87 类 /
+  872 用例增加到 88 类 / 874 用例 / 0 失败**（新增 `data/AgentTeamProjectionTest.kt` 5 例：
+  全字段解析、bridge 极简夹具兜底、subagentCatalog 用 sessionId 键、无投影/空团队返回 null、
+  脏数组元素跳过；新增 `ui/chat/PermissionToneTest.kt` 2 例：三档→INFO/WARN/DANGER、
+  custom/未知/null/空串→NEUTRAL）。`scripts/build.sh` 门验四项全绿：`docsCheck`
+  （10 文档 / 47 任务 / STRUCTURE 164 anchors 对 144 源文件 / INTERFACES 136）、
+  `:app:testDebugUnitTest` 874 全绿、`:app:lintDebug` 0 error、`assembleDebug` 成功。
+  **真机已验（V2080A，覆盖安装 lastUpdateTime 17:52:45）**：会话副行「已连接 + 红色完整访问
+  + 品牌色智能团队」三胶囊；点团队胶囊直达面板，成员 lead/负责人/在岗、任务板空态、
+  2 个可续用子会话卡（e083dffc…/d7a2b050…）、指挥 chips 对话框预填正确。
+  单测绿 ≠ 行为对：只读/琥珀两档颜色用户叫停未验；真机菜单内切换权限档未完成闭环
+  （DropdownMenu 在独立 window，uiautomator 抓不到菜单项，两次坐标点击未切换成功）。
 - **2026-10-25 `v2.2.55` 对齐桥 v2.7.0（模型容量 + 空白会话复用）**：**单测从 68 类 / 627 用例
   增加到 69 类 / 634 用例**（新增 `data/ModelCapacityLabelTest.kt` 7 例，钉住 1024 进制与
   小数规则）；`docsCheck` 双向一致（10 文档 / 46 任务 / STRUCTURE 137 anchors /
