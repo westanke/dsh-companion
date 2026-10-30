@@ -145,6 +145,21 @@ export ANDROID_HOME=/media/wangke/OFFICE/workspace/android-toolchain/sdk
 apksigner verify --verbose app\build\outputs\apk\release\app-release.apk
 ```
 
+- **2026-10-30 `v2.2.62` 小屏顶栏两段式重排 + 流式期加载更早历史竞态修复**：**单测从 88 类 /
+  874 用例增加到 88 类 / 875 用例 / 0 失败**（`data/HistoryMergeTest.kt` 新增
+  `autoRefreshDuringStreamingKeepsOlderLoadedPage`：用户已加载更早页 1,2,3 + 尾页 10,11，流式
+  自动刷新只回尾页 10,11,12 且尾页 hasMore=false，断言合并后 1,2,3,10,11,12 全在且 hasMore
+  沿用用户页为 true）。根因：`HarnessViewModel.scheduleChatRefresh()` 的流式自动刷新（安静 400ms
+  去抖）原来整页替换 history，冲掉 `loadOlderHistory` 合并的更早页；改走 `mergeRefreshedHistory()`，
+  另两处同患裸覆盖（isHostCommandLine 命令后、selectPermissionPreset 后）一并修。
+  `scripts/build.sh` 门验四项全绿：`docsCheck`、`:app:testDebugUnitTest` 875 全绿、
+  `:app:lintDebug` 0 error、`assembleDebug` 成功。
+  **真机已验（V2080A 1080x2400/360dp，强杀重启 + 设备 base.apk SHA 与本地一致后）**：
+  dump 实测「智能团队」`[531,318][663,366]` 四字完整（v2.2.61 时只显「智能」），文件图标移到
+  状态行行尾 `[972,312]`，全局栏只剩「DSH伴侣」无「会话」副标题，标题区加宽约 30%。
+  装机教训：vivo PackageInterceptActivity 未处理完时 install job 被 kill 会造成「lastUpdateTime
+  变了但包没换」的假象，必须等命令输出 Success 并比对 base.apk 指纹。④ 的真机点按现场受流式期
+  列表自动回底影响难稳定手动复现，以竞态根因 + 定向回归用例兜底。
 - **2026-10-30 `v2.2.61` 智能团队只读面板 + 自然语言指挥条 + 权限档位分色**：**单测从 87 类 /
   872 用例增加到 88 类 / 874 用例 / 0 失败**（新增 `data/AgentTeamProjectionTest.kt` 5 例：
   全字段解析、bridge 极简夹具兜底、subagentCatalog 用 sessionId 键、无投影/空团队返回 null、

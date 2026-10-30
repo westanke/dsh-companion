@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -181,7 +182,16 @@ private fun ConnectedApp(
                 snackbarHost = { SnackbarHost(snackbar) },
                 topBar = {
                     if (!wide) {
+                        // 会话详情页有自己的会话标题栏，应用栏只留「返回应用」的品牌行：
+                        // 收掉上下留白（默认 64dp + 系统状态栏 inset 双层叠加，真机反馈
+                        // 「程序标题与会话标题间距太大」）。列表页保持默认高度不变。
+                        val inChatDetail = section == MainSection.Chat &&
+                            state.selectedSessionId != null && !state.useWebChat
                         TopAppBar(
+                            modifier = if (inChatDetail) Modifier.height(46.dp) else Modifier,
+                            // 保留默认状态栏 inset（否则汉堡键会钻到状态栏下）；
+                            // 48dp = 状态栏 inset 之上只留一行标题的高度（TopAppBar 单内容行高），
+                            // 配合下面详情页隐去 section 副标题，程序标题与会话标题间距收紧到最小。
                             navigationIcon = {
                                 IconButton(onClick = { scope.launch { drawerState.open() } }) {
                                     Icon(Icons.Outlined.Menu, stringResource(R.string.navigation))
@@ -195,11 +205,15 @@ private fun ConnectedApp(
                                         overflow = TextOverflow.Ellipsis,
                                         style = MaterialTheme.typography.titleMedium,
                                     )
-                                    Text(
-                                        stringResource(section.label),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        style = MaterialTheme.typography.labelSmall,
-                                    )
+                                    // 会话详情页下方紧接着就是会话自己的标题行，
+                                    // 「会话」这个分区名是重复信息 —— 隐去，给高度收紧腾空间。
+                                    if (!inChatDetail) {
+                                        Text(
+                                            stringResource(section.label),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            style = MaterialTheme.typography.labelSmall,
+                                        )
+                                    }
                                 }
                             },
                             actions = {

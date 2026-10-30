@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -84,52 +85,29 @@ internal fun ConversationHeader(
     onSteer: () -> Unit,
     wide: Boolean = false,
 ) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    // 两段式顶栏（2026-10-30 真机反馈重排）：
+    //  ① 标题行只放 返回 / 标题 / ⋯ —— 长标题不再被文件按钮分走 48dp；
+    //  ② 状态行独占整行：已连接 · 权限 · 智能团队 从左排满（左缘前移到屏幕边距，
+    //     不再缩在返回键+标题的窄列里），文件按钮用 Spacer 顶到行尾 —— 小屏上
+    //     「智能团队」胶囊也能完整显示，不再被裁。
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
     ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
         if (onBack != null) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back)) }
         }
-        Column(Modifier.weight(1f).padding(start = if (onBack == null) 10.dp else 2.dp)) {
             // 标题在窄屏（手机）永远单行；平板（wide）下允许两行 —— 兜底到长 cwd 路径时
             // 不会在顶栏被腰斩，短标题（用户起的名字）依然只占一行，布局无感。
             Text(
                 sessionDisplayTitle(session),
+                Modifier.weight(1f).padding(start = if (onBack == null) 10.dp else 2.dp),
                 maxLines = if (wide) 2 else 1,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.titleMedium,
             )
-            // 状态行：连接状态（绿/红点）+ 权限档位 Pill 同一行。
-            //
-            // 权限 Pill 原先贴在**输入区上方**、还 `.fillMaxWidth()` 独占一整条，
-            // 用户 2026-10-19 反馈「影响页面可视区域」。挪到这里既省掉那一行，
-            // 语义也更顺：它和「已连接」一样，都是**当前会话的处境**。
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                StatusLabel(
-                    if (state.eventsConnected) stringResource(R.string.online) else stringResource(R.string.offline),
-                    state.eventsConnected,
-                    // 绿=已连接、红=已断开（用户要求：这两态要一眼可辨）。
-                    activeColor = ConnectionOnlineColor,
-                    inactiveColor = ConnectionOfflineColor,
-                )
-                PermissionPill(permission, permissionEnabled, onPermissionSelect)
-                // 「智能团队」胶囊（2026-10-30 用户要求：紧跟权限档位 Pill 之后，
-                // 与三档权限同排；一点直达只读团队面板，不用再翻 ⋯ 菜单）。
-                TeamEntryPill(onClick = onOpenTeam)
-            }
-            if (session.pendingInteraction == "approval") ApprovalStatusLabel(Modifier.padding(top = 2.dp))
-        }
-        IconButton(onClick = onOpenFiles) {
-            Icon(Icons.Outlined.FolderOpen, stringResource(R.string.session_files))
-        }
-        // 「刷新」与「停止运行」**已收进 ⋯ 菜单**（用户 2026-10-19 要求：顶栏太挤，
-        // 这两个按钮的功能挪到三个点里面去）。
-        // 顶栏只留「本会话的文件」（它是这个页面的主入口，值得占一格）。
-        // ⋯ 菜单（网页版 chat.html:283 的 #more，位置一样：标题右边、停止键旁边）。
+        // ⋯ 菜单留在标题行右缘（网页版 chat.html:283 的 #more 同位）：它是整个会话的动作总入口。
+        // 「刷新」与「停止运行」也收在里面（用户 2026-10-19 要求：顶栏太挤，挪进三个点）。
         //
         // 输入区压成**一行药丸**后，模型 / 权限 / 插话这些入口在输入区里没有位置了，
         // 所以整体搬到这里。它们只是**换了容器，不是换了语义** ——
@@ -309,6 +287,38 @@ internal fun ConversationHeader(
                     onPermissionSelect("danger-full-access")
                 },
             )
+        }
+        }
+        // 状态行独占整行（不再挤在标题的窄列里）：
+        // 已连接 / 权限 / 智能团队 三个状态从左排；Spacer 把文件按钮顶到行尾 ——
+        // 「已连接」从返回键右缘前移到屏幕边距，文件按钮后移，中间胶囊在小屏放得下、不被裁。
+        Row(
+            Modifier.fillMaxWidth().padding(start = if (onBack == null) 10.dp else 4.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            StatusLabel(
+                if (state.eventsConnected) stringResource(R.string.online) else stringResource(R.string.offline),
+                state.eventsConnected,
+                // 绿=已连接、红=已断开（用户要求：这两态要一眼可辨）。
+                activeColor = ConnectionOnlineColor,
+                inactiveColor = ConnectionOfflineColor,
+            )
+            PermissionPill(permission, permissionEnabled, onPermissionSelect)
+            // 「智能团队」胶囊（2026-10-30 用户要求：紧跟权限档位 Pill 之后；
+            // 一点直达只读团队面板，不用再翻 ⋯ 菜单）。
+            TeamEntryPill(onClick = onOpenTeam)
+            if (session.pendingInteraction == "approval") ApprovalStatusLabel()
+            Spacer(Modifier.weight(1f))
+            // 「本会话的文件」（这个页面的主入口，值得占一格）挪到状态行行尾，
+            // 不再与长标题抢标题行的 48dp。
+            IconButton(onClick = onOpenFiles, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Outlined.FolderOpen,
+                    stringResource(R.string.session_files),
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

@@ -3,6 +3,37 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## v2.2.62 · 小屏顶栏两段式重排 + 修复流式期加载更早历史被冲掉（2026-10-30）
+
+### 基于什么
+v2.2.61 真机当天用户连提四点：①360dp 小屏下标题副行「智能团队」胶囊只显示「智能」两字；
+②全局应用栏（DSH伴侣/会话）与会话标题上下间距太大；③长标题被标题行右侧的文件按钮挤掉宽度；
+④模型正在流式输出时点「加载更早消息」，加载出的历史一闪即消失。
+
+### 干了什么
+- **顶栏两段式**（`ui/chat/ChatHeader.kt`）：标题行只留 返回 / 标题 / ⋯，文件按钮移出标题行，
+  长标题可用宽度约 570px→738px；状态行独占整行，已连接 / 权限 / 智能团队从左边距排起，
+  Spacer(weight 1f) 把文件按钮顶到行尾——小屏下「智能团队」四字完整不再被裁。
+- **全局栏收紧**（`ui/App.kt`）：会话详情页全局 TopAppBar 收高到 46dp，并隐去重复的「会话」
+  分区副标题；列表页保持默认高度不变。
+- **竞态修复**（核心）：`HarnessViewModel.scheduleChatRefresh()` 的流式自动刷新（安静 400ms 去抖）
+  原来拿回最后一页后直接 `copy(history = …)` 整体替换，把 `loadOlderHistory` 已合并的更早页冲掉。
+  改走既有的 `mergeRefreshedHistory()` 合并口（早先 seq 保留、尾页新内容接上、hasMore 沿用用户页）。
+  `HarnessSessionsViewModel` 另两处同患裸覆盖（`isHostCommandLine` 命令执行后、
+  `selectPermissionPreset` 后）一并改为合并。
+
+### 测了什么
+`HistoryMergeTest` 新增 `autoRefreshDuringStreamingKeepsOlderLoadedPage`：previous=1,2,3,10,11、
+流式自动刷新只回尾页 10,11,12（hasMore=false）→ 合并为 1,2,3,10,11,12 且 hasMore 保持 true。
+单测 **88 类 / 875 用例**全绿；docsCheck、lintDebug 0 error、assembleDebug 全绿。
+
+### 真机验了什么
+V2080A（1080x2400 / 360dp）强杀重启后核对设备 base.apk SHA 与本地一致（教训：上一轮误以为装机
+成功——vivo 风险页未处理完 install job 被提前 kill，lastUpdateTime 变化是假象；装机必须比对 APK
+指纹）。uiautomator dump 实测：「智能团队」`[531,318][663,366]` 四字完整；文件图标移到状态行
+行尾 `[972,312]`；全局栏只剩「DSH伴侣」无「会话」副标题；标题区加宽。④ 的点按现场受流式期
+列表自动回底影响难以稳定手动复现，以竞态根因 + 定向回归用例兜底。
+
 ## v2.2.61 · 智能团队只读面板 + 自然语言指挥条 + 权限档位分色（2026-10-30）
 
 ### 基于什么

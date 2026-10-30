@@ -65,4 +65,26 @@ class HistoryMergeTest {
         assertEquals(listOf(10, 11, 12), merged.events.map { it.event.seq })
         assertFalse(merged.hasMore)
     }
+
+    /**
+     * 回归（真机反馈，2026-10-30）：模型正在输出时点「加载更早消息」，
+     * 流式事件会在安静 400ms 后触发一次自动刷新，拿回的只是**最后一页**。
+     * 这一刷新若整页替换，刚加载出来的更早历史「出现一瞬就消失」。
+     * 自动刷新必须与手动刷新走同一个合并口：早先加载的 seq 保留、尾页新内容接上、
+     * 「还能往前翻」沿用用户那一页的 hasMore。
+     */
+    @Test
+    fun autoRefreshDuringStreamingKeepsOlderLoadedPage() {
+        // 用户已加载更早页（1-3）+ 当前尾页（10-11），更早还有内容。
+        val previous = page(1, 2, 3, 10, 11)
+        // 输出期间自动刷新只回最后一页：尾部新增了刚落盘的 12，尾页自身 hasMore=false。
+        val fresh = page(10, 11, 12, hasMore = false)
+
+        val merged = mergeRefreshedHistory(previous, fresh)
+
+        assertEquals(listOf(1, 2, 3, 10, 11, 12), merged.events.map { it.event.seq })
+        // 尾页说「我前面没有了」是因为它只知道自己那一页；用户明明还停在更早的分页上，
+        // hasMore 必须沿用 previous，不能被尾页结论打回 false。
+        assertTrue(merged.hasMore)
+    }
 }

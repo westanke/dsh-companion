@@ -290,7 +290,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.61.apk
+DSH伴侣-companion-v2.2.62.apk
 ```
 
 安装要求：
@@ -536,25 +536,25 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.61`（`versionCode` 10086）
+- 当前版本：`v2.2.62`（`versionCode` 10087）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
-- 单元测试：88 个测试类 / 874 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
+- 单元测试：88 个测试类 / 875 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.61.apk`，**3,358,308 字节**，
-  SHA-256 `a5eaaaf213b8d3f915d9bf5d9ca57c972549ce106ed9c83c9800db4ffe7cbcca`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
-  **本版（v2.2.61，智能团队只读面板 + 自然语言指挥条 + 权限档位分色）**：对照官方 Web 智能团体
-  的只读监工形态，新增会话级团队面板——成员名册（角色 + 在岗/组建中/失败状态）、共享任务板
-  （四态/负责人/前置依赖/写范围）、子会话目录三节只读卡，数据全部来自首屏 history 已下发的
-  `agentTeam` / `subagentCatalog` 投影，**桥零改动**；「新成员/派任务/问进度」三枚指挥 chips
-  以普通队列消息发给 Lead，由 Lead 自己调模型工具，对齐官方「人只旁观+下自然语言指令」的设计。
-  入口两处：会话 ⋯ 菜单一级「智能团队」项、标题副行权限胶囊后的品牌色「智能团队」胶囊。
-  权限三档同步分色分图标：只读=信息蓝锁、工作区写入=琥珀笔、完整访问=危险红警示。
-  **上一版 v2.2.60**：纯文档一致性修复重打包（GitHub `verify` 的坑位索引标题反引号问题），
-  APK 与 v2.2.59 内容等价；**v2.2.59（配套桥 v2.8.2）**修复 WS 双通道新建会话后
-  `JsonDecodingException: … SessionList … JsonArray` 裸数组解码崩溃。
-  **验证**：88 类 / 874 用例 / 0 失败；`docsCheck`、`lintDebug`、`assembleDebug` 全绿；
-  真机 V2080A 已验两胶囊、团队面板与指挥对话框。
+- 当前 APK：`DSH伴侣-companion-v2.2.62.apk`，**3,358,308 字节**，
+  SHA-256 `0a1e071fbe0ca145f6ab19bde1eeee8e69c35fa84a9bcf7853e9bb1c64e71f35`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
+  **本版（v2.2.62，小屏顶栏重排 + 修复流式期加载更早历史被冲掉）**：v2.2.61 真机当天四点反馈的补丁版。
+  顶栏改两段式——标题行只留 返回/标题/⋯（文件按钮移出，长标题可用宽度约 +30%），状态行独占整行，
+  已连接/权限/智能团队从左边距排起、文件按钮顶到行尾，360dp 小屏下「智能团队」四字完整不再被裁；
+  会话详情页全局应用栏收紧并隐去重复的「会话」副标题。核心是一个竞态修复：模型流式输出时的自动
+  刷新原来拿最后一页整体替换历史，会把刚点「加载更早消息」拉出的内容冲掉（一闪即消失），现统一走
+  历史合并口，早先加载的页保留、尾页新内容接上；新增定向回归用例（88 类 / 875 用例全绿）。
+  **上一版 v2.2.61**：智能团队只读面板（成员名册/共享任务板/子会话三节只读卡 + 「新成员/派任务/
+  问进度」自然语言指挥 chips，桥零改动）+ 权限三档分色分图标，入口为 ⋯ 菜单一级项与副行品牌色胶囊；
+  **v2.2.60**：纯文档一致性修复重打包，APK 与 v2.2.59 内容等价；**v2.2.59（配套桥 v2.8.2）**
+  修复 WS 双通道新建会话后 `JsonDecodingException: … SessionList … JsonArray` 裸数组解码崩溃。
+  **验证**：88 类 / 875 用例 / 0 失败；`docsCheck`、`lintDebug`、`assembleDebug` 全绿；
+  真机 V2080A 已验四字完整、文件按钮移位、全局栏无副标题（强杀重启 + base.apk SHA 比对一致后）。
   （WS 双通道大改造在 **v2.2.58**：P1 传输层基座 + P2 Session/Message/Event +
   P3 HITL/Command/Model + P4 目标写操作，配套桥 v2.8.1；明细见 `docs/project/CHANGELOG-DEV.md`。）
 - 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用。证书没变，但 **v2.2.41 起包名变了**，

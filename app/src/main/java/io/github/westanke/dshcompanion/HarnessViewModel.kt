@@ -567,12 +567,16 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
                     // 走 Port：WS 可用时用 history 帧（分页/刷新都带 beforeSeq=null，
                     // 所以这里仍走 REST —— 首屏需要 projections，WS 帧不带）。
                     runCatching { withContext(Dispatchers.IO) { sessionPort().history(id) } }
-                        .onSuccess { history ->
+                        .onSuccess { fresh ->
                             if (mutableState.value.selectedSessionId == id) update {
                                 val clearLive = finalizeTarget != null && liveChat?.let {
                                     it.sessionId == finalizeTarget.sessionId && it.turn == finalizeTarget.turn && it.step == finalizeTarget.step
                                 } == true
-                                copy(history = history, liveChat = if (clearLive) null else liveChat)
+                                // 流式事件触发的自动刷新拿回的同样只是**最后一页**：
+                                // 用户若刚点过「加载更早」，整页替换会让更早的历史凭空蒸发
+                                // （真机实测：输出期间点加载更早，内容出现一瞬即消失）。
+                                // 与手动 refreshHistory 走同一个合并口，保留 seq 更早的已加载页。
+                                copy(history = mergeRefreshedHistory(history, fresh), liveChat = if (clearLive) null else liveChat)
                             }
                         }
                         .onFailure { error ->

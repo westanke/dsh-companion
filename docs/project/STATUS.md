@@ -1,4 +1,16 @@
 - 日期：2026-10-30
+- **v2.2.62（versionCode 10087，发）**：**小屏顶栏两段式重排 + 修复流式期加载更早历史被冲掉**。
+  v2.2.61 真机当天用户四点反馈：小屏「智能团队」只显两字、应用栏与会话标题间距大、长标题宽度被
+  文件按钮挤占、流式输出时点「加载更早消息」历史一闪即失。`ui/chat/ChatHeader.kt` 改两段式
+  （标题行只留 返回/标题/⋯；状态行独占整行，文件按钮用 Spacer 顶到行尾，长标题宽度约
+  570px→738px）；`ui/App.kt` 详情页全局 TopAppBar 收高 46dp 并隐去「会话」副标题；核心竞态在
+  `HarnessViewModel.scheduleChatRefresh()`——流式自动刷新原整页替换 history，改走
+  `mergeRefreshedHistory()`，另两处同患裸覆盖（isHostCommandLine/selectPermissionPreset）一并修。
+  门禁：docsCheck、单测 **88 类 / 875 用例**（新增 1 例 autoRefreshDuringStreamingKeepsOlderLoadedPage）、
+  lintDebug 0 error、assembleDebug 全绿。**真机已验**（V2080A，强杀重启 + base.apk SHA 比对一致）：
+  「智能团队」四字完整、文件按钮移至状态行行尾、全局栏无副标题。教训：vivo 覆盖安装必须等
+  `pm install` 输出 Success 并比对 APK 指纹，不能信 lastUpdateTime。
+- 日期：2026-10-30
 - **v2.2.61（versionCode 10086，发）**：**智能团队只读面板 + 自然语言指挥条 + 权限档位分色**。
   依据《手机端智能团体管理与会话功能研究报告 2026-10-30》P0/P1 方案（官方 Web 团队 UI 本身只读，
   管理靠 Lead agent 的模型工具，故桥零改动）。新增 `data/AgentTeamProjection.kt`（容错解析

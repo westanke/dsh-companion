@@ -571,9 +571,10 @@ internal fun HarnessViewModel.sendMessage(text: String, steer: Boolean) {
             if (execution.result.kind == "error") {
                 throw DshApiException(409, "COMMAND_FAILED", execution.result.text ?: "Command failed.")
             }
-            val history = sessionPort().history(id)
+            val fresh = sessionPort().history(id)
             val commands = commandPort().commands(id)
-            update { copy(history = history, commands = commands) }
+            // 命令执行后的刷新同样只回最后一页，已加载的更早历史不能被抹掉。
+            update { copy(history = mergeRefreshedHistory(history, fresh), commands = commands) }
         }
         return
     }
@@ -637,9 +638,9 @@ internal fun HarnessViewModel.selectPermissionPreset(preset: String) = withClien
     if (execution.result.kind == "error") {
         throw DshApiException(409, "COMMAND_FAILED", execution.result.text ?: "Permission change failed.")
     }
-    val history = sessionPort().history(id)
+    val fresh = sessionPort().history(id)
     val commands = commandPort().commands(id)
-    update { copy(history = history, commands = commands) }
+    update { copy(history = mergeRefreshedHistory(history, fresh), commands = commands) }
 }
 
 internal fun HarnessViewModel.refreshSessionModels() = withClient {

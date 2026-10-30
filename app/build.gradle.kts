@@ -1024,8 +1024,33 @@ android {
         //     任务板空态、2 个「可续用」子会话（两个调研子智能体 id 正确）、指挥对话框预填正确。
         //     未做（报告 P2，需桥侧改造）：点成员跳进子会话（桥滤掉 origin:subagent 会话）、
         //     parentSessionId 入站透传。
-        versionCode = 10086
-        versionName = "2.2.61"
+        //
+        // v2.2.62（versionCode 10087）：**小屏顶栏重排 + 修复流式期加载更早历史被冲掉**（2026-10-30，补丁版）。
+        //   基于什么：v2.2.61 真机当天用户连提四点——①「智能团队」胶囊在 360dp 小屏只显示「智能」两字；
+        //     ②全局应用栏（DSH伴侣/会话）与会话标题上下间距太大；③长标题被文件按钮挤掉宽度；
+        //     ④模型正在流式输出时点「加载更早消息」，加载出的历史一闪即消失。
+        //   干了什么：
+        //     ① ui/chat/ChatHeader.kt 顶栏改两段式：标题行只放 返回/标题/⋯（文件按钮移出，长标题
+        //        可用宽度约 570px→738px）；状态行独占整行，已连接/权限/智能团队从左边距排起，
+        //        Spacer 把文件按钮顶到行尾——小屏下「智能团队」四字完整不再被裁。
+        //     ② ui/App.kt 全局 TopAppBar 在会话详情页收高到 46dp 并隐去重复的「会话」分区副标题，
+        //        程序标题与会话标题间距收紧；列表页保持默认高度不变。
+        //     ④（核心竞态）HarnessViewModel.scheduleChatRefresh() 的流式自动刷新原来拿回最后一页后
+        //        直接整体替换 history，把 loadOlderHistory 已合并的更早页冲掉；改走既有的
+        //        mergeRefreshedHistory() 合并口（早先 seq 保留、尾页新内容接上、hasMore 沿用用户页）。
+        //        HarnessSessionsViewModel 里另两处同患裸覆盖（isHostCommandLine 命令后、
+        //        selectPermissionPreset 后）一并改。
+        //   测了什么：HistoryMergeTest 增 autoRefreshDuringStreamingKeepsOlderLoadedPage
+        //     （previous=1,2,3,10,11 / 流式刷新只回尾页 10,11,12 hasMore=false → 合并 1,2,3,10,11,12
+        //     且 hasMore 保持 true）；单测 88 类 / 875 用例全绿；docsCheck、lintDebug 0 error、
+        //     assembleDebug 全绿。
+        //   真机验了什么：V2080A（1080x2400,360dp）强制停止重启后核对 base.apk SHA 与本地一致
+        //     （教训：上一轮误以为装机成功，实际 install job 被提前 kill，lastUpdateTime 是假象）。
+        //     dump 实测：「智能团队」[531,318][663,366] 四字完整；文件图标移到状态行行尾；
+        //     全局栏只剩「DSH伴侣」一行无「会话」副标题；标题区加宽。④ 的点按现场受流式期
+        //     列表自动回底影响难稳定手动复现，以竞态根因+定向回归用例兜底。
+        versionCode = 10087
+        versionName = "2.2.62"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。
