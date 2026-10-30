@@ -989,8 +989,19 @@ android {
         //     accepted:true 且放行命令真落地（v2.8.1 的 409 是桥侧 rpcId bug，见桥仓 PITFALLS）。
         //   测了什么：单测 86 类 / 867 用例 / 0 失败；lintDebug、assembleDebug、docsCheck 全绿。
         //     真机：v2.2.58 复现崩溃 → v2.2.59 新建会话不再报错、自动进入新会话、列表正常。
-        versionCode = 10084
-        versionName = "2.2.59"
+        //
+        // v2.2.60（versionCode 10085）：**纯文档一致性修复重打包，让发版 tag 落在绿 CI 上**（2026-10-30，补丁版）。
+        //   背景：v2.2.59 的发布包功能正确，但 GitHub verify 红在 ArchitectureGuardTest「坑位索引与
+        //     PITFALLS 正文双向一致」——AGENTS.md §7 索引条目正则 `^- `([^`]+)`` 不允许条目内嵌反引号，
+        //     索引提取出的触发词是「REST 包 items」，而 PITFALLS.md 标题写的是「REST 包 `{items}`」，
+        //     两边字面不等，867 用例 1 失败。
+        //   修了什么：只把 PITFALLS.md 标题统一成「REST 包 items」（正文仍讲 {items} 形状），无任何代码/资源改动，
+        //     APK 与 v2.2.59 内容等价（体积同为 3,324,284 字节）。发 v2.2.60 而非移动 v2.2.59 tag，
+        //     是因为已发布的 tag/Release 不改写。
+        //   测了什么：ArchitectureGuardTest 定向复跑通过；docsCheck + testDebugUnitTest + lintDebug +
+        //     assembleDebug 四项 --rerun-tasks 全绿（867 用例 0 失败）。
+        versionCode = 10085
+        versionName = "2.2.60"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。

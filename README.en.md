@@ -299,7 +299,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.59.apk
+DSH伴侣-companion-v2.2.60.apk
 ```
 
 Requirements:
@@ -589,36 +589,30 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.59` (`versionCode` 10084)
+- Version: `v2.2.60` (`versionCode` 10085)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
 - Unit tests: 86 test classes / 867 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.59.apk`, **3,324,284 bytes**, SHA-256
-  `d3912f296c4e7dafda089bb5c43e23a40cb6d4c971a3c23a3d1f1be1eac50916` (kept in sync in
-  `artifacts/SHA256SUMS.txt`).   **Pending release on Gitee + GitHub** (tag `v2.2.59`) —
-  this is a **patch release** (companion bridge **v2.8.2**): it fixes a decoding crash that the WS
-  dual channel hit every time after "New Session" —
-  `JsonDecodingException: … SessionList … JsonArray`.
-  **Root cause**: the same session list has two different shapes across the two transports —
-  REST `GET /chat/sessions` wraps it as `{items:[…]}`, while the WS `sessions` frame's
-  `data.sessions` **is the array directly** (the bridge's `listSessions` already returns an
-  array). `WsSessionPort.sessions()` wrongly decoded that `JsonArray` with the REST-shaped
-  `SessionList(items)` model.
-  **Fix**: the WS path now decodes the array directly with
-  `ListSerializer(ChatSession.serializer())`, plus a regression test using the real frame shape
-  (`WsSessionPortTest` previously had no sessions-frame case at all — hand-built reply frames
-  passed with any shape; only the real bridge exposed the assumption). See `PITFALLS.md`
-  "same list: REST wraps `items`, WS gives a bare array".
-  **The same on-device round (V2080A + bridge v2.8.2) also confirmed**: every WS pairing now
-  takes the "requestId fast path"; `command-execute` succeeds for read-only/workspace-write/danger;
-  and the `approval-response` protocol loop returns `accepted:true` with the approved command
-  actually running (the 409 on v2.8.1 was a bridge-side rpcId bug fixed in bridge v2.8.2; the
-  app's frame codec and matcher are pinned by unit tests).
-  **Verified**: 86 test classes / 867 cases / 0 failures; `lintDebug`, `assembleRelease` and
-  `docsCheck` all green; on a device, v2.2.58 reproduced the crash and v2.2.59 no longer errors
-  after New Session — it opens the new session and the list is fine.
+- Current APK: `DSH伴侣-companion-v2.2.60.apk`, **3,324,284 bytes**, SHA-256
+  `9eb61b91d0e13a555e36b2e73f0e0e243af8f90a6fa87f81bd9b987de6901671` (kept in sync in
+  `artifacts/SHA256SUMS.txt`).   **Pending release on Gitee + GitHub** (tag `v2.2.60`) —
+  this is a **docs-consistency repack**: the v2.2.59 artifact was functionally correct, but GitHub
+  `verify` failed in `ArchitectureGuardTest` ("pitfall index ↔ PITFALLS heading consistency"): the
+  index entry cannot contain nested backticks, while the heading wrote the REST wrapper as
+  `` `{items}` ``, so the trigger phrases differed. This release aligns that one heading, changes no
+  code or resources, and is content-equivalent to v2.2.59. The published v2.2.59 tag/Release is not
+  rewritten, so this version puts the release tag on a green CI commit.
+  **The functional fix in v2.2.59 (companion bridge v2.8.2)** cured the WS decoding crash after
+  "New Session" (`JsonDecodingException: … SessionList … JsonArray`): REST `GET /chat/sessions`
+  wraps the list as `{items:[…]}`, while the WS `sessions` frame's `data.sessions` is a bare array;
+  the WS path now uses `ListSerializer(ChatSession.serializer())`, with a real-shape regression test.
+  The same V2080A + bridge v2.8.2 round confirmed all WS pairings on the requestId fast path,
+  `command-execute` for all three permissions, and `approval-response` `accepted:true` with the
+  approved command actually running.
+  **Verified**: 86 test classes / 867 cases / 0 failures; `docsCheck`, `lintDebug` and
+  `assembleRelease` all green.
   (The WS dual-channel overhaul itself shipped in **v2.2.58**: P1 transport base + P2
   Session/Message/Event + P3 HITL/Command/Model + P4 goal writes, with companion bridge v2.8.1;
   details in `docs/project/CHANGELOG-DEV.md`.)

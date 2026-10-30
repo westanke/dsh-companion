@@ -290,7 +290,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.59.apk
+DSH伴侣-companion-v2.2.60.apk
 ```
 
 安装要求：
@@ -536,28 +536,26 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.59`（`versionCode` 10084）
+- 当前版本：`v2.2.60`（`versionCode` 10085）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：86 个测试类 / 867 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.59.apk`，**3,324,284 字节**，
-  SHA-256 `d3912f296c4e7dafda089bb5c43e23a40cb6d4c971a3c23a3d1f1be1eac50916`（`artifacts/SHA256SUMS.txt` 同步）。
-  **本版补丁（配套桥 v2.8.2）**：修复 WS 双通道在「新建会话」后列表必现的解码崩溃 ——
-  `JsonDecodingException: … SessionList … JsonArray`。
-  **根因**：同一份会话列表两通道形状不同——REST `GET /chat/sessions` 包一层 `{items:[…]}`，
-  而 WS `sessions` 帧的 `data.sessions` **直接就是数组**（桥 `listSessions` 本就返回数组）；
-  `WsSessionPort.sessions()` 误用 REST 的 `SessionList(items)` 模型去解 `JsonArray`。
-  **修法**：WS 侧改用 `ListSerializer(ChatSession.serializer())` 直接解数组，并补一条真形状
-  回归用例（此前 `WsSessionPortTest` 没有任何 sessions 帧用例，手造回帧喂什么形状都过，
-  真桥才拆穿假设）。详见 `PITFALLS.md`「同一份列表，REST 包 items、WS 直接给数组」。
-  **同一轮真机（V2080A + 桥 v2.8.2）还确认**：所有 WS 配对走「requestId 快路」；
-  `command-execute` 切 read-only/workspace-write/danger 三档全部 success；
-  `approval-response` 协议闭环 `accepted:true` 且放行命令真落地（v2.8.1 的 409 是桥侧 rpcId bug，
-  桥 v2.8.2 已修，App 帧编解码与 matcher 由单测钉住）。
-  **验证**：单测 86 类 / 867 用例 / 0 失败；`lintDebug`、`assembleRelease`、`docsCheck` 全绿；
-  真机 v2.2.58 复现崩溃 → v2.2.59 新建会话不再报错、自动进入新会话、列表正常。
-  （WS 双通道大改造本身在上一版 **v2.2.58**：P1 传输层基座 + P2 Session/Message/Event +
+- 当前 APK：`DSH伴侣-companion-v2.2.60.apk`，**3,324,284 字节**，
+  SHA-256 `9eb61b91d0e13a555e36b2e73f0e0e243af8f90a6fa87f81bd9b987de6901671`（`artifacts/SHA256SUMS.txt` 同步）。
+  **本版（v2.2.60，纯文档一致性修复重打包）**：v2.2.59 的发布包功能正确，但 GitHub `verify`
+  红在 `ArchitectureGuardTest` 的「坑位索引与 PITFALLS 正文双向一致」——坑位索引条目不允许内嵌
+  反引号，而正文标题把 REST 包裹写成了 `` `{items}` ``，触发词字面不等。本版只统一这一行标题，
+  无代码/资源改动，APK 与 v2.2.59 内容等价；不改写已发布的 v2.2.59 tag/Release，故另发本版，
+  让发版 tag 落在绿 CI 上。
+  **上一版 v2.2.59（配套桥 v2.8.2）的功能修复**：WS 双通道在「新建会话」后列表必现的解码崩溃
+  （`JsonDecodingException: … SessionList … JsonArray`）。根因是 REST `GET /chat/sessions`
+  包一层 `{items:[…]}`、WS `sessions` 帧的 `data.sessions` 直接是数组；WS 侧改用
+  `ListSerializer(ChatSession.serializer())` 直接解数组并补真形状回归用例。同轮真机
+  （V2080A + 桥 v2.8.2）确认 `command-execute` 三档 success、`approval-response`
+  `accepted:true` 且放行命令真落地。
+  **验证**：86 类 / 867 用例 / 0 失败；`docsCheck`、`lintDebug`、`assembleRelease` 全绿。
+  （WS 双通道大改造在 **v2.2.58**：P1 传输层基座 + P2 Session/Message/Event +
   P3 HITL/Command/Model + P4 目标写操作，配套桥 v2.8.1；明细见 `docs/project/CHANGELOG-DEV.md`。）
 - 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用。证书没变，但 **v2.2.41 起包名变了**，
   `v2.2.40` 及更早仍需先卸载）
