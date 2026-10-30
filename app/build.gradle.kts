@@ -974,8 +974,23 @@ android {
         //   真机验了什么：P2 顶栏绿点 + 104 会话 + 正文实时更新；P3 模型域读+写；
         //     P4 四项写操作全过（revision 每次 +1，判据取桥侧 WS 回读）。
         //     未验：approval-response、command-execute；桥侧心跳/连接上限/背压要重启插件才生效。
-        versionCode = 10083
-        versionName = "2.2.58"
+        //
+        // v2.2.59（versionCode 10084）：**修复 WS sessions 帧裸数组解码崩溃**（2026-10-30，补丁版）。
+        //   基于什么：v2.2.58 发版后真机对桥 v2.8.2 验收「新建会话」时抓到——会话创建成功，列表却立即报
+        //     JsonDecodingException: Expected JsonObject, but had JsonArray … body of …SessionList。
+        //   根因：同一份会话列表两通道形状不同。REST GET /chat/sessions 包一层 {items:[…]}，
+        //     WS sessions 帧的 data.sessions 直接是数组（桥 listSessions 本就返回数组），而
+        //     WsSessionPort.sessions() 复用了 REST 的 SessionList(items) 模型去解 JsonArray，必炸。
+        //     真机真帧取证：data keys=['sessions','requestId']、Array.isArray(sessions)=true、len=105。
+        //   修了什么：WS 侧改用 ListSerializer(ChatSession.serializer()) 直接解数组；删掉 WsPorts.kt
+        //     里只为 REST 形状存在的私有 SessionList；补一条真形状回归用例（此前 WsSessionPortTest
+        //     没有任何 sessions 帧用例——手造回帧喂什么形状都过，真桥才拆穿假设）。
+        //   一并补记真机验收：桥 v2.8.2 下 command-execute 三档 success、approval-response 协议闭环
+        //     accepted:true 且放行命令真落地（v2.8.1 的 409 是桥侧 rpcId bug，见桥仓 PITFALLS）。
+        //   测了什么：单测 86 类 / 867 用例 / 0 失败；lintDebug、assembleDebug、docsCheck 全绿。
+        //     真机：v2.2.58 复现崩溃 → v2.2.59 新建会话不再报错、自动进入新会话、列表正常。
+        versionCode = 10084
+        versionName = "2.2.59"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。

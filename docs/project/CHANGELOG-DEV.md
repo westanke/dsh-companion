@@ -3,6 +3,50 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## v2.2.59 · 修复 WS sessions 帧裸数组解码崩溃（2026-10-30，补丁版）
+
+### 基于什么
+v2.2.58 发版后，真机（V2080A）对桥 **v2.8.2** 做 WS 双通道真机验收时抓到：点「新建会话」，
+会话**创建成功**，但紧接着刷新列表立即报
+`JsonDecodingException: Expected JsonObject, but had JsonArray as the serialized body of
+io.github.westanke.dshcompanion.data.ws.SessionList at element: $`，列表出不来。
+
+### 根因
+同一份会话列表，两条通道的包裹形状不同：
+- REST `GET /chat/sessions` 返回 `{items:[…]}`；
+- WS `sessions` 帧的 `data.sessions` **直接就是数组**（桥 `src/host/ws-handler.ts` 的
+  `handleSessions`，`listSessions` 本就返回数组）。
+
+而 `WsSessionPort.sessions()` 取到 `data.sessions` 后，复用了为 REST 形状写的
+`@Serializable private data class SessionList(val items: List<ChatSession>)` 去解，
+拿 `JsonArray` 喂一个期望 `JsonObject` 的模型，必然抛解码异常。真机真帧取证：
+`data keys=['sessions','requestId']`、`Array.isArray(sessions)=true`、`len=105`。
+
+单测此前漏掉，是因为 `WsSessionPortTest` 里**没有任何 sessions 帧用例**，手造回帧喂什么
+形状都过——真桥才拆穿假设（与 requestId 那次是同一类教训）。
+
+### 干了什么
+- `data/ws/WsPorts.kt`：`WsSessionPort.sessions()` 改用
+  `ListSerializer(ChatSession.serializer())` 直接解数组；删掉只为 REST 形状存在的私有
+  `SessionList` 与其 `Serializable` import；注释写明两通道形状不同。
+  桥 `workspaces` 帧同样是裸数组，但 App 工作区列表仍走 REST、未接 WS，暂不受影响
+  （已在 PITFALLS 铁律里注明将来接入照此办理）。
+- `WsSessionPortTest` 补回归用例「sessions 回帧里 sessions 直接是数组（不是 REST 的 items 包裹）」。
+
+### 测了什么 / 真机验了什么
+- 单测 86 类 / **867 用例** / 0 失败（866→867）；`lintDebug`、`assembleDebug`、`docsCheck` 全绿
+  （STRUCTURE 162 锚点 / INTERFACES 136 锚点双向一致，README 双站 759 checks）。
+- 真机：v2.2.58 稳定复现崩溃 → 修复包点「新建会话」后不再报错，自动进入新会话，列表正常。
+- 同一轮真机还在桥 v2.8.2 上确认：所有 WS 配对走「requestId 快路」（桥统一回显生效）；
+  `command-execute` 切 read-only/workspace-write/danger 三档全部 success；
+  `approval-response` 协议闭环 `accepted:true` 且放行命令真落地（v2.8.1 的 409 是桥侧
+  rpcId bug，桥 v2.8.2 已修，App 帧编解码与 matcher 由单测钉住）。
+
+### 文档
+- `PITFALLS.md` 新增「同一份列表，REST 包 items、WS 直接给数组：套同一个反序列化模型必炸」；
+  `AGENTS.md` §7 坑位索引同步。
+- `WS-FIRST-DESIGN.md` §7.1.3 / §7.1.4 补 v2.8.2 真机验收与本 bug 记录，P5 标记完成。
+
 ## v2.2.58 · 会话通道切到 `/ws/mobile`：WS 优先、REST 兜底（2026-10-30）
 
 ### 基于什么

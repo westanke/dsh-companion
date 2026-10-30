@@ -290,7 +290,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.58.apk
+DSH伴侣-companion-v2.2.59.apk
 ```
 
 安装要求：
@@ -536,46 +536,29 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.58`（`versionCode` 10083）
+- 当前版本：`v2.2.59`（`versionCode` 10084）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：86 个测试类 / 867 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.58.apk`，**3,324,284 字节**，
-  SHA-256 `6bc69f376ddf67fe1ac6416d6aae933c0d35336cba4cb676bad4bba7d4f3ba76`（`artifacts/SHA256SUMS.txt` 同步）。
-  **待发 Gitee + GitHub**（tag `v2.2.58`）——
-  本版改动：**会话通道切到 `/ws/mobile` —— WS 优先、REST 兜底**（配套桥 **v2.8.1**）。
-  **为什么要做**：此前 App **一条 WS 帧都没发过**（`DshClient.eventsUrl()` 拼的是
-  `/api/v1/events`，全仓 `ws/mobile` 只出现在两行注释里），而桥的 `/ws/mobile` 网关早已跑通，
-  缺的只是客户端与对外契约。用户拍板「C 档：全量 WS 优先 + REST 兜底」后，一次拉齐。
-  **做法**（P1–P3 只是换通道，**P4 才是唯一真正的新功能**）：
-  ① **P1 传输层基座** `data/ws/`：`MobileWsTransport`（**复用 `DshClient.defaultHttpClient`**，
-  唯一网络边界不变）、`ChannelState` 四态（`WsReady` / `WsDegraded` / `WsDown` / `RestOnly`，
-  降级判据的唯一真理源）、`WsFrames`、`WsRequestRouter`（requestId 配对 + 按 kind 兜底，
-  兜底时同 kind 串行）、`WsPorts` 按域切端口；
-  ② **P2** Session / Message / Event 三域；③ **P3** HITL / Command / Model 三域；
-  ④ **P4 目标写操作**：`goal-edit` / `goal-pause` / `goal-resume` / `goal-clear`
-  （桥侧 compare-and-set，必须带 `ref:{id, revision}`）—— 此前 REST 路由里 `goal` 零命中，
-  手机上根本没法改目标，这是全程唯一真正新增的用户能力；
-  ⑤ **补齐两处「最后一米」**（桥侧同步改）：首屏 `history` 带 `projections`（此前被丢，
-  导致首屏只能走 REST）、`session-create` 带 `workspaceId` / `agentPreset` / `reuseBlank`、
-  `select-agent-preset` 接入（原注释写「桥侧无此帧」是错的，已改正）；
-  ⑥ **接收侧两条**：认桥的背压告知 `connection-resync-required`（重取历史 + 清 seq 基线）、
-  429 认 `Retry-After`（`data/ws/RetryAfter.kt`，只认 delta-seconds，夹 1s..60s，与退避取 max）。
-  **两条关键判据**：读失败一律回落 REST，**写失败只在「帧没发出去」时回落**（写超时意味着
-  不知道服务端做没做，重试可能改两次名、归档两次、分叉出两个会话）；回落判据**不看版本号**
-  （能力位里没有「是否回显 requestId」这种位，靠「发了有没有回」自适应）。
-  **按设计继续留 REST 的三条**：归档列表（桥 `session-archives` 无生产者）、读附件字节
-  （WS `attachment` 帧是上传语义）、待审批清单（不轮询，换通道省不了请求）。
-  **验证**：单测 86 类 / 867 用例 / 0 失败；`lintDebug` 0 error；`assembleDebug` 成功；
-  `docsCheck` 双向一致（STRUCTURE 162 锚点 / INTERFACES 136 锚点）。
-  **真机验了**（V2080A）：P2 顶栏绿点「已连接」+ 104 会话 + 正文实时更新；P3 模型域读+写；
-  P4 四项写操作全过（`revision` 每次 +1，判据取桥侧 WS 回读而非界面自报）。
-  **真机未验**：`approval-response`、`command-execute`；桥侧心跳 / 连接上限 / 背压三条新行为
-  要重启插件才生效，本次未重启宿主。
-  **降级已钉**：老桥不发能力位或 upgrade 404 → `RestOnly` → 整条回落 REST，行为与发版前一致。
-  （上一个版本 v2.2.56 的改动见 `docs/project/CHANGELOG-DEV.md`：模型选择器显示上下文容量、
-  新会话复用空白会话。v2.2.55 的改动已随该版本发布。）
+- 当前 APK：`DSH伴侣-companion-v2.2.59.apk`，**3,324,284 字节**，
+  SHA-256 `d3912f296c4e7dafda089bb5c43e23a40cb6d4c971a3c23a3d1f1be1eac50916`（`artifacts/SHA256SUMS.txt` 同步）。
+  **本版补丁（配套桥 v2.8.2）**：修复 WS 双通道在「新建会话」后列表必现的解码崩溃 ——
+  `JsonDecodingException: … SessionList … JsonArray`。
+  **根因**：同一份会话列表两通道形状不同——REST `GET /chat/sessions` 包一层 `{items:[…]}`，
+  而 WS `sessions` 帧的 `data.sessions` **直接就是数组**（桥 `listSessions` 本就返回数组）；
+  `WsSessionPort.sessions()` 误用 REST 的 `SessionList(items)` 模型去解 `JsonArray`。
+  **修法**：WS 侧改用 `ListSerializer(ChatSession.serializer())` 直接解数组，并补一条真形状
+  回归用例（此前 `WsSessionPortTest` 没有任何 sessions 帧用例，手造回帧喂什么形状都过，
+  真桥才拆穿假设）。详见 `PITFALLS.md`「同一份列表，REST 包 items、WS 直接给数组」。
+  **同一轮真机（V2080A + 桥 v2.8.2）还确认**：所有 WS 配对走「requestId 快路」；
+  `command-execute` 切 read-only/workspace-write/danger 三档全部 success；
+  `approval-response` 协议闭环 `accepted:true` 且放行命令真落地（v2.8.1 的 409 是桥侧 rpcId bug，
+  桥 v2.8.2 已修，App 帧编解码与 matcher 由单测钉住）。
+  **验证**：单测 86 类 / 867 用例 / 0 失败；`lintDebug`、`assembleRelease`、`docsCheck` 全绿；
+  真机 v2.2.58 复现崩溃 → v2.2.59 新建会话不再报错、自动进入新会话、列表正常。
+  （WS 双通道大改造本身在上一版 **v2.2.58**：P1 传输层基座 + P2 Session/Message/Event +
+  P3 HITL/Command/Model + P4 目标写操作，配套桥 v2.8.1；明细见 `docs/project/CHANGELOG-DEV.md`。）
 - 签名：`CN=DSH Pocket Client`（正式证书；v2.2.25 起使用。证书没变，但 **v2.2.41 起包名变了**，
   `v2.2.40` 及更早仍需先卸载）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)

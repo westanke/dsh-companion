@@ -299,7 +299,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.58.apk
+DSH伴侣-companion-v2.2.59.apk
 ```
 
 Requirements:
@@ -589,62 +589,39 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.58` (`versionCode` 10083)
+- Version: `v2.2.59` (`versionCode` 10084)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
 - Unit tests: 86 test classes / 867 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.58.apk`, **3,324,284 bytes**, SHA-256
-  `6bc69f376ddf67fe1ac6416d6aae933c0d35336cba4cb676bad4bba7d4f3ba76` (kept in sync in
-  `artifacts/SHA256SUMS.txt`).   **Pending release on Gitee + GitHub** (tag `v2.2.58`) —
-  what changed in this release: **the session channel moves to `/ws/mobile` — WS first, REST
-  fallback** (companion bridge **v2.8.1**).
-  **Why**: the app had **never sent a single WS frame** (`DshClient.eventsUrl()` builds
-  `/api/v1/events`; `ws/mobile` appeared only in two comments), while the bridge's `/ws/mobile`
-  gateway had been working for a long while. What was missing was the client and the public
-  contract. After the call for "option C: full WS first with REST fallback", all of it lands at once.
-  **What changed** (P1–P3 only swap the transport; **P4 is the only genuinely new capability**):
-  ① **P1 transport base** in `data/ws/`: `MobileWsTransport` (**reuses `DshClient.defaultHttpClient`**
-  — the single network boundary does not move), `ChannelState` with four states (`WsReady` /
-  `WsDegraded` / `WsDown` / `RestOnly`, the one source of truth for degradation), `WsFrames`,
-  `WsRequestRouter` (requestId pairing with a per-kind fallback that serialises per kind), and
-  `WsPorts` split by domain;
-  ② **P2** Session / Message / Event; ③ **P3** HITL / Command / Model;
-  ④ **P4 goal write operations**: `goal-edit` / `goal-pause` / `goal-resume` / `goal-clear`
-  (compare-and-set on the bridge side, `ref:{id, revision}` required) — the REST router had zero
-  hits for `goal`, so the phone could not touch a goal at all; this is the only real new capability;
-  ⑤ **two "last metre" gaps closed** (bridge side changed in step): the first-screen `history`
-  now carries `projections` (it was dropped, which forced the first screen onto REST),
-  `session-create` takes `workspaceId` / `agentPreset` / `reuseBlank`, and `select-agent-preset`
-  is wired up (the old comment claiming "the bridge has no such frame" was wrong and is fixed);
-  ⑥ **two receive-side gaps**: honouring the bridge's backpressure notice
-  `connection-resync-required` (reload history + reset the seq baseline) and honouring
-  `Retry-After` on 429 (`data/ws/RetryAfter.kt`, delta-seconds only, clamped to 1s..60s, taking the
-  max with the backoff).
-  **Two key rules**: reads fall back to REST on any WS failure, while **writes fall back only when
-  the frame never left** (a write timeout means "unknown whether the server did it", and retrying
-  could rename twice, archive twice or fork two sessions); and the fallback decision **never looks
-  at a version number** (no capability bit says "echoes requestId", so it adapts by observing
-  whether a reply comes back).
-  **Three things deliberately stay on REST**: the archived-session list (the bridge's
-  `session-archives` has no producer), reading attachment bytes (the WS `attachment` frame means
-  *upload*), and the pending-approval list (the app does not poll, so switching transports saves
-  no requests).
-  **Verified**: 86 test classes / 867 cases / 0 failures; `lintDebug` reports 0 errors;
-  `assembleDebug` succeeds; `docsCheck` consistent in both directions (STRUCTURE 162 anchors /
-  INTERFACES 136 anchors).
-  **Verified on a device** (V2080A): P2 — green "connected" dot, 104 sessions, live message
-  updates; P3 model domain, both read and write; P4 — all four write operations pass (`revision`
-  increments each time, judged from the bridge's WS read-back rather than the UI's own report).
-  **Not verified on a device**: `approval-response` and `command-execute`; the bridge-side
-  heartbeat, connection cap and backpressure notice need a plugin restart to take effect, and the
-  host was not restarted this round.
-  **Degradation pinned**: an older bridge that omits the capability bits, or an upgrade that 404s,
-  yields `RestOnly` and the whole app falls back to REST — behaviour matches the previous release.
-  (The previous release, v2.2.56, is documented in `docs/project/CHANGELOG-DEV.md`: the model
-  picker showing context capacity and New Session reusing the blank session. v2.2.55 shipped with
-  its own release notes.)
+- Current APK: `DSH伴侣-companion-v2.2.59.apk`, **3,324,284 bytes**, SHA-256
+  `d3912f296c4e7dafda089bb5c43e23a40cb6d4c971a3c23a3d1f1be1eac50916` (kept in sync in
+  `artifacts/SHA256SUMS.txt`).   **Pending release on Gitee + GitHub** (tag `v2.2.59`) —
+  this is a **patch release** (companion bridge **v2.8.2**): it fixes a decoding crash that the WS
+  dual channel hit every time after "New Session" —
+  `JsonDecodingException: … SessionList … JsonArray`.
+  **Root cause**: the same session list has two different shapes across the two transports —
+  REST `GET /chat/sessions` wraps it as `{items:[…]}`, while the WS `sessions` frame's
+  `data.sessions` **is the array directly** (the bridge's `listSessions` already returns an
+  array). `WsSessionPort.sessions()` wrongly decoded that `JsonArray` with the REST-shaped
+  `SessionList(items)` model.
+  **Fix**: the WS path now decodes the array directly with
+  `ListSerializer(ChatSession.serializer())`, plus a regression test using the real frame shape
+  (`WsSessionPortTest` previously had no sessions-frame case at all — hand-built reply frames
+  passed with any shape; only the real bridge exposed the assumption). See `PITFALLS.md`
+  "same list: REST wraps `items`, WS gives a bare array".
+  **The same on-device round (V2080A + bridge v2.8.2) also confirmed**: every WS pairing now
+  takes the "requestId fast path"; `command-execute` succeeds for read-only/workspace-write/danger;
+  and the `approval-response` protocol loop returns `accepted:true` with the approved command
+  actually running (the 409 on v2.8.1 was a bridge-side rpcId bug fixed in bridge v2.8.2; the
+  app's frame codec and matcher are pinned by unit tests).
+  **Verified**: 86 test classes / 867 cases / 0 failures; `lintDebug`, `assembleRelease` and
+  `docsCheck` all green; on a device, v2.2.58 reproduced the crash and v2.2.59 no longer errors
+  after New Session — it opens the new session and the list is fine.
+  (The WS dual-channel overhaul itself shipped in **v2.2.58**: P1 transport base + P2
+  Session/Message/Event + P3 HITL/Command/Model + P4 goal writes, with companion bridge v2.8.1;
+  details in `docs/project/CHANGELOG-DEV.md`.)
 - Signing: `CN=DSH Pocket Client` (release key, used since v2.2.25). The key did not change, but the
   **package name did in v2.2.41**, so `v2.2.40` and earlier still require an uninstall first
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)
