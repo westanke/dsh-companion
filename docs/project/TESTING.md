@@ -145,6 +145,17 @@ export ANDROID_HOME=/media/wangke/OFFICE/workspace/android-toolchain/sdk
 apksigner verify --verbose app\build\outputs\apk\release\app-release.apk
 ```
 
+- **2026-10-30 `v2.2.63` 热修高状态栏机型应用栏整行被裁**：纯布局改动，**单测维持 88 类 /
+  875 用例 / 0 失败**（无新增）。背景：v2.2.62 给 M3 TopAppBar 硬套 `Modifier.height(46.dp)`，
+  TopAppBar 仍内缩 statusBars inset；vivo V2080A 状态栏矮没暴露，华为机（1080x2440）上 46dp 总高
+  减 inset 后内容行被压没，汉堡键/「DSH伴侣」/刷新整行消失（用户截图反馈）。修法为 ui/App.kt
+  详情页改用自建 Row + `windowInsetsPadding(WindowInsets.statusBars)` 自消费 inset、内容行 48dp。
+  `scripts/build.sh` 门验：编译、lintDebug、assembleDebug 全绿。**真机已验（V2080A 覆盖安装 +
+  强杀重启）**：dump 实测应用栏 打开导航 `[36,120]`、DSH伴侣 `[156,125]`、刷新 `[972,120]`
+  整行健在，其下会话标题 y=270，两栏间距收紧不重叠，状态行四字完整；华为端由用户复验。
+  **教训（进 PITFALLS 候选）**：不要给自带 windowInsets 的 M3 组件（TopAppBar/Scaffold）硬套
+  Modifier.height，inset 随机型变化会让固定总高下的内容行出现负值；要收紧高度就自己消费 inset
+  或调 windowInsets 参数。
 - **2026-10-30 `v2.2.62` 小屏顶栏两段式重排 + 流式期加载更早历史竞态修复**：**单测从 88 类 /
   874 用例增加到 88 类 / 875 用例 / 0 失败**（`data/HistoryMergeTest.kt` 新增
   `autoRefreshDuringStreamingKeepsOlderLoadedPage`：用户已加载更早页 1,2,3 + 尾页 10,11，流式

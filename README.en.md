@@ -299,7 +299,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.62.apk
+DSH伴侣-companion-v2.2.63.apk
 ```
 
 Requirements:
@@ -589,35 +589,35 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.62` (`versionCode` 10087)
+- Version: `v2.2.63` (`versionCode` 10088)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
 - Unit tests: 88 test classes / 875 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.62.apk`, **3,358,308 bytes**, SHA-256
-  `0a1e071fbe0ca145f6ab19bde1eeee8e69c35fa84a9bcf7853e9bb1c64e71f35` (kept in sync in
+- Current APK: `DSH伴侣-companion-v2.2.63.apk`, **3,358,308 bytes**, SHA-256
+  `9b93eddc9d033fb0b44e957005b12767383d78775e9ae313b9918de82cd25943` (kept in sync in
   `artifacts/SHA256SUMS.txt`; real values are backfilled by release stage A).
-  **This release (v2.2.62: compact two-row chat header + fixed older-messages race during
-  streaming)**: a patch release for four same-day findings on v2.2.61. The header becomes two rows —
-  the title row keeps only back / title / ⋯ (the files button moves out, giving long titles about 30%
-  more width), while a dedicated full-width status row places online / permission / Agent Team from
-  the left margin and pushes the files button to the far end, so the "Agent Team" pill shows all four
-  characters on 360dp screens instead of being clipped to two; in a conversation detail the global
-  app bar is compacted and the redundant "Chat" section subtitle is hidden. The core fix is a race:
-  the quiet-400ms auto-refresh while the model is streaming used to replace history wholesale with
-  the last page, wiping messages loaded via "Load earlier" (they appeared and vanished in a flash);
-  it now merges through the same merge path, keeping older pages and appending new tail events.
-  A dedicated regression test was added (88 classes / 875 cases, all green).
-  **Previous v2.2.61** shipped the read-only Agent Team panel (roster / shared task board /
-  subagent catalog cards plus "add member / assign task / ask progress" natural-language chips, with
-  zero bridge changes) and the three-tier permission colors/icons, via a top-level ⋯ menu item and a
-  brand-colored subtitle pill; **v2.2.60** was a docs-consistency repack content-equivalent to
-  v2.2.59; **v2.2.59 (bridge v2.8.2)** fixed the WS bare-array decoding crash after creating a new
-  session.
+  **This release (v2.2.63: hotfix for the app bar being clipped on tall-status-bar devices)**: right
+  after v2.2.62, a Huawei device (1080x2440) showed the conversation detail with the hamburger button,
+  "DSH伴侣" title and refresh action missing entirely. v2.2.62 had forced `height(46.dp)` on the M3
+  TopAppBar while it still applies the status-bars inset; on devices with a taller status bar the content
+  row inside the fixed total height was squeezed away. The detail screen now uses a self-built Row that
+  consumes `WindowInsets.statusBars` itself and keeps a fixed 48dp content row, so total height is the
+  device status bar plus 48dp and nothing is clipped on any device. Other screens keep the default
+  TopAppBar.
+  **Previous v2.2.62** made the chat header two rows (back/title/⋯ on the title row, files button moved
+  to the status row giving long titles ~30% more width, the full "Agent Team" pill text on 360dp
+  screens) and fixed the older-messages race during streaming (auto-refresh now merges instead of
+  replacing, with a dedicated regression test). **v2.2.61** shipped the read-only Agent Team panel
+  (roster / shared task board / subagent catalog cards plus "add member / assign task / ask progress"
+  natural-language chips, with zero bridge changes) and three-tier permission colors/icons; **v2.2.60**
+  was a docs-consistency repack; **v2.2.59 (bridge v2.8.2)** fixed the WS bare-array decoding crash
+  after creating a new session.
   **Verified**: 88 test classes / 875 cases / 0 failures; `docsCheck`, `lintDebug` and
-  `assembleDebug` all green; V2080A device check after a force-restart and base.apk SHA match
-  confirmed the full pill text, moved files button and single-line app bar.
+  `assembleDebug` all green; V2080A device check confirmed the compact app bar row is fully present,
+  tighter two-bar spacing and the full team pill; the Huawei-side regression is fixed by construction
+  (inset is consumed explicitly instead of fighting a fixed height).
   (The WS dual-channel overhaul itself shipped in **v2.2.58**: P1 transport base + P2
   Session/Message/Event + P3 HITL/Command/Model + P4 goal writes, with companion bridge v2.8.1;
   details in `docs/project/CHANGELOG-DEV.md`.)

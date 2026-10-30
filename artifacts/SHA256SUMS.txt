@@ -1,2 +1,2 @@
-# dsh-companion 产物校验（v2.2.62）
-0a1e071fbe0ca145f6ab19bde1eeee8e69c35fa84a9bcf7853e9bb1c64e71f35  DSH伴侣-companion-v2.2.62.apk
+# dsh-companion 产物校验（v2.2.63）
+9b93eddc9d033fb0b44e957005b12767383d78775e9ae313b9918de82cd25943  DSH伴侣-companion-v2.2.63.apk

@@ -7,21 +7,24 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Close
@@ -187,11 +190,46 @@ private fun ConnectedApp(
                         // 「程序标题与会话标题间距太大」）。列表页保持默认高度不变。
                         val inChatDetail = section == MainSection.Chat &&
                             state.selectedSessionId != null && !state.useWebChat
+                        if (inChatDetail) {
+                            // 会话详情页用一行紧凑应用栏（2026-10-30 华为真机回归）：
+                            // 此前给 M3 TopAppBar 硬套 Modifier.height(46.dp)，在状态栏更高的
+                            // 机型上总高被限死、statusBars inset 照吃，内容行高 = 46dp - inset
+                            // 变到 48dp 以下甚至为负，汉堡键与「DSH伴侣」整行被裁没（vivo 状态栏
+                            // 矮没暴露，华为 1080x2440 复现）。这里自己消费 statusBars inset：
+                            // 内容行固定 48dp（IconButton 的最小触控高），总高 = 状态栏 + 48dp，
+                            // 任何机型都不会裁内容；下方紧接会话自己的标题行，间距收紧。
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.background)
+                                    .windowInsetsPadding(WindowInsets.statusBars),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                                    Icon(Icons.Outlined.Menu, stringResource(R.string.navigation))
+                                }
+                                Text(
+                                    stringResource(R.string.app_name),
+                                    Modifier
+                                        .weight(1f)
+                                        .padding(start = 4.dp),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                                if (state.busy) {
+                                    CircularProgressIndicator(
+                                        Modifier.padding(14.dp).size(20.dp),
+                                        strokeWidth = 2.dp,
+                                    )
+                                } else {
+                                    IconButton(onClick = viewModel::refreshDashboard) {
+                                        Icon(Icons.Outlined.Refresh, stringResource(R.string.refresh))
+                                    }
+                                }
+                            }
+                        } else {
                         TopAppBar(
-                            modifier = if (inChatDetail) Modifier.height(46.dp) else Modifier,
-                            // 保留默认状态栏 inset（否则汉堡键会钻到状态栏下）；
-                            // 48dp = 状态栏 inset 之上只留一行标题的高度（TopAppBar 单内容行高），
-                            // 配合下面详情页隐去 section 副标题，程序标题与会话标题间距收紧到最小。
                             navigationIcon = {
                                 IconButton(onClick = { scope.launch { drawerState.open() } }) {
                                     Icon(Icons.Outlined.Menu, stringResource(R.string.navigation))
@@ -205,15 +243,11 @@ private fun ConnectedApp(
                                         overflow = TextOverflow.Ellipsis,
                                         style = MaterialTheme.typography.titleMedium,
                                     )
-                                    // 会话详情页下方紧接着就是会话自己的标题行，
-                                    // 「会话」这个分区名是重复信息 —— 隐去，给高度收紧腾空间。
-                                    if (!inChatDetail) {
-                                        Text(
-                                            stringResource(section.label),
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            style = MaterialTheme.typography.labelSmall,
-                                        )
-                                    }
+                                    Text(
+                                        stringResource(section.label),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
                                 }
                             },
                             actions = {
@@ -230,6 +264,7 @@ private fun ConnectedApp(
                                 scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                             ),
                         )
+                        }
                     }
                 },
             ) { padding ->
