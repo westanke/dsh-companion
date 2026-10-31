@@ -1094,6 +1094,21 @@ android {
         //   依赖：需要 dsh-remote-bridge >= 2.9.0（能力位 subagent-history-v1）。旧桥会走
         //     ROUTE_NOT_FOUND → 映射成 PLUGIN_TOO_OLD，界面提示「桥版本太旧」而非报原始错误码。
         //
+        // v2.2.65（versionCode 10090）：**抽屉显示真实设备 + 行数守卫覆盖 assets**（2026-10-31，补丁版）。
+        //   改了什么：
+        //     #7 抽屉顶部显示 `HarmonyOS · ICL-AL10` 但机器是 vivo V2080A。根因不是 bug：
+        //       桥侧那条设备记录 model 早已是 V2080A，name 停在配对时声明的旧值，而
+        //       「声明过的名字不再自动覆盖」是刻意的。改法取 issue 的方案 1 ——
+        //       名字与桥回传 model 不一致时补一行「当前设备 · Android · V2080A」。
+        //     #4（一半）interact.js 实际 1059 行、台账记着 803。根因：台账 2026-10-18 就写着
+        //       「登记范围扩大到 assets/chat/*.js」，但 ArchitectureGuardTest 只扫
+        //       app/src/main/java，assets/ 全程无人检查，数字漂了 256 行没人发现。
+        //       守卫新增第二个扫描面，台账数值同步修正。
+        //   真机验了什么：V2080A 装 debug 包（sha256 与本地产物逐字节一致），
+        //     抽屉显示两行 —— `HarmonyOS · ICL-AL10` + `当前设备 · Android · V2080A`。
+        //   仍未做：interact.js 本身没拆，仍 1059 行（#4 的另一半）。
+        //   依赖：无（纯客户端改动，不需要新桥能力位）。
+        //
         versionCode = 10090
         versionName = "2.2.65"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
