@@ -5,6 +5,10 @@
 </p>
 
 <p align="center">
+  <img src="assets/promo-16x9.png" alt="Android native client: chat, settings and files" width="100%">
+</p>
+
+<p align="center">
   <a href="./README.md">中文</a> · English
 </p>
 

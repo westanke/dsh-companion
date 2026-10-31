@@ -5,6 +5,10 @@
 </p>
 
 <p align="center">
+  <img src="assets/promo-16x9.png" alt="Android 原生客户端：聊天、设置、文件三屏" width="100%">
+</p>
+
+<p align="center">
   中文 · <a href="./README.en.md">English</a>
 </p>
 
