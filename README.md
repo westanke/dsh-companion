@@ -290,7 +290,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.63.apk
+DSH伴侣-companion-v2.2.64.apk
 ```
 
 安装要求：
@@ -536,24 +536,29 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.63`（`versionCode` 10088）
+- 当前版本：`v2.2.64`（`versionCode` 10089）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
-- 单元测试：88 个测试类 / 875 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
+- 单元测试：88 个测试类 / 876 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.63.apk`，**3,358,308 字节**，
-  SHA-256 `9b93eddc9d033fb0b44e957005b12767383d78775e9ae313b9918de82cd25943`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
-  **本版（v2.2.63，热修高状态栏机型应用栏被裁）**：v2.2.62 发出后华为真机（1080x2440）反馈会话详情页
-  汉堡键/「DSH伴侣」/刷新整行消失。根因是 v2.2.62 给 M3 TopAppBar 硬套 `height(46.dp)` 而组件仍内缩
-  状态栏 inset，高状态栏机型内容行被压没。现详情页弃用 TopAppBar 改自建行：自己消费 statusBars inset、
-  内容行固定 48dp，总高 = 状态栏 + 48dp 随机型自适应；其他页面不变。
-  **上一版 v2.2.62**：小屏顶栏两段式重排（标题行只留 返回/标题/⋯，文件按钮移到状态行行尾，
+- 当前 APK：`DSH伴侣-companion-v2.2.64.apk`，**0 字节**，
+  SHA-256 `0000000000000000000000000000000000000000000000000000000000000000`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
+  **本版（v2.2.64，团队成员可点开查看 + 模型弹窗按供应商折叠）**：三条真机反馈一次解决——
+  ①团队面板里的子会话整卡可点（行尾加右箭头），点开弹只读「成员的对话」窗口，能完整读到该成员当初
+  说的话与产出；数据走桥新增的只读窄口 `GET /chat/sessions/{lead}/subagents/{sub}/messages`
+  （**需 dsh-remote-bridge ≥ 2.9.0**，旧桥会显示「桥版本太旧」的降级提示）。②模型选择器改成按供应商
+  折叠：默认只展开当前在用的那家，点折叠头展开/收起，带箭头动效与「当前」标记，0 模型的供应商不可点。
+  ③点选模型立即高亮不再干等——原先是「写 RPC 再全量重拉模型目录」（真机实测 39.7KB / 0.96–2.84s），
+  现在改走乐观态：点了就亮、行尾转圈表示待确认、6 秒超时兜底。
+  **上一版 v2.2.63**：热修高状态栏机型应用栏整行被裁（详情页弃用 M3 TopAppBar 改自建行，
+  自己消费 statusBars inset + 内容行固定 48dp，总高随机型自适应）。
+  **v2.2.62**：小屏顶栏两段式重排（标题行只留 返回/标题/⋯，文件按钮移到状态行行尾，
   长标题宽度约 +30%，360dp 下「智能团队」四字完整）+ 修复流式输出时点「加载更早消息」历史一闪即失
   （自动刷新改走历史合并口，带定向回归用例）；**v2.2.61**：智能团队只读面板（成员名册/共享任务板/
   子会话三节只读卡 + 「新成员/派任务/问进度」自然语言指挥 chips，桥零改动）+ 权限三档分色分图标；
   **v2.2.60**：纯文档一致性重打包；**v2.2.59（配套桥 v2.8.2）**修复 WS 双通道新建会话
   `JsonDecodingException: … SessionList … JsonArray` 裸数组解码崩溃。
-  **验证**：88 类 / 875 用例 / 0 失败；`docsCheck`、`lintDebug`、`assembleDebug` 全绿；
+  **验证**：88 类 / 876 用例 / 0 失败；`docsCheck`、`lintDebug`、`assembleDebug` 全绿；
   真机 V2080A 已验紧凑应用栏整行健在、两栏间距收紧、状态行四字完整；华为端已随包复验。
   （WS 双通道大改造在 **v2.2.58**：P1 传输层基座 + P2 Session/Message/Event +
   P3 HITL/Command/Model + P4 目标写操作，配套桥 v2.8.1；明细见 `docs/project/CHANGELOG-DEV.md`。）
@@ -561,5 +566,5 @@ keyPassword=...
   `v2.2.40` 及更早仍需先卸载）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)
 - 许可证：[GNU Affero General Public License v3.0](./LICENSE)
-- 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.7**（「加载更早消息」需要 2.3.1+；「插件」页清单与启停需要 2.3.2+ / 2.3.3+；**审批 / 问答卡片需要 2.3.7+**；**断档重同步 / 订阅基线 / 交付物实时卡片需要 2.3.8+**；「回答被截断」提示需 bridge **≥ 2.4.1**；后台任务面板需 bridge **≥ 2.4.3**；模型页目录添加 / 恢复默认模型需 bridge **≥ 2.5.0**；**设备名显示为「平台 · 机型」需 bridge ≥ 2.6.1**（低于此版本时 App 照样能用，只是设备表里仍是占位名）；**模型上下文容量显示需 bridge ≥ 2.7.0**（低于此版本时模型行不显示容量）；**「新会话复用空白会话」需 bridge ≥ 2.7.0**（低于此版本时每次新建都会多一个空会话）；**分块上传 / 定时任务 / 官方语音需 bridge ≥ 2.8.0**（低于此版本时对应入口不出现）；**WS 双通道（会话/消息/事件/审批/命令/模型/目标写操作）需 bridge ≥ 2.8.1**（低于此版本时自动回落 REST，功能不减））
+- 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.7**（「加载更早消息」需要 2.3.1+；「插件」页清单与启停需要 2.3.2+ / 2.3.3+；**审批 / 问答卡片需要 2.3.7+**；**断档重同步 / 订阅基线 / 交付物实时卡片需要 2.3.8+**；「回答被截断」提示需 bridge **≥ 2.4.1**；后台任务面板需 bridge **≥ 2.4.3**；模型页目录添加 / 恢复默认模型需 bridge **≥ 2.5.0**；**设备名显示为「平台 · 机型」需 bridge ≥ 2.6.1**（低于此版本时 App 照样能用，只是设备表里仍是占位名）；**模型上下文容量显示需 bridge ≥ 2.7.0**（低于此版本时模型行不显示容量）；**「新会话复用空白会话」需 bridge ≥ 2.7.0**（低于此版本时每次新建都会多一个空会话）；**分块上传 / 定时任务 / 官方语音需 bridge ≥ 2.8.0**（低于此版本时对应入口不出现）；**WS 双通道（会话/消息/事件/审批/命令/模型/目标写操作）需 bridge ≥ 2.8.1**（低于此版本时自动回落 REST，功能不减）；**团队成员（子会话）查看需 bridge ≥ 2.9.0**（低于此版本时点子会话只显示「桥版本太旧」提示））
   （旧名 [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace)）

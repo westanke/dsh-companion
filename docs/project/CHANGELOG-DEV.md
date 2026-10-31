@@ -3,6 +3,90 @@
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 
+## v2.2.64 · 团队成员可点开查看 + 模型弹窗按供应商折叠（2026-10-31）
+
+### 基于什么
+真机连报三条：
+
+1. 「智能团队 的成员 任务完成情况 我无法自己查看」
+2. 「团队面板中的子会话 无法查看」
+3. 「会话页 菜单中的模型 更换点击反应较慢，另外模型需按照供应商收缩模式，点击那个厂家，那个展开」
+
+第 1 条在盘点后确认：团队面板本身已能正常打开（用户也确认「胶囊按钮正常 我都可以手动点开」），
+真正卡住的是**面板里的条目点不进去**——名册只读展示、子会话只是一行文字，看不到任何实质内容。
+第 2 条与它同源。第 3 条是模型选择器的两个体验问题：平铺 90+ 个模型滚不动，点一下要等网络往返才高亮。
+
+### 根因
+**子会话读不到，是桥与内核双重设限**（不是 App 没接线）：
+
+- 桥的 `requireSession()` 靠 `listSessions()` 判可见性，而 `sessions.list` 会把
+  `origin === 'subagent'` 的行整批滤掉（桥的 `dsh-0.2-bridge.ts:2327`，注释写明「暴露出来只会得到
+  点开就崩的行」）。于是任何子会话 id 打 `/messages` 必然 404。
+- 即使绕过可见性，内核 `dsh-api-session-controller` 的 `validateAddress()` 也会拦：
+  对 `kind:'session'` 且 `header.origin === 'subagent'` 抛
+  `session/agent-busy: subagent Sessions require their durable parent address`，
+  要求用 `{ kind:'subagent', parentSessionId, childSessionId, mode }` 这套判别联合寻址。
+
+所以本版**必须搭配 dsh-remote-bridge >= 2.9.0**（该版新增受成员关系校验的只读窄口）。
+
+### 干了什么
+
+**① 子会话可查看**
+
+- 新建 `data/DshClientSubagents.kt`：`DshClient.subagentHistory(leadSessionId, subagentId, beforeSeq, maxMessages)`，
+  路径 `chat/sessions/{lead}/subagents/{sub}/messages`。**为什么拆文件**：直接加进 `DshClient.kt` 会让它
+  变 822 行，超 `AGENTS.md` §4.2 的 800 行预算，被 `ArchitectureGuardTest` 判红；拆出后回落到 794 行。
+- 新建 `ui/chat/SubagentDialog.kt`：只读的「成员的对话」窗口。用
+  `DialogProperties(usePlatformDefaultWidth = false)` + `Surface(fillMaxWidth(0.94f).fillMaxHeight(0.86f))`
+  ——默认 Dialog 宽度 90% 且高度自适应，长对话会被压成一条缝。三态：加载中转圈 / 失败卡片 / 消息列表。
+  消息渲染**刻意不复用 `ChatItem`**：那个带图片、重试、分叉、审批回调，在只读窗口里全是无效入口。
+- `HarnessSessionsViewModel` 加 `openSubagent()` / `closeSubagent()`；`HarnessState` 加 `subagentView`。
+  失败码映射：`ROUTE_NOT_FOUND` → `PLUGIN_TOO_OLD`（旧桥会认不出这条路由），`SUBAGENT_NOT_FOUND`
+  走专门的「看不到这个成员的对话」文案。两个错误码刻意不区分「不存在」与「不是成员」，否则 id 是否
+  存在就成了探测面。
+- `TeamPanelSheet` 的子会话卡片加整卡 `clickable` + 行尾右箭头，点开盖一层 Dialog，关掉回名册。
+
+**② 模型弹窗按供应商折叠**
+
+- 新建 `ui/chat/ModelSheetGroups.kt`：默认只展开当前选中模型所在的供应商，点折叠头展开/收起，
+  箭头 `animateFloatAsState` 0°→180°，0 模型的供应商禁用点击，收起态折叠头带勾与「当前」标记。
+- 两处刻意的取舍：
+  - 折叠状态用 `remember {} + LaunchedEffect(currentProvider)` 而非 `remember(groups)` —— 后者会在
+    每次重拉 `sessionModels` 时把用户手动展开的供应商悄悄收起（VM 会在多个时机重拉）。
+  - 展开用 `if (expanded) { items(...) }` 而非 `AnimatedVisibility` —— 后者在 `LazyColumn` 里会
+    破坏 item key 复用，滚动位置会跳。
+
+**③ 点击响应加速**
+
+- ModelSheet 内加 `pending` 乐观态：点选立刻按新模型高亮，不等网络；行尾 14dp 转圈表示待确认；
+  服务端确认后清空；同目标重复点击直接吞掉；**6 秒超时兜底**（不用全局 `busy`，怕误伤别的操作）。
+- 根因是 `selectModel` 原本「写 RPC + 全量重拉 sessionModels」，REST `/models` 真机实测 39.7KB、
+  0.96–2.84s，面板在点后卡住等第二次往返。
+
+### 测了什么
+- `DshClientTest.requestsSubagentHistoryUnderLeadSessionPath`（MockWebServer）：钉住两个 id 都得进路径
+  且自动 URL 编码，`beforeSeq` / `maxMessages` 正确带出。
+- strings 中英各 +12 键（`subagent_*` 7 个 + `model_group_*` 5 个）。
+- 单测 88 类 / **876 用例**全绿；`docsCheck`（STRUCTURE 165 锚点 / 145 源文件双向一致，INTERFACES 136）、
+  `lintDebug` 0 error、`assembleDebug` 全绿。
+
+### 真机验了什么
+V2080A（serial 9540718532001JR，1080x2316）覆盖安装后 `am force-stop` + `am start` 强杀重启，
+并核对设备 `base.apk` 的 SHA-256 与本地产物一致（教训：`pm install` 的 job 被提前 kill 时
+`lastUpdateTime` 会变但包没换，必须比 SHA）：
+
+- 团队面板点 `e083dffc…` 子会话卡片 → 完整显示该子智能体当初写的 7 节调研报告原文，一字不差，
+  底部「只读：要看它的工具调用细节，请回主会话看团队任务板」提示正确。
+- 模型弹窗 8 家供应商折叠正常（WorkBuddy (国际版) 带「当前」标记默认展开），点 DeepSeek 头展开出
+  DeepSeek-V4.1-Flash / DeepSeek-V4-Pro（各 977K tokens），点选立即高亮不再干等。
+- 首轮点开子会话曾报 `subagent Sessions require their durable parent address`，是旧进程/旧桥产物残留，
+  重进界面后正常——不是代码问题。
+
+### 依赖与降级
+需要 `dsh-remote-bridge >= 2.9.0`。用旧桥时点开子会话会收到 `ROUTE_NOT_FOUND`，App 映射成
+`PLUGIN_TOO_OLD` 并提示「桥版本太旧，读不到成员对话。请把电脑端的 dsh-remote-bridge 升级到 2.9.0
+或更高版本」，而不是把原始错误码甩给用户。
+
 ## v2.2.63 · 热修：高状态栏机型会话详情页应用栏整行被裁（2026-10-30）
 
 ### 基于什么

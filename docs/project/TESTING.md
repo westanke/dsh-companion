@@ -145,6 +145,24 @@ export ANDROID_HOME=/media/wangke/OFFICE/workspace/android-toolchain/sdk
 apksigner verify --verbose app\build\outputs\apk\release\app-release.apk
 ```
 
+- **2026-10-31 `v2.2.64` 团队成员可点开查看 + 模型弹窗按供应商折叠**：**单测从 88 类 /
+  875 用例增加到 88 类 / 876 用例 / 0 失败**（`data/DshClientTest.kt` 新增
+  `requestsSubagentHistoryUnderLeadSessionPath`：MockWebServer 断言请求路径为
+  `/api/v1/chat/sessions/lead%2F1/subagents/sub%2F2/messages?beforeSeq=7&maxMessages=30`，
+  钉住「lead 与 sub 两个 id 都必须进路径且自动 URL 编码」——这条窄口最容易写成只带一个 id）。
+  三条改动：①子会话只读窗口（新 `ui/chat/SubagentDialog.kt` + `data/DshClientSubagents.kt`，
+  拆文件是为守住 DshClient.kt 的 800 行预算，加进去会到 822 行被 ArchitectureGuardTest 判红）；
+  ②模型按供应商折叠（新 `ui/chat/ModelSheetGroups.kt`）；③模型点选乐观态 + 6 秒超时兜底。
+  `scripts/build.sh` 门验四项全绿：`docsCheck`（STRUCTURE 165 锚点 / 145 源文件双向一致、
+  INTERFACES 136）、`:app:testDebugUnitTest` 876 全绿、`:app:lintDebug` 0 error、
+  `assembleDebug` 成功。**真机已验（V2080A 1080x2316，强杀重启 + 设备 base.apk SHA 与本地一致）**：
+  团队面板点 `e083dffc…` 子会话卡片 → 完整显示该子智能体当初写的 7 节调研报告原文、底部只读提示正确；
+  模型弹窗 8 家供应商折叠正常（WorkBuddy (国际版) 带「当前」默认展开），点 DeepSeek 头展开出
+  DeepSeek-V4.1-Flash / DeepSeek-V4-Pro，点选立即高亮。
+  **首轮误报排查留档**：第一次点开子会话报 `subagent Sessions require their durable parent address`，
+  是旧进程/旧桥产物残留（桥新端点需重启 DSH 才生效），重进界面后正常——遇到内核
+  `session/agent-busy` 这句先查桥产物是否真换（`grep -c subagentMode lib/index.js`）与宿主是否重启，
+  别急着改代码。
 - **2026-10-30 `v2.2.63` 热修高状态栏机型应用栏整行被裁**：纯布局改动，**单测维持 88 类 /
   875 用例 / 0 失败**（无新增）。背景：v2.2.62 给 M3 TopAppBar 硬套 `Modifier.height(46.dp)`，
   TopAppBar 仍内缩 statusBars inset；vivo V2080A 状态栏矮没暴露，华为机（1080x2440）上 46dp 总高

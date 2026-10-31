@@ -288,6 +288,7 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/data/CronHint.kt` | file | cron 表达式人话解析（不拦扩展语法） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClient.kt` | file | 唯一网络边界：bridge REST 强类型客户端 + SSE 订阅 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClientBff.kt` | file | 分块上传/定时任务/语音的 /api/v1 扩展端点 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/DshClientSubagents.kt` | file | 子会话（团队成员）历史的只读窄口（DshClient 扩展函数） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/SchedulePolicy.kt` | file | 定时任务策略：开关语义、错误分类、展示排序（纯函数，可单测） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/SettingsNamespaces.kt` | file | 设置命名空间 wire 模型 + schema→控件纯函数映射（不强类型化） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ErrorMessages.kt` | file | 按错误码查的本地化出错文案 |
@@ -366,10 +367,12 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ScheduleSheet.kt` | file | 定时任务底部面板：列表、新建表单与人话 cron 预览 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatSessionPane.kt` | file | 会话列表层（窄屏整页 / 宽屏左栏 / 未选时概览） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatSheets.kt` | file | 三个底部弹层：模型与智能体、工作区管理、新建会话 |
+| `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ModelSheetGroups.kt` | file | 模型弹窗的按供应商折叠：展开态、折叠头与模型行 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SpeechInput.kt` | file | 麦克风按钮、录音状态条、运行时权限与转写结果插入 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SpeechRecorder.kt` | file | AudioRecord 采集 PCM16 并封 WAV（可取消、限长） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatStatsSheet.kt` | file | 会话统计面板（执行维度） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/TeamPanelSheet.kt` | file | 智能团队只读面板（成员 / 任务 / 子会话 + 自然语言指挥条） |
+| `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SubagentDialog.kt` | file | 团队成员（子会话）对话的只读窗口 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatSuggestions.kt` | file | 输入框上方 @ 文件与 / 命令两个补全面板 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatToast.kt` | file | 一次性反馈与剪贴板助手 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatToolBlocks.kt` | file | 工具调用专用块渲染（Read/Terminal/Diff） |

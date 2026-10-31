@@ -1,5 +1,6 @@
 package io.github.westanke.dshcompanion.ui.chat
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -8,9 +9,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Groups
@@ -45,6 +48,8 @@ import androidx.compose.ui.unit.dp
 import io.github.westanke.dshcompanion.HarnessState
 import io.github.westanke.dshcompanion.HarnessViewModel
 import io.github.westanke.dshcompanion.R
+import io.github.westanke.dshcompanion.closeSubagent
+import io.github.westanke.dshcompanion.openSubagent
 import io.github.westanke.dshcompanion.sendMessage
 import io.github.westanke.dshcompanion.data.AgentTeamProjection
 import io.github.westanke.dshcompanion.data.SubagentRow
@@ -154,7 +159,9 @@ internal fun TeamPanelSheet(state: HarnessState, viewModel: HarnessViewModel, on
                     if (team.subagents.isEmpty()) {
                         EmptyHint(stringResource(R.string.team_empty_subagents))
                     } else {
-                        team.subagents.forEach { SubagentCard(it) }
+                        team.subagents.forEach { row ->
+                            SubagentCard(row) { viewModel.openSubagent(row.id, row.label) }
+                        }
                     }
                 }
             }
@@ -180,6 +187,11 @@ internal fun TeamPanelSheet(state: HarnessState, viewModel: HarnessViewModel, on
                 onClose()
             },
         )
+    }
+
+    // 点开某个成员：独立窗口盖在面板之上，关掉就回到名册（不连面板一起关）。
+    state.subagentView?.let { view ->
+        SubagentDialog(view = view, viewModel = viewModel) { viewModel.closeSubagent() }
     }
 }
 
@@ -302,11 +314,16 @@ private fun TaskCard(task: TeamTaskRow) {
 }
 
 @Composable
-private fun SubagentCard(row: SubagentRow) {
+private fun SubagentCard(row: SubagentRow, onClick: () -> Unit) {
     val title = row.label ?: row.id.take(16)
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp)
+            // 整张卡可点：只点文字的话，用户得精准命中那行小字才打得开，
+            // 而这张卡在 460dp 面板里本来就只有两行高。
+            .clickable(onClickLabel = stringResource(R.string.team_subagent_open), onClick = onClick),
     ) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
@@ -326,6 +343,12 @@ private fun SubagentCard(row: SubagentRow) {
                 }
             }
             SubagentModeChip(row.mode)
+            Icon(
+                Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+            )
         }
     }
 }

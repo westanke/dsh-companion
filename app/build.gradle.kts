@@ -1064,8 +1064,38 @@ android {
         //   测了什么：编译通过；无新单测（纯布局）。真机 V2080A 覆盖安装强杀重启后 dump：
         //     应用栏 打开导航[36,120]+DSH伴侣[156,125]+刷新[972,120] 整行健在，其下会话标题 y270，
         //     两栏间距收紧且不再重叠；状态行四字完整。华为端由用户复验。
-        versionCode = 10088
-        versionName = "2.2.63"
+        //
+        // v2.2.64（versionCode 10089）：**团队成员/子会话可点开查看 + 模型弹窗按供应商折叠**（2026-10-31，次版本）。
+        //   基于什么：用户三条真机反馈——①「智能团队的成员、任务完成情况我无法自己查看」；
+        //     ②「团队面板中的子会话无法查看」；③「会话页菜单中的模型更换点击反应较慢，另外模型需按照
+        //     供应商收缩模式，点击那个厂家，那个展开」。
+        //   干了什么：
+        //     ① 子会话可查看：团队面板里每张子会话卡加整卡可点 + 行尾右箭头，点开弹「成员的对话」
+        //        只读 Dialog（新建 ui/chat/SubagentDialog.kt）。数据走桥新增的只读窄口
+        //        GET /chat/sessions/{lead}/subagents/{sub}/messages（新建 data/DshClientSubagents.kt，
+        //        拆文件是因为直接加进 DshClient.kt 会把它顶到 822 行、超 AGENTS.md §4.2 的 800 行预算）。
+        //        刻意不复用 ChatItem 渲染：那个带图片/重试/分叉/审批回调，在只读窗口里全是无效入口。
+        //     ② 模型弹窗按供应商折叠（新建 ui/chat/ModelSheetGroups.kt）：默认只展开当前选中模型所在
+        //        的供应商，点折叠头展开/收起，箭头 rotate 0°→180° 动效，0 模型的供应商禁用点击，
+        //        收起态折叠头带勾与「当前」标记。折叠状态用 remember {} + LaunchedEffect(currentProvider)
+        //        而非 remember(groups) —— 否则每次重拉 sessionModels 都会把用户手动展开的供应商悄悄收起。
+        //        展开用 if (expanded) { items(...) } 而非 AnimatedVisibility —— 后者在 LazyColumn 里
+        //        会破坏 item key 复用。
+        //     ③ 点击响应加速：ModelSheet 内加 pending 乐观态，点选立刻高亮不等网络，行尾 14dp 转圈，
+        //        服务端确认后清空，同目标重复点击吞掉，6 秒超时兜底（不用全局 busy，怕误伤别的操作）。
+        //   测了什么：DshClientTest 增 requestsSubagentHistoryUnderLeadSessionPath（钉住两个 id 都得
+        //     进路径、query 正确）；strings 中英各 +12 键（subagent_* 7 + model_group_* 5）；
+        //     单测 88 类 / 876 用例全绿；docsCheck（STRUCTURE 165 锚点 / 145 源文件双向一致）、
+        //     lintDebug 0 error、assembleDebug 全绿。
+        //   真机验了什么：V2080A（1080x2316）强制停止重启并核对 base.apk SHA 与本地一致后，
+        //     团队面板点 e083dffc… 子会话卡片 → 完整显示该子智能体当初写的 7 节调研报告原文，
+        //     底部「只读」提示正确；模型弹窗 8 家供应商折叠正常（WorkBuddy 带「当前」默认展开），
+        //     点 DeepSeek 头展开出 DeepSeek-V4.1-Flash / DeepSeek-V4-Pro，点选立即高亮。
+        //   依赖：需要 dsh-remote-bridge >= 2.9.0（能力位 subagent-history-v1）。旧桥会走
+        //     ROUTE_NOT_FOUND → 映射成 PLUGIN_TOO_OLD，界面提示「桥版本太旧」而非报原始错误码。
+        //
+        versionCode = 10089
+        versionName = "2.2.64"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。

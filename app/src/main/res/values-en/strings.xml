@@ -208,6 +208,14 @@
     <string name="team_command_new_task_prompt">Please assign a task to a team member:</string>
     <string name="team_command_progress_prompt">Report the current team member status and task progress.</string>
     <string name="team_command_send">Send to Lead</string>
+    <string name="subagent_dialog_title">Teammate conversation</string>
+    <string name="subagent_role_user">Sent to teammate</string>
+    <string name="subagent_role_assistant">Teammate reply</string>
+    <string name="subagent_role_failure">Something failed</string>
+    <string name="subagent_empty">This teammate has no conversation to show yet</string>
+    <string name="subagent_readonly_hint">Read-only: for tool-call details, check the task board in the main conversation</string>
+    <string name="team_subagent_open">Open this teammate\'s conversation</string>
+    <string name="subagent_plugin_too_old">The bridge is too old to read teammate conversations. Upgrade dsh-remote-bridge on the computer to 2.9.0 or newer</string>
     <string name="team_command_cancel">Cancel</string>
     <string name="team_command_edit_hint">Edit the instruction before sending; the Lead will invoke team tools to act on it.</string>
     <string name="team_subagent_mode_one_shot">One-shot</string>
@@ -358,6 +366,11 @@
     <string name="agent_preset_locked">This session has already started, so its Agent preset cannot be changed.</string>
     <string name="reasoning_effort">Reasoning effort</string>
     <string name="model_context_window">%1$s tokens of context</string>
+    <string name="model_group_count">· %1$d models</string>
+    <string name="model_group_empty">· no models available</string>
+    <string name="model_group_current">Current</string>
+    <string name="model_group_expand">Expand this provider\'s models</string>
+    <string name="model_group_collapse">Collapse this provider\'s models</string>
     <string name="settings_subtitle">Manage connection, model providers, device permissions, and language</string>
     <string name="about">About</string>
     <string name="author">Author</string>
@@ -653,6 +666,7 @@
     <string name="err_file_changed">The file changed elsewhere — reload and try again</string>
     <string name="err_no_root_selected">Select an authorized root folder first</string>
     <string name="err_session_missing">That conversation no longer exists</string>
+    <string name="err_subagent_missing">Cannot show this teammate\'s conversation (it may not belong to this team, or the bridge is too old)</string>
     <string name="err_session_forbidden">That conversation is outside the authorized folders, so the bridge rejected the operation</string>
     <string name="err_workspace_missing">That workspace no longer exists</string>
     <string name="err_workspace_outside_root">That workspace is outside the authorized folders</string>

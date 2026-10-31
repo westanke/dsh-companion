@@ -299,7 +299,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.63.apk
+DSH伴侣-companion-v2.2.64.apk
 ```
 
 Requirements:
@@ -589,24 +589,30 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.63` (`versionCode` 10088)
+- Version: `v2.2.64` (`versionCode` 10089)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
-- Unit tests: 88 test classes / 875 cases at the last run (0 failures). The counts move with the code, so
+- Unit tests: 88 test classes / 876 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.63.apk`, **3,358,308 bytes**, SHA-256
-  `9b93eddc9d033fb0b44e957005b12767383d78775e9ae313b9918de82cd25943` (kept in sync in
+- Current APK: `DSH伴侣-companion-v2.2.64.apk`, **0 bytes**, SHA-256
+  `0000000000000000000000000000000000000000000000000000000000000000` (kept in sync in
   `artifacts/SHA256SUMS.txt`; real values are backfilled by release stage A).
-  **This release (v2.2.63: hotfix for the app bar being clipped on tall-status-bar devices)**: right
-  after v2.2.62, a Huawei device (1080x2440) showed the conversation detail with the hamburger button,
-  "DSH伴侣" title and refresh action missing entirely. v2.2.62 had forced `height(46.dp)` on the M3
-  TopAppBar while it still applies the status-bars inset; on devices with a taller status bar the content
-  row inside the fixed total height was squeezed away. The detail screen now uses a self-built Row that
-  consumes `WindowInsets.statusBars` itself and keeps a fixed 48dp content row, so total height is the
-  device status bar plus 48dp and nothing is clipped on any device. Other screens keep the default
-  TopAppBar.
-  **Previous v2.2.62** made the chat header two rows (back/title/⋯ on the title row, files button moved
+  **This release (v2.2.64: teammates are readable + models fold by provider)**: three device reports
+  fixed in one go. (1) Every subagent card in the team panel is now tappable (with a trailing chevron)
+  and opens a read-only "teammate conversation" window showing exactly what that teammate said and
+  produced; the data comes from the bridge's new read-only narrow port
+  `GET /chat/sessions/{lead}/subagents/{sub}/messages` (**requires dsh-remote-bridge >= 2.9.0**; an
+  older bridge degrades gracefully with a "bridge is too old" message instead of a raw error code).
+  (2) The model picker now folds by provider: only the provider currently in use is expanded by
+  default, headers toggle with an animated chevron and a "current" marker, and providers with zero
+  models are not tappable. (3) Selecting a model highlights immediately instead of waiting on the
+  network — it used to write the RPC and then re-fetch the whole catalog (39.7KB, 0.96–2.84s measured
+  on device); it now uses an optimistic pending state with a trailing spinner and a 6-second fallback.
+  **Previous v2.2.63** was the hotfix for the app bar being clipped on tall-status-bar devices (the
+  detail screen dropped the M3 TopAppBar for a self-built row that consumes the status-bars inset
+  itself and keeps a fixed 48dp content row, so total height adapts per device).
+  **v2.2.62** made the chat header two rows (back/title/⋯ on the title row, files button moved
   to the status row giving long titles ~30% more width, the full "Agent Team" pill text on 360dp
   screens) and fixed the older-messages race during streaming (auto-refresh now merges instead of
   replacing, with a dedicated regression test). **v2.2.61** shipped the read-only Agent Team panel
@@ -614,10 +620,9 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
   natural-language chips, with zero bridge changes) and three-tier permission colors/icons; **v2.2.60**
   was a docs-consistency repack; **v2.2.59 (bridge v2.8.2)** fixed the WS bare-array decoding crash
   after creating a new session.
-  **Verified**: 88 test classes / 875 cases / 0 failures; `docsCheck`, `lintDebug` and
-  `assembleDebug` all green; V2080A device check confirmed the compact app bar row is fully present,
-  tighter two-bar spacing and the full team pill; the Huawei-side regression is fixed by construction
-  (inset is consumed explicitly instead of fighting a fixed height).
+  **Verified**: 88 test classes / 876 cases / 0 failures; `docsCheck`, `lintDebug` and
+  `assembleDebug` all green; V2080A device check confirmed a subagent card opens the full 7-section
+  report the teammate wrote, all eight providers fold correctly and selection highlights instantly.
   (The WS dual-channel overhaul itself shipped in **v2.2.58**: P1 transport base + P2
   Session/Message/Event + P3 HITL/Command/Model + P4 goal writes, with companion bridge v2.8.1;
   details in `docs/project/CHANGELOG-DEV.md`.)
@@ -625,5 +630,5 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
   **package name did in v2.2.41**, so `v2.2.40` and earlier still require an uninstall first
 - Author: upstream [Hakunm](https://github.com/Hakunm); this fork maintained by [westanke](https://github.com/westanke)
 - License: [GNU Affero General Public License v3.0](./LICENSE)
-- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.7** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+; **approval and question cards need 2.3.7+**; gap resync / subscription baseline / live deliverable cards need 2.3.8+; the "response truncated" notice needs bridge **≥ 2.4.1**; the background-jobs panel needs bridge **≥ 2.4.3**; the model page's catalog add and restore-default-models need bridge **≥ 2.5.0**; **showing the device name as "platform · model" needs bridge ≥ 2.6.1** (below that the app still works — the device table just keeps the placeholder name); **the model context capacity needs bridge ≥ 2.7.0** (below that the model row omits it); **"New Session reuses the blank session" needs bridge ≥ 2.7.0** (below that every new session adds another blank one); **chunked upload / schedules / official speech need bridge ≥ 2.8.0** (below that the corresponding entries stay hidden); **the WS dual channel (sessions / messages / events / approvals / commands / models / goal writes) needs bridge ≥ 2.8.1** (below that the app falls back to REST automatically and loses nothing))
+- Server plugin: [dsh-remote-bridge](https://github.com/westanke/dsh-remote-bridge) **≥ 2.3.7** (loading older messages needs 2.3.1+; the Plugins tab list and enable/disable need 2.3.2+ / 2.3.3+; **approval and question cards need 2.3.7+**; gap resync / subscription baseline / live deliverable cards need 2.3.8+; the "response truncated" notice needs bridge **≥ 2.4.1**; the background-jobs panel needs bridge **≥ 2.4.3**; the model page's catalog add and restore-default-models need bridge **≥ 2.5.0**; **showing the device name as "platform · model" needs bridge ≥ 2.6.1** (below that the app still works — the device table just keeps the placeholder name); **the model context capacity needs bridge ≥ 2.7.0** (below that the model row omits it); **"New Session reuses the blank session" needs bridge ≥ 2.7.0** (below that every new session adds another blank one); **chunked upload / schedules / official speech need bridge ≥ 2.8.0** (below that the corresponding entries stay hidden); **the WS dual channel (sessions / messages / events / approvals / commands / models / goal writes) needs bridge ≥ 2.8.1** (below that the app falls back to REST automatically and loses nothing); **reading teammates (sub-sessions) needs bridge ≥ 2.9.0** (below that, tapping a teammate only shows a "bridge is too old" notice))
   (formerly [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace))

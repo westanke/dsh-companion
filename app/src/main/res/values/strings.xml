@@ -211,6 +211,14 @@
     <string name="team_command_new_task_prompt">请给团队成员分配任务：</string>
     <string name="team_command_progress_prompt">汇报一下团队当前的成员状态和任务进度。</string>
     <string name="team_command_send">发给负责人</string>
+    <string name="subagent_dialog_title">成员的对话</string>
+    <string name="subagent_role_user">发给成员</string>
+    <string name="subagent_role_assistant">成员的回复</string>
+    <string name="subagent_role_failure">出错了</string>
+    <string name="subagent_empty">这个成员还没有可显示的对话</string>
+    <string name="subagent_readonly_hint">只读：要看它的工具调用细节，请回主会话看团队任务板</string>
+    <string name="team_subagent_open">打开这个成员的对话</string>
+    <string name="subagent_plugin_too_old">桥版本太旧，读不到成员对话。请把电脑端的 dsh-remote-bridge 升级到 2.9.0 或更高版本</string>
     <string name="team_command_cancel">取消</string>
     <string name="team_command_edit_hint">指令可以先改再发，负责人会调用团队工具执行。</string>
     <string name="team_subagent_mode_one_shot">一次性</string>
@@ -366,6 +374,11 @@
     <string name="agent_preset_locked">该会话已经开始，无法再切换 Agent 配置。</string>
     <string name="reasoning_effort">思考强度</string>
     <string name="model_context_window">上下文 %1$s tokens</string>
+    <string name="model_group_count">· %1$d 个模型</string>
+    <string name="model_group_empty">· 暂无可用模型</string>
+    <string name="model_group_current">当前</string>
+    <string name="model_group_expand">展开该供应商的模型</string>
+    <string name="model_group_collapse">收起该供应商的模型</string>
     <string name="settings_subtitle">管理连接、模型供应商、设备权限和语言</string>
     <string name="about">关于</string>
     <string name="author">作者</string>
@@ -661,6 +674,7 @@
     <string name="err_file_changed">文件在别处被改过，重新加载再试</string>
     <string name="err_no_root_selected">请先选择一个授权根目录</string>
     <string name="err_session_missing">找不到这个会话</string>
+    <string name="err_subagent_missing">看不到这个成员的对话（它可能不属于当前团队，或桥版本过旧）</string>
     <string name="err_session_forbidden">这个会话不在已授权的目录里，桥拒绝了这次操作</string>
     <string name="err_workspace_missing">找不到这个工作区</string>
     <string name="err_workspace_outside_root">这个工作区不在已授权的目录里</string>

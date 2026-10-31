@@ -16,7 +16,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
@@ -24,12 +23,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -124,6 +120,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -186,7 +183,6 @@ import io.github.westanke.dshcompanion.data.FileEntry
 import io.github.westanke.dshcompanion.data.MentionQuery
 import io.github.westanke.dshcompanion.data.ComposerSendPolicy
 import io.github.westanke.dshcompanion.data.ModelSelection
-import io.github.westanke.dshcompanion.data.ModelView
 import io.github.westanke.dshcompanion.data.PendingApproval
 import io.github.westanke.dshcompanion.data.PendingQuestionSet
 import io.github.westanke.dshcompanion.data.PermissionSelect
@@ -207,7 +203,6 @@ import io.github.westanke.dshcompanion.data.SessionFileRefs
 import io.github.westanke.dshcompanion.data.deliverables
 import io.github.westanke.dshcompanion.data.TodoItem
 import io.github.westanke.dshcompanion.data.displayItems
-import io.github.westanke.dshcompanion.data.formatContextWindow
 import io.github.westanke.dshcompanion.data.permissionSelect
 import io.github.westanke.dshcompanion.data.todoItems
 import java.io.InputStream
@@ -231,13 +226,43 @@ import io.github.westanke.dshcompanion.selectWorkspacePickerRoot
  *
  * 这三个弹层都在列表层被唤起（新建入口在工作区按钮旁），与消息流无耦合。
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ModelSheet(state: HarnessState, viewModel: HarnessViewModel, onClose: () -> Unit) {
     val sessionModels = state.sessionModels
     val session = state.sessions.find { it.id == state.selectedSessionId }
     val currentPreset = session?.agentPreset
         ?: state.agentPresets.firstOrNull { it.isDefault && it.available }?.id
+    val expansion = rememberModelGroupExpansion(sessionModels?.current?.provider)
+    // 乐观高亮：点下去立刻亮，不等「写 RPC + 重拉 39.7KB sessionModels」这趟往返。
+    // 服务端回填的 current 追上 pending 后清空，界面从"本地猜测"无缝交还给"服务端事实"。
+    var pending by remember { mutableStateOf<ModelSelection?>(null) }
+    // 写失败时服务端事实永远追不上 pending，转圈会一直挂在那儿——比改造前更糟。
+    // 所以给本地猜测设一个上限寿命：到点还没被服务端确认就撤销，界面交还服务端事实。
+    // 不用 state.busy 判断「这趟跑完了没」：那是全局共享标志，别的操作一结束就会误伤。
+    LaunchedEffect(pending) {
+        val target = pending ?: return@LaunchedEffect
+        delay(6_000)
+        if (pending == target) pending = null
+    }
+    LaunchedEffect(sessionModels?.current, pending) {
+        val target = pending
+        val confirmed = sessionModels?.current
+        if (target != null && confirmed != null &&
+            confirmed.provider == target.provider && confirmed.model == target.model &&
+            confirmed.reasoningEffort == target.reasoningEffort
+        ) {
+            pending = null
+        }
+    }
+    val shown = pending ?: sessionModels?.current
+    val submit: (ModelSelection) -> Unit = { target ->
+        // 同一个目标还在路上时再点等于重复发写请求，直接吞掉。
+        if (pending != target) {
+            pending = target
+            viewModel.selectModel(target)
+        }
+    }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
         onDismissRequest = onClose,
@@ -290,17 +315,30 @@ internal fun ModelSheet(state: HarnessState, viewModel: HarnessViewModel, onClos
                     }
                 } else {
                     sessionModels.groups.forEach { group ->
-                        item(group.id) {
-                            Text(
-                                group.name,
-                                modifier = Modifier.padding(top = 14.dp, bottom = 6.dp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.labelLarge,
+                        val expanded = expansion.isOpen(group.id)
+                        val holdsCurrent = shown?.provider == group.id
+                        item("header:${group.id}") {
+                            ModelProviderHeader(
+                                name = group.name,
+                                modelCount = group.models.size,
+                                expanded = expanded,
+                                holdsCurrent = holdsCurrent,
+                                onToggle = { expansion.toggle(group.id) },
                             )
                         }
-                        items(group.models, key = { "${group.id}:${it.id}" }) { model ->
-                            val selected = sessionModels.current.provider == group.id && sessionModels.current.model == model.id
-                            ModelRow(group.id, model, selected, sessionModels.current, viewModel)
+                        if (expanded) {
+                            items(group.models, key = { "${group.id}:${it.id}" }) { model ->
+                                val target = ModelSelection(group.id, model.id, model.reasoning?.defaultEffort)
+                                val selected = shown?.provider == group.id && shown.model == model.id
+                                ModelRow(
+                                    providerId = group.id,
+                                    model = model,
+                                    selected = selected,
+                                    current = shown ?: sessionModels.current,
+                                    pending = selected && pending == target,
+                                    onSelect = submit,
+                                )
+                            }
                         }
                     }
                 }
@@ -344,81 +382,6 @@ internal fun AgentPresetRow(
         }
         if (selected) Icon(Icons.Outlined.Check, null, tint = MaterialTheme.colorScheme.secondary)
     }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-internal fun ModelRow(
-    providerId: String,
-    model: ModelView,
-    selected: Boolean,
-    current: ModelSelection,
-    viewModel: HarnessViewModel,
-) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .clickable {
-                viewModel.selectModel(
-                    ModelSelection(
-                        providerId,
-                        model.id,
-                        model.reasoning?.defaultEffort,
-                    ),
-                )
-            }
-            .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(model.name, style = MaterialTheme.typography.titleMedium)
-                model.description?.let {
-                    Text(
-                        it,
-                        modifier = Modifier.padding(top = 2.dp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-                model.contextWindow?.let {
-                    Text(
-                        stringResource(R.string.model_context_window, formatContextWindow(it)),
-                        modifier = Modifier.padding(top = 2.dp),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-            }
-            if (selected) Icon(Icons.Outlined.Check, null, tint = MaterialTheme.colorScheme.secondary)
-        }
-        if (selected && !model.reasoning?.efforts.isNullOrEmpty()) {
-            Text(
-                stringResource(R.string.reasoning_effort),
-                modifier = Modifier.padding(top = 12.dp, bottom = 7.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.labelMedium,
-            )
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                model.reasoning.efforts.forEach { effort ->
-                    val active = current.reasoningEffort == effort.id
-                    Surface(
-                        onClick = { viewModel.selectModel(ModelSelection(providerId, model.id, effort.id)) },
-                        shape = CircleShape,
-                        color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-                        contentColor = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                        border = if (active) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                    ) {
-                        Text(effort.name, Modifier.padding(horizontal = 12.dp, vertical = 7.dp), style = MaterialTheme.typography.labelMedium)
-                    }
-                }
-            }
-        }
-    }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f))
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

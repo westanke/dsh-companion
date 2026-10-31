@@ -67,6 +67,10 @@ fun localizedErrorRes(code: String?): Int? = when (normalizeErrorCode(code)) {
 
     // ———— 会话 · 聊天 ————
     "SESSION_NOT_FOUND" -> R.string.err_session_missing
+    // 子会话历史的只读窄口（桥 2.9.0+）用它表示「这个 id 不是本团队成员」或
+    // 「Lead 投影取不到、成员关系无从证明」。两种情形刻意不区分（否则子会话 id 的
+    // 存否就成了探测面），文案也只说「看不到这个成员的对话」，不猜是哪一种。
+    "SUBAGENT_NOT_FOUND" -> R.string.err_subagent_missing
     // 桥侧 WS 写帧（P4 目标写操作）对未授权会话回这个码，见 ws-goals.ts 的 forwardError。
     "SESSION_FORBIDDEN" -> R.string.err_session_forbidden
     "WORKSPACE_NOT_FOUND" -> R.string.err_workspace_missing

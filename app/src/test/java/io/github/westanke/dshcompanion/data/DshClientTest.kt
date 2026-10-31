@@ -96,6 +96,27 @@ class DshClientTest {
         assertEquals("/api/v1/chat/sessions/session%2F1/messages?beforeSeq=42&maxMessages=25", request.path)
     }
 
+    /**
+     * 子会话历史走的是**另一条**路径：`/subagents/{id}/messages`，不是普通 `/messages`。
+     *
+     * 这条断言守的是「两个 id 都得进路径」—— 桥的窄口靠 Lead id 授权、靠 subagent id 取数，
+     * 少一个就会被 404。最容易犯的错是复用 [DshClient.history] 的路径拼接：那样 subagent id
+     * 会被当成普通会话 id 打过去，永远 404 且从报错里看不出原因。
+     */
+    @Test
+    fun requestsSubagentHistoryUnderLeadSessionPath() {
+        server.enqueue(MockResponse().setBody("""{"events":[],"hasMore":false}""").setHeader("Content-Type", "application/json"))
+        val client = DshClient(server.url("/").toString(), "device-token")
+
+        client.subagentHistory("lead/1", "sub/2", beforeSeq = 7, maxMessages = 30)
+
+        val request = server.takeRequest()
+        assertEquals(
+            "/api/v1/chat/sessions/lead%2F1/subagents/sub%2F2/messages?beforeSeq=7&maxMessages=30",
+            request.path,
+        )
+    }
+
     @Test
     fun websocketHandshakeKeepsAnOkHttpCompatibleUrlScheme() {
         val httpClient = DshClient("http://example.test:3090")

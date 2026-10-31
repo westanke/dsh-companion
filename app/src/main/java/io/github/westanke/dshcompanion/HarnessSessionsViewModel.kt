@@ -20,6 +20,7 @@ import io.github.westanke.dshcompanion.data.DirectoryPage
 import io.github.westanke.dshcompanion.data.DshApiException
 import io.github.westanke.dshcompanion.data.DshClient
 import io.github.westanke.dshcompanion.data.DshConnectionException
+import io.github.westanke.dshcompanion.data.subagentHistory
 import io.github.westanke.dshcompanion.data.FileEntry
 import io.github.westanke.dshcompanion.data.handoffPathOf
 import io.github.westanke.dshcompanion.data.LiveChatState
@@ -266,6 +267,54 @@ internal fun HarnessViewModel.openSessionFile(absolutePath: String) {
 
 /** 关闭面板里的文件详情，回到路径列表。 */
 internal fun HarnessViewModel.closeSessionFile() = update { copy(sessionFileOpen = null) }
+
+/**
+ * 打开团队面板里的一个**子会话（团队成员）**，看它自己的对话。
+ *
+ * 走桥的只读窄口 `GET /chat/sessions/{lead}/subagents/{sub}/messages`：普通
+ * `/messages` 对子会话 id **必然 404**（子会话被桥的会话列表刻意滤掉了，见
+ * `DshClient.subagentHistory` 的注释）。所以两个 id 都要带 —— lead 是授权依据，
+ * sub 是取数目标，缺一个桥就拒。
+ *
+ * 为什么只读：写成员会话会让「谁在指挥谁」含混，官方 Web 端同样只允许经 Lead 的
+ * 模型工具去写。这里连输入框都不给，就是为了不制造第二条指挥通道。
+ */
+internal fun HarnessViewModel.openSubagent(subagentId: String, label: String?) {
+    val api = client ?: return
+    val leadId = mutableState.value.selectedSessionId ?: return
+    update { copy(subagentView = SubagentView(sessionId = leadId, subagentId = subagentId, label = label)) }
+    viewModelScope.launch {
+        val outcome = runCatching {
+            withContext(Dispatchers.IO) { api.subagentHistory(leadId, subagentId) }
+        }
+        // 用户可能在读取期间切了会话或点了另一个成员；结果只对发起它的那对 (lead, sub) 有效。
+        val current = mutableState.value.subagentView
+        if (current == null || current.sessionId != leadId || current.subagentId != subagentId) return@launch
+        outcome
+            .onSuccess { history ->
+                update { copy(subagentView = current.copy(loading = false, history = history, failure = null)) }
+            }
+            .onFailure { failure ->
+                update {
+                    copy(
+                        subagentView = current.copy(
+                            loading = false,
+                            // 端点不存在 = 桥版本过旧（这条窄口是 2.9.0 才有的）。
+                            // 与「不是本团队成员」分开说，否则用户会去升级一个已经最新的桥。
+                            failure = if (failure is DshApiException && failure.code == "ROUTE_NOT_FOUND") {
+                                "PLUGIN_TOO_OLD"
+                            } else {
+                                messageOf(failure)
+                            },
+                        ),
+                    )
+                }
+            }
+    }
+}
+
+/** 关闭子会话视图，回到团队名册。 */
+internal fun HarnessViewModel.closeSubagent() = update { copy(subagentView = null) }
 
 internal fun HarnessViewModel.loadSessionFile(api: DshClient, sessionId: String, absolutePath: String): SessionFileOutcome {
     val resolved = api.resolvePath(absolutePath)

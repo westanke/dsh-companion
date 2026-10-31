@@ -164,6 +164,28 @@ data class SessionFileOpen(
 )
 
 /**
+ * 正在查看的**子会话（团队成员）**历史。
+ *
+ * 与 [SessionFileOpen] 同构：`sessionId` 是发起查看的 **Lead** 会话（切走就作废），
+ * `subagentId` 是被查看的那个成员/子会话。两者必须成对 —— 桥的窄口授权就是
+ * 「Lead 可见 + 内核投影背书 subagentId 属于该 Lead」，只带 subagentId 拿不到任何东西。
+ *
+ * 只读：这份状态没有任何「发送」动作。写成员会话会让「谁在指挥谁」含混，
+ * 官方 Web 端同样只允许经 Lead 的模型工具去写。
+ */
+data class SubagentView(
+    /** 发起查看的 Lead 会话 id。切到别的会话后，这个结果就不该再显示。 */
+    val sessionId: String,
+    val subagentId: String,
+    /** 成员名/标签，只用于标题展示（可能为 null，退化成 id 前缀）。 */
+    val label: String? = null,
+    val loading: Boolean = true,
+    val history: ChatHistory? = null,
+    /** 可直接展示的失败文本（例如「这不是本团队的成员」或「桥版本过旧」）。 */
+    val failure: String? = null,
+)
+
+/**
  * 一条已经准备好、等着随消息一起发出去的附件。
  *
  * 图片在 [part] 里已经内联好了 base64（[imageBytes] 只是留一份原图给界面画缩略图，
@@ -430,6 +452,8 @@ data class HarnessState(
     val document: OpenDocument? = null,
     /** 会话文件面板正在查看的那一条（null 表示面板显示路径列表）。 */
     val sessionFileOpen: SessionFileOpen? = null,
+    /** 团队面板里正在查看的子会话（null 表示只看名册，没点进任何成员）。 */
+    val subagentView: SubagentView? = null,
     val trash: List<TrashEntry> = emptyList(),
     /**
      * 智能体正在运行时，Enter 与主发送按钮的默认行为。
