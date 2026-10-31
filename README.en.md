@@ -303,7 +303,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.64.apk
+DSH伴侣-companion-v2.2.65.apk
 ```
 
 Requirements:
@@ -604,10 +604,23 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 - Unit tests: 88 test classes / 876 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.64.apk`, **3,381,660 bytes**, SHA-256
-  `299d59d37a4d9667ac539f9993ddc294da0788ac2a26d63c2721074861818447` (kept in sync in
+- Current APK: `DSH伴侣-companion-v2.2.65.apk`, **3,382,128 bytes**, SHA-256
+  `44dd2f68d31898e1bc254150d8d9e03b2e866df9156e7ac37545f76c83170be9` (kept in sync in
   `artifacts/SHA256SUMS.txt`; real values are backfilled by release stage A).
-  **This release (v2.2.64: teammates are readable + models fold by provider)**: three device reports
+  **This release (v2.2.65: the drawer shows the device you are actually on)**: fixes an old
+  problem that looked like a bug but was not. The drawer header used to read `HarmonyOS · ICL-AL10`
+  while the phone was a vivo V2080A. The bridge row already had `model = V2080A`; only `name` was
+  still the value declared when this pairing token was first used, and "a declared name is never
+  auto-overwritten" is deliberate — it must not clobber a name the user chose. With a single name on
+  screen there was no way to tell "a declared name" from "the machine I am holding". Now, when the
+  name and the bridge-reported `model` disagree, a second line shows the actual device
+  (**On this device now · Android · V2080A**). The data was already in `DeviceView` (bridge >= 2.6.1
+  reports it); it just was not displayed.
+  This release also extends the line-budget guard from "only `app/src/main/java`" to
+  `assets/chat/*.js`: the debt ledger declared that scope back on 2026-10-18, but the guard never
+  implemented it, so `interact.js` grew from 803 to 1,059 lines while still being waved through as
+  "3 lines over budget". A rule written but not enforced is not a rule.
+  **Previous release (v2.2.64: teammates are readable + models fold by provider)**: three device reports
   fixed in one go. (1) Every subagent card in the team panel is now tappable (with a trailing chevron)
   and opens a read-only "teammate conversation" window showing exactly what that teammate said and
   produced; the data comes from the bridge's new read-only narrow port
