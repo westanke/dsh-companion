@@ -340,19 +340,24 @@ onward tags are kept across Gitee / AtomGit / GitHub (GitHub is an auto-synced m
 
 ## Screenshots
 
-<!-- The navigation-drawer screenshot was removed: since v1.2.0 the drawer also lists
-     "Plugins" and shows the current endpoint underneath, so the old image no longer matched.
-     No Android device is available here to re-take it, so it is omitted rather than left wrong. -->
+<!-- All screenshots re-taken on a real vivo V2080A (Android 11) on 2026-10-31, matching the
+     current build. The previous set was shot on 2026-10-08, before the team panel, sub-session
+     drill-in, the ⋯ menu consolidation and the provider-grouped model sheet — it no longer
+     matched. It was kept back then only because no Android device was on hand; now it is fixed. -->
 <p align="center">
-  <img src="./assets/screenshots/chat-demo.jpg" width="47%" alt="Chat and live responses">
-  <img src="./assets/screenshots/file-browser.jpg" width="47%" alt="Authorized-root file browser">
+  <img src="./assets/screenshots/connect.jpg" width="47%" alt="Connect screen: saved machines with LAN and virtual-network endpoints">
+  <img src="./assets/screenshots/chat-demo.jpg" width="47%" alt="Session: Markdown, code blocks and deliverable cards">
 </p>
 <p align="center">
-  <img src="./assets/screenshots/file-editor.jpg" width="47%" alt="Text editor with line numbers and zoom">
-  <img src="./assets/screenshots/workspace-create.jpg" width="47%" alt="Create a workspace and start a session">
+  <img src="./assets/screenshots/workspace-create.jpg" width="47%" alt="New session: workspace, agent mode and permission mode">
+  <img src="./assets/screenshots/file-browser.jpg" width="47%" alt="Authorized-root file browser with create, upload and purge">
 </p>
 <p align="center">
-  <img src="./assets/screenshots/model-providers.jpg" width="47%" alt="Model provider settings">
+  <img src="./assets/screenshots/file-editor.jpg" width="47%" alt="Text editor with line numbers, search and zoom">
+  <img src="./assets/screenshots/model-providers.jpg" width="47%" alt="Model providers: configured and unconfigured at a glance">
+</p>
+<p align="center">
+  <img src="./assets/screenshots/plugins.jpg" width="47%" alt="Plugins: load state and pending items for this profile">
 </p>
 
 ## Connect to DSH

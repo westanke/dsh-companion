@@ -326,18 +326,23 @@ Gitee / AtomGit / GitHub 三端（GitHub 为自动镜像），产物见 Releases
 
 ## 界面预览
 
-<!-- 导航侧栏截图已移除：v1.2.0 起抽屉内多出「插件」入口，底部还多了当前地址，
-     旧图与实际不符；本机无 Android 设备可重录，宁缺毋滥。 -->
+<!-- 全部截图 2026-10-31 于 vivo V2080A（Android 11）真机重拍，对应当前版本。
+     此前那批摄于 2026-10-08，早于团队面板、子会话、⋯ 菜单收敛与按供应商分组的模型弹层，
+     与本版界面已不符 —— 那次因「本机无 Android 设备可重录」而保留，现已补上。 -->
 <p align="center">
-  <img src="./assets/screenshots/chat-demo.jpg" width="47%" alt="聊天与实时回复">
-  <img src="./assets/screenshots/file-browser.jpg" width="47%" alt="授权根目录文件浏览">
+  <img src="./assets/screenshots/connect.jpg" width="47%" alt="连接页：已保存的电脑与双地址（局域网 / 虚拟网）">
+  <img src="./assets/screenshots/chat-demo.jpg" width="47%" alt="会话页：Markdown、代码块与交付物卡片">
 </p>
 <p align="center">
-  <img src="./assets/screenshots/file-editor.jpg" width="47%" alt="带行号和缩放的文本编辑器">
-  <img src="./assets/screenshots/workspace-create.jpg" width="47%" alt="创建工作区并开始会话">
+  <img src="./assets/screenshots/workspace-create.jpg" width="47%" alt="新建会话：工作区、Agent 模式与权限模式">
+  <img src="./assets/screenshots/file-browser.jpg" width="47%" alt="授权根目录文件浏览：新建、上传、清理">
 </p>
 <p align="center">
-  <img src="./assets/screenshots/model-providers.jpg" width="47%" alt="模型供应商设置">
+  <img src="./assets/screenshots/file-editor.jpg" width="47%" alt="带行号、查找与缩放的文本编辑器">
+  <img src="./assets/screenshots/model-providers.jpg" width="47%" alt="模型供应商设置：已配置与未配置一目了然">
+</p>
+<p align="center">
+  <img src="./assets/screenshots/plugins.jpg" width="47%" alt="插件页：本机 profile 的加载状态与待处理项">
 </p>
 
 ## 连接你的 DSH
