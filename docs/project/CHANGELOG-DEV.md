@@ -1,5 +1,55 @@
 # 开发日志
 
+## v2.2.65 · 抽屉显示真实设备 + 行数守卫覆盖 assets（2026-10-31）
+
+### 基于什么
+v2.2.64。两条登记在 issue 里的真实待办，都是小改。
+
+### ① 抽屉显示真实设备（#7）
+
+**症状**：抽屉顶部显示 `HarmonyOS · ICL-AL10`，而这台机器是 **vivo V2080A / Android 11**。
+
+**根因**：不是 bug，是「声明过的名字不再自动覆盖」这条设计的必然后果。桥侧那条设备记录：
+
+```
+name = HarmonyOS · ICL-AL10    platform = android    model = V2080A    name_source = declared
+```
+
+`model` 早已跟着换成了 V2080A，只有 `name` 停在配对时声明的旧值。而界面只有一行名字，
+用户无从判断它是「声明过的名字」还是「此刻这台机器」。
+
+**改法**（取 issue #7 的方案 1，成本最小）：名字与桥回传的 `model` 不一致时，补一行
+`当前设备 · Android · V2080A`。数据本来就有（`DeviceView` 的 `platform` / `model`，2.6.1 起就回传），
+此前只是没显示。`platform` 做首字母大写，免得小写的 `android` 读起来像型号的一部分。
+
+**真机验证**（v2080A）：抽屉现显示两行 —— `HarmonyOS · ICL-AL10` + `当前设备 · Android · V2080A`。
+
+### ② 行数守卫覆盖 assets（#4 的一半）
+
+**症状**：`chat/interact.js` 实际 **1 059 行**，`TECH-DEBT.md` 却记着 **803 行**（「超预算 3 行」）。
+
+**根因**：台账第 51 行早在 2026-10-18 就写着「本表登记范围自此扩大到 `assets/chat/*.js`」，
+但 `ArchitectureGuardTest` 的行数守卫**只扫 `app/src/main/java/`** —— `assets/` 全程没人检查，
+数字因此漂了 256 行无人发现。**制度写了、守卫没做，等于没写。**
+
+**改法**：
+- 台账数值修正为 1 059，并注明漂移原因与修正日期。
+- 守卫新增第二个扫描面 `assets/chat/*.js`，与 `.kt` 共用同一套「台账登记行数 ≥ 实际」的校验，
+  不另立规则；`packagePath` 加一支 assets 相对路径，让台账沿用既有的 `chat/interact.js` 写法。
+
+**过程中被自己的下限断言逮住两次**，都记在这里：
+1. `File(MAIN_ROOT, "assets/chat")` 指到了 `java/assets/chat`（`MAIN_ROOT` 是 `app/src/main/java`），
+   扫到 0 个 `.js` → `sanity()` 当场红。若没有那条下限断言，这个错路径会静默全绿。
+2. 我在 JSDoc 里写了 `` `assets/chat/*.js` ``，其中的 `*/` 把注释**提前闭合**了，
+   导致后面整段代码被当成注释吞掉。Kotlin 文档注释里的 `*/` 必须避开 —— 已改写措辞。
+
+**仍未做**：`interact.js` 本身没拆，仍是 1 059 行（超预算 259 行）。拆分属 #4 的另一半，
+`renderHistory` 提出去才能收掉。
+
+### 测了什么
+`docsCheck`、`:app:testDebugUnitTest`（含 `ArchitectureGuardTest` 6 条）、`lintDebug` 全绿；
+真机装 debug 包验证抽屉显示，装后用 `pm path` + sha256 与本地产物逐字节比对。
+
 本文件记录本仓库的改动。每条都写清**基于什么、为什么、干了什么、测了什么**。
 上半部分是本仓库新增的开发记录，下半部分是上游 `Hakunm/dsh-android-app` 的历史（原样保留）。
 

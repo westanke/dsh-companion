@@ -411,6 +411,32 @@ private fun NavigationPanel(
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodySmall,
                 )
+                // 配对时的名字一旦被声明（nameSource=declared），桥就**不再自动更新**它 ——
+                // 这是刻意的，免得覆盖用户起的名字。代价是：把同一台设备（或同一份令牌）
+                // 换到另一支手机上之后，这里会一直显示旧设备的平台与型号，而界面上没有任何
+                // 线索说明它是「声明过的名字」还是「此刻这台机器」。
+                //
+                // 解法取 issue #7 的方案 1：名字与**桥回传的 model** 不一致时，补一行真实的
+                // 当前设备。数据本来就有（DeviceView 的 platform/model），只是此前没显示。
+                val declared = state.device?.name
+                val actualModel = state.device?.model
+                if (declared != null && actualModel != null && declared.contains(actualModel).not()) {
+                    Text(
+                        text = stringResource(
+                            R.string.drawer_actual_device,
+                            // platform 是客户端自报的小写标识（`android`），直接拼出来像型号的一部分；
+                            // 首字母大写后读作「当前设备 · Android · V2080A」，与上面的名字区分开。
+                            listOfNotNull(
+                                state.device?.platform?.replaceFirstChar { it.uppercase() },
+                                actualModel,
+                            ).joinToString(" · "),
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
             }
             IconButton(onClick = onRefresh, enabled = !state.busy) {
                 if (state.busy) CircularProgressIndicator(Modifier.size(19.dp), strokeWidth = 2.dp)

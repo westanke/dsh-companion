@@ -103,10 +103,14 @@ class ArchitectureGuardTest {
         val debt = readDebtRegistry()
         val files = ktFiles(MAIN_ROOT)
         sanity(files.size >= 40, "app/src/main/java 下只扫到 ${files.size} 个 .kt（预期 ≥ 40），盘面不对")
+        // assets/chat/*.js 同受这条预算约束（TECH-DEBT.md 第 51 行 2026-10-18 已扩大登记范围）。
+        // 两个扫描面共用下面同一套「台账登记行数 ≥ 实际」的校验，不另立规则。
+        val web = webFiles(ASSETS_CHAT)
+        sanity(web.size >= 6, "assets/chat 下只扫到 ${web.size} 个 .js（预期 ≥ 6），目录移动或改名了")
 
         val violations = mutableListOf<String>()
         var exempt = 0
-        files.forEach { file ->
+        (files + web).forEach { file ->
             val actual = file.readLines().size
             if (actual <= LINE_BUDGET) return@forEach
             val candidates = listOfNotNull(packagePath(file), repoPath(file))
@@ -546,6 +550,19 @@ private val TEST_PACKAGE_ROOT: File by lazy { File(TEST_ROOT, PACKAGE_DIR) }
 private val GUARD_FILE: File by lazy { File(TEST_PACKAGE_ROOT, GUARD_FILE_NAME) }
 private val FACADE_FILE: File by lazy { File(MAIN_PACKAGE_ROOT, "data/ChatPresentation.kt") }
 private val TECH_DEBT: File by lazy { File(REPO_ROOT, "docs/project/TECH-DEBT.md") }
+
+/**
+ * 行数预算的第二个扫描面：`assets/chat/` 下的 `.js`。
+ *
+ * 为什么它必须被扫：`TECH-DEBT.md` 第 51 行早在 2026-10-18 就写着「本表登记范围自此扩大到
+ * `assets/chat/` 下的 js」，但守卫只扫 `app/src/main/java/`，于是 `interact.js` 从 803 行长到
+ * 1 059 行、台账数字一直停在 803，**超预算 259 行却以「只差 3 行」的名义被放过**。
+ * 制度写了、守卫没做，等于没写 —— 这条注释就是那次事故的收据。
+ */
+// 注意：MAIN_ROOT 是 `app/src/main/java`，不是 `app/src/main` —— assets 与它**同级**，
+// 所以这里从 REPO_ROOT 起算。写成 File(MAIN_ROOT, "assets/chat") 会指向 java/assets/chat，
+// 扫到 0 个文件；那正是下限断言存在的理由（它当场把这条错路径抓了出来）。
+private val ASSETS_CHAT: File by lazy { File(REPO_ROOT, "app/src/main/assets/chat") }
 private val PITFALLS: File by lazy { File(REPO_ROOT, "docs/project/PITFALLS.md") }
 private val AGENTS_MD: File by lazy { File(REPO_ROOT, "AGENTS.md") }
 
@@ -581,6 +598,11 @@ private fun sanity(condition: Boolean, what: String) {
 private fun ktFiles(root: File): List<File> =
     root.walkTopDown().filter { it.isFile && it.name.endsWith(".kt") }.sortedBy { it.path }.toList()
 
+/** `assets/chat/` 下的 WebView 资产（`.js`）。与 `.kt` 同受 800 行预算约束。 */
+private fun webFiles(root: File): List<File> =
+    if (!root.isDirectory) emptyList()
+    else root.walkTopDown().filter { it.isFile && it.name.endsWith(".js") }.sortedBy { it.path }.toList()
+
 /** 路径前缀计算（自己写，不依赖实验性 API）。 */
 private fun relativeOrNull(base: File, file: File): String? {
     val basePath = base.absoluteFile.canonicalFile.path
@@ -595,7 +617,12 @@ private fun repoPath(file: File): String = relativeOrNull(REPO_ROOT, file) ?: fi
 
 /** 包内相对路径：`ui/Foo.kt` —— 台账与文档里用的是这一种。 */
 private fun packagePath(file: File): String? =
-    relativeOrNull(MAIN_PACKAGE_ROOT, file) ?: relativeOrNull(TEST_PACKAGE_ROOT, file)
+    relativeOrNull(MAIN_PACKAGE_ROOT, file)
+        ?: relativeOrNull(TEST_PACKAGE_ROOT, file)
+        // assets 下的 WebView 资产不挂在 java 包路径下，但台账里沿用的是同一种
+        // 「相对用途目录」写法（`chat/core.js`、`chat.html`），所以这里按父目录换基。
+        // 少了这一支，台账那行 `chat/interact.js` 永远匹配不上，守卫会一直报「未登记」。
+        ?: relativeOrNull(ASSETS_CHAT.parentFile, file)
 
 /**
  * 整行注释放行（`//` `/*` `*` `*/` 开头，忽略前导空白）。

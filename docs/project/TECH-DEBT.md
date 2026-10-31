@@ -41,7 +41,7 @@ chat.html 已按「逐字搬迁、零行为变化」拆为壳 + 6 个子文件�
 | `chat/core.js` | 582 | 全局状态 + `$`/`api`/`md` 等基础设施（必须最先加载） |
 | `chat/render.js` | 175 | 思考条 / 消息与活动块 / 失败与截断行 |
 | `chat/tools.js` | 203 | 工具调用组渲染（含 read/bash/edit/write 专用块） |
-| `chat/interact.js` | 803 | 审批 / 问答 / renderHistory / 连接 / 发送 / 弹层 / 斜杠命令（**超预算 3 行**，下批拆 renderHistory 时收掉） |
+| `chat/interact.js` | 1 059 | 审批 / 问答 / renderHistory / 连接 / 发送 / 弹层 / 斜杠命令（**超预算 259 行**，下批拆 renderHistory 时收掉）。⚠️ 本行此前的 803 是失真值：第 51 行早已声明「本表登记范围扩大到 `assets/chat/*.js`」，但 `ArchitectureGuardTest` 的行数守卫只扫 `app/src/main/java/`，`assets/` 全程无人检查，数字因此漂了 256 行无人发现。2026-10-31 修正数值并把守卫扩到 `assets/chat/`。 |
 | `chat/cards.js` | 223 | dsh-ui 卡片渲染 |
 | `chat/bridge.js` | 269 | 附件 / buildParts / `window.dshChat` 桥接导出 |
 

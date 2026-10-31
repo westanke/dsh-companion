@@ -1094,8 +1094,8 @@ android {
         //   依赖：需要 dsh-remote-bridge >= 2.9.0（能力位 subagent-history-v1）。旧桥会走
         //     ROUTE_NOT_FOUND → 映射成 PLUGIN_TOO_OLD，界面提示「桥版本太旧」而非报原始错误码。
         //
-        versionCode = 10089
-        versionName = "2.2.64"
+        versionCode = 10090
+        versionName = "2.2.65"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。

@@ -2,6 +2,8 @@
 <resources>
     <string name="app_name">DSH伴侣</string>
     <string name="mobile_workspace">移动开发工作台</string>
+    <!-- 抽屉里配对名与当前设备不一致时的副行（issue #7）：把「此刻这台机器」显式说出来。 -->
+    <string name="drawer_actual_device">当前设备 · %1$s</string>
     <string name="server">服务器</string>
     <string name="device_pairing">设备配对</string>
     <string name="connect_title">连接 你的 DSH 服务端</string>

@@ -2,6 +2,8 @@
 <resources>
     <string name="app_name">DSH Companion</string>
     <string name="mobile_workspace">Mobile developer workspace</string>
+    <!-- Drawer sub-line shown when the declared pairing name disagrees with the device actually in use (issue #7). -->
+    <string name="drawer_actual_device">On this device now · %1$s</string>
     <string name="server">Server</string>
     <string name="device_pairing">Device pairing</string>
     <string name="connect_title">Connect to your DSH server</string>
