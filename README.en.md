@@ -595,8 +595,8 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 - Unit tests: 88 test classes / 876 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.64.apk`, **0 bytes**, SHA-256
-  `0000000000000000000000000000000000000000000000000000000000000000` (kept in sync in
+- Current APK: `DSH伴侣-companion-v2.2.64.apk`, **3,381,660 bytes**, SHA-256
+  `299d59d37a4d9667ac539f9993ddc294da0788ac2a26d63c2721074861818447` (kept in sync in
   `artifacts/SHA256SUMS.txt`; real values are backfilled by release stage A).
   **This release (v2.2.64: teammates are readable + models fold by provider)**: three device reports
   fixed in one go. (1) Every subagent card in the team panel is now tappable (with a trailing chevron)

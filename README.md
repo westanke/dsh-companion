@@ -541,8 +541,8 @@ keyPassword=...
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：88 个测试类 / 876 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.64.apk`，**0 字节**，
-  SHA-256 `0000000000000000000000000000000000000000000000000000000000000000`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
+- 当前 APK：`DSH伴侣-companion-v2.2.64.apk`，**3,381,660 字节**，
+  SHA-256 `299d59d37a4d9667ac539f9993ddc294da0788ac2a26d63c2721074861818447`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
   **本版（v2.2.64，团队成员可点开查看 + 模型弹窗按供应商折叠）**：三条真机反馈一次解决——
   ①团队面板里的子会话整卡可点（行尾加右箭头），点开弹只读「成员的对话」窗口，能完整读到该成员当初
   说的话与产出；数据走桥新增的只读窄口 `GET /chat/sessions/{lead}/subagents/{sub}/messages`
