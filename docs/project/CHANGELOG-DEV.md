@@ -55,7 +55,15 @@ v2.2.66。用户真机发一张手机原图（`280827.jpg`），等 15 秒后弹
   发送成功、模型正常分析截图内容。
 - [x] **发 JPEG 小图不回归**：小体积图片与上面 PNG 走同一条「不压」分支（`needsImageCompression`
   只看体积），单测 `手机截图体积够小就不压 哪怕长边超过 1600` 钉住该路径；真机未单独再拍一张小 JPEG。
-- 全程 `logcat -d | grep -iE "WS_CHANNEL_CLOSED|WS_TIMEOUT|请求超时|Image type|IMAGE_TOO_LARGE"` 零命中。
+- [x] **在发版产物上复验（不是 debug 包）**：上面三条跑在 `assembleDebug` 的 debug 包上。
+  发版后把 `artifacts/DSH伴侣-companion-v2.2.67.apk` 装到真机重跑一遍 —— 装前设备是 10091/2.2.66，
+  装后 `dumpsys package` 报 **10092 / 2.2.67**，设备 `/data/app/…/base.apk` 的 MD5
+  `a4891bc224f19b97d3e134b26a5d6bd0` 与本地产物**一致**、双方均为 3,382,740 字节（v2.2.62 的教训：
+  不能信 `lastUpdateTime`，要比对 APK 指纹）。重跑结果：4.26 MB 原图 → 附件卡片 **697.0 KiB** →
+  发送一次成功、模型开始分析图内内容；287.8 KiB 的 PNG → 卡片仍显示 **287.8 KiB（零重编码）** →
+  发送成功、模型正常解读截图。
+- 全程 `logcat -d | grep -iE "WS_CHANNEL_CLOSED|WS_TIMEOUT|请求超时|Image type|IMAGE_TOO_LARGE|UNSUPPORTED_IMAGE"` 零命中
+  （debug 包与发版产物两次都扫过；另以宽口径 `dshcompanion.*(Exception|Error|FAIL)` 复扫，同样零命中）。
 
 ### 仍未做
 - **桥侧 `maxPayloadBytes` 可配**（P2，跨仓）：**已在桥仓做完** —— dsh-remote-bridge
@@ -312,9 +320,11 @@ WS 端口直接复用了 `api.json` —— 而 `api.json` 是为**解码**宽容
       **零命中** —— 修复前那条 `Image type undefined is not accepted by this deployment.`
       不再出现。截图 `.dsh-images/verify-png-send-fixed.png`。
 - [x] **纯文字消息不回归**：同一次会话里的文本消息（输入 → 发送 → 回复）全程正常。
-- [ ] **JPEG 真机未复测**（相册里没有 JPEG 样本）：该格式修复前就能发（mediaType 非默认值
+- [x] **JPEG 真机已复测**（v2.2.67 期间补上）：该格式修复前就能发（mediaType 非默认值
       侥幸留在帧里），修复只是把编码改成 `encodeDefaults = true`，不会让已有字段消失；
-      由 `发 JPEG 图片时 mediaType 也要在帧里` 这条单测守着。
+      由 `发 JPEG 图片时 mediaType 也要在帧里` 这条单测守着。**真机**：用 10092/2.2.67 正式产物
+      发 `/sdcard/Pictures/big-photo-real.jpg`（4,263,724 字节的高熵 JPEG）一次成功，
+      附件卡片显示 697.0 KiB（压缩链路生效）、模型读出图内信息，无报错、无 `UNSUPPORTED_IMAGE_TYPE`。
 - [x] **文件附件路径未动**：本次只改 `WsMessagePort` 的 Json 实例，`OpenDocument` → 上传端点
       那条链路一行未碰。
 
