@@ -58,8 +58,12 @@ v2.2.66。用户真机发一张手机原图（`280827.jpg`），等 15 秒后弹
 - 全程 `logcat -d | grep -iE "WS_CHANNEL_CLOSED|WS_TIMEOUT|请求超时|Image type|IMAGE_TOO_LARGE"` 零命中。
 
 ### 仍未做
-- **桥侧 `maxPayloadBytes` 可配**（P2，跨仓）：本次只在客户端压缩，桥的 1 MiB 帧上限没动。
-  想发更大的原图需要 `dsh-remote-bridge` 支持配置，另开 issue。
+- **桥侧 `maxPayloadBytes` 可配**（P2，跨仓）：**已在桥仓做完** —— dsh-remote-bridge
+  issue [#10](https://github.com/westanke/dsh-remote-bridge/issues/10) / commit `a4c4bd2`，
+  `Config.maxPayloadBytes` 可配（默认仍 1 MiB），桥重启后默认路径已实测不回归。
+  但**本仓的 700 KiB 压缩上限先于它生效**：客户端永远压不到 1 MiB 以上，
+  所以桥放宽上限目前对 App 的发图体积没有实际影响 —— 要吃到它，得先放宽这里的
+  `MAX_ENCODED_IMAGE_BYTES`（未做，等有真实需求再说）。
 - 超时后自动重试（会重复发消息）、大图自动改走 REST（双通道分流让错误归因更难）—— 都不做。
 
 ## v2.2.66 · 顶栏间距 / 表格列宽 / 文件链接 / 发图片必挂（2026-11-01）
