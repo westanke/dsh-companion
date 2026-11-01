@@ -1,4 +1,11 @@
 - 日期：2026-11-01
+- **发原图必超时收口（#12，未发版）**：真机发手机原图等 15 秒后报「WS 请求超时（15000ms）」且消息丢失。
+  双缺陷：①客户端按 REST 口径允许 8 MiB 原图，而桥 `/ws/mobile` 单帧上限只有 1 MiB（`ws` 库读到帧头就
+  `close(1009)`，处理器没进）；②`WsRequestRouter` 没有断线入口，在途请求无人唤醒，只能等满超时 ——
+  用户看到的「超时」是假象。改法：发送前按质量阶梯 + 缩边压缩到 700 KiB（`data/ImageCompression.kt`
+  + `data/AndroidImageCodec.kt`，只按体积触发，手机截图一个字节都不动）、常量拆 source/encoded 两个口径、
+  `WsRequestRouter.failAll` + 新码 `WS_CHANNEL_CLOSED` 纳入 `isFrameNeverSent`。单测 89 类 / 916 用例全绿。
+  桥侧 `maxPayloadBytes` 可配（P2）待另开 issue。
 - **v2.2.66（versionCode 10091，发）**：**四处缺陷收口 —— 顶栏间距（#8）、表格列宽（#9）、
   文件链接（#10）、发图片必挂（#11）**。前三件来自「安卓与鸿蒙版逐屏对照」，第四件是用户报障。
   ① 顶栏三处留白按鸿蒙实测值收齐：列表「会话」大字 53→18px、详情标题 48→23.5px、状态行

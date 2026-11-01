@@ -71,6 +71,17 @@ internal class MobileWsTransport(
     private val defaultTimeoutMillis: Long = DEFAULT_TIMEOUT_MS,
     /** 文件类请求超时；默认 [FILE_TIMEOUT_MS]。 */
     private val fileTimeoutMillis: Long = FILE_TIMEOUT_MS,
+    /**
+     * 在途请求被丢弃时的通知（issue #12）。
+     *
+     * 本类只清**自己**那张 `pending` 表（[send] 用的），而真正跑业务请求的是
+     * [WsRequestRouter]，它另有一张在途表，本类看不见。没有这个回调时，断线后
+     * 路由器的请求无人唤醒，只能等满超时 —— 用户看到的就是那句与真相无关的
+     * 「WS 请求超时（15000ms）」。
+     *
+     * 参数是 (错误码, 人话原因)。
+     */
+    private val onPendingDropped: ((code: String, message: String) -> Unit)? = null,
     private val reconnectScope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
 
@@ -389,6 +400,9 @@ internal class MobileWsTransport(
     }
 
     private fun failAllPending(code: String, message: String) {
+        // 先通知路由器（它那张表与这里的 pending 是两回事，见构造参数注释）。
+        // 即使本类的 pending 是空的也要通知 —— 业务请求全在路由器那边。
+        onPendingDropped?.invoke(code, message)
         if (pending.isEmpty()) return
         val snapshot = pending.keys.toList()
         snapshot.forEach { key ->

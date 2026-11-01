@@ -25,13 +25,23 @@ import kotlinx.serialization.json.put
  */
 object ChatContentParts {
     /**
-     * 单张**原图**的字节上限。
+     * 单张**原图**（用户选中的那个文件）的字节上限。
      *
      * 限制的是原始字节而不是 base64 长度：base64 会膨胀约 33%，所以 8 MiB 原图
      * 在请求体里约 10.7 MiB。先在这里拦下来，用户拿到的是「先压缩再试」这种能照做的
      * 提示，而不是等一个 413。
+     *
+     * 注意这里只管**源文件**大小。真正上线缆的字节受两条不同约束：
+     * - REST：300 MiB 请求体（`dsh-client-connection` 的 `DEFAULT_MAX_REQUEST_BODY_BYTES`），
+     *   8 MiB 原图绰绰有余；
+     * - WS：桥的 `/ws/mobile` 单帧上限 **1 MiB**（`dsh-remote-bridge` `server.ts` 的
+     *   `DEFAULT_MAX_PAYLOAD_BYTES`），超了 `ws` 库直接 `close(1009)`。
+     *
+     * 两条差了 300 倍，所以图片在**入队前**就按 WS 的口径压过一遍
+     * （[MAX_ENCODED_IMAGE_BYTES]，见 `ImageCompression.kt`）。这是 issue #12：
+     * 2026-11-01 真机发手机原图必挂，报的还是一句「WS 请求超时（15000ms）」。
      */
-    const val MAX_IMAGE_BYTES: Long = 8L * 1024 * 1024
+    const val MAX_SOURCE_IMAGE_BYTES: Long = 8L * 1024 * 1024
 
     /**
      * 单个**文件附件**的字节上限。
@@ -57,11 +67,12 @@ object ChatContentParts {
     /**
      * 构造一个内联图片 part。
      *
-     * 超限直接抛 [IllegalArgumentException]（`IMAGE_TOO_LARGE`），而不是造一个超大
-     * 请求体让服务端去拒绝 —— 那时用户已经等了一轮上传。
+     * 上限是 [MAX_ENCODED_IMAGE_BYTES] 而不是源图的 8 MiB：能走到这里说明图片已经过
+     * `prepareImageForWire` 压缩（见 `ImageCompression.kt`），此刻还超 700 KiB 就是
+     * 压缩没兜住，属于该报错的异常，而不是硬塞一个必然被桥 `close(1009)` 的帧。
      */
     fun imagePart(mediaType: String, bytes: ByteArray, name: String? = null): PromptPart {
-        require(bytes.size.toLong() <= MAX_IMAGE_BYTES) { "IMAGE_TOO_LARGE" }
+        require(bytes.size.toLong() <= MAX_ENCODED_IMAGE_BYTES) { "IMAGE_TOO_LARGE" }
         return PromptPart.ImagePart(
             mediaType = mediaType,
             data = base64(bytes),

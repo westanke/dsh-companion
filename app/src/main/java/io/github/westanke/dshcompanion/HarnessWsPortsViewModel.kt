@@ -348,6 +348,9 @@ internal fun HarnessViewModel.connectWsTransport(api: DshClient) {
         token = token,
         onPush = { frame -> router.onFrame(frame) },
         onStateChange = { reconcileEventChannel() },
+        // 断线时把路由器那张在途表也清掉（issue #12）。不接这根线的话，桥 `close(1009)`
+        // 之后业务请求要等满 15 秒才报超时，而真因（帧超 1 MiB）永远不会出现在错误里。
+        onPendingDropped = { code, message -> router.failAll("$message（$code）") },
     )
     transportRef = transport
     wsRouter = router
@@ -610,9 +613,20 @@ internal class AdaptiveMessagePort(
  *
  * `internal` 而不是 `private`：P3 的 `HarnessDomainPortsViewModel.kt` 必须复用**同一份**判据。
  * 两份判据迟早会漂，而漂的后果是「超时后偷偷重试写操作」。
+ *
+ * ## 为什么 `WS_CHANNEL_CLOSED` 也在这里（issue #12）
+ *
+ * 它是「通道被关时还在途」的失败码（见 `WsRequestRouter.failAll`）。归到「帧没送达」一侧
+ * 是因为**桥关连接的方式**：单帧超限时 `ws` 库在**读到帧头**就 `close(1009)`，
+ * 处理器根本没被调用，帧里的内容一个字节都没被消费。重发是安全的，而且必须重发 ——
+ * 否则用户发一张原图，等 15 秒，消息还静默丢了。
+ *
+ * 别把它和 `WS_TIMEOUT` 混为一谈：超时时帧**可能**已经送达并产生了副作用，
+ * 那种情况绝不能偷偷重试（发消息不幂等，重试等于问两遍）。
  */
 internal fun isFrameNeverSent(failure: DshApiException): Boolean =
-    failure.code == "WS_NOT_READY" || failure.code == "WS_SEND_FAILED"
+    failure.code == "WS_NOT_READY" || failure.code == "WS_SEND_FAILED" ||
+        failure.code == "WS_CHANNEL_CLOSED"
 
 /** WS 传输层失败（而不是服务端业务错误）：读操作遇到它就该回落 REST。理由见 [isFrameNeverSent]。 */
 internal fun isWsTransportFailure(failure: DshApiException): Boolean =

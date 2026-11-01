@@ -15,6 +15,15 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 
 /**
+ * 通道断开时在途请求的失败码（issue #12）。
+ *
+ * 与 `WS_TIMEOUT` 的区别：超时**可能**意味着帧已经送达、副作用已经发生，所以不许回落 REST；
+ * 而「通道被关」时帧要么没发出去，要么发了但对方没处理完 —— 桥侧对超限帧是**读到帧头就
+ * `close(1009)`**，处理器根本没进，重发是安全的。所以它归在「帧没送达」一侧。
+ */
+internal const val WS_CHANNEL_CLOSED: String = "WS_CHANNEL_CLOSED"
+
+/**
  * `/ws/mobile` 的**请求-配对层**：把「发一帧、等一条能认出属于它的应答」这件事从
  * [MobileWsTransport] 里分出来（设计 §3.3）。
  *
@@ -132,6 +141,40 @@ internal class WsRequestRouter(
 
     /** 诊断用：当前在途请求的 kind 列表（按入表顺序）。 */
     internal fun pendingKinds(): List<String> = synchronized(pendings) { pendings.values.map { it.expectedKind } }
+
+    /**
+     * 通道断了：把所有在途请求**立刻**以失败结束，别让它们各自等满超时。
+     *
+     * ## 为什么必须有这个入口（issue #12）
+     *
+     * 2026-11-01 真机发手机原图，报的是「WS 请求超时（15000ms）：message（期望应答 sent）」。
+     * 真实过程是：图片 base64 后超了桥的单帧上限 1 MiB，`ws` 库在**读到帧头**时就
+     * `close(1009)`，桥的 `message` 处理器根本没被调用 —— 所以永远不会有 `sent` 应答。
+     *
+     * 客户端这边，[MobileWsTransport] 感知到断线后只清自己那张 `pending` 表，
+     * 路由器这张表**它根本不知道**。于是那条 `message` 请求无人唤醒，只能等满
+     * `withTimeout(15_000)` 才报超时。用户等了 15 秒，拿到的还是一句与真相无关的「超时」。
+     *
+     * 现在断线时由 transport 调用这里，请求当场以 [code] 失败。因为断线**可能发生在帧已送达
+     * 之后**，这个 code 归在 [isFrameNeverSent] 里、可以回落 REST —— 见那个函数的注释。
+     *
+     * @param reason 人话原因（会拼进异常消息，给用户和日志看）。
+     * @param code 异常码，默认 [WS_CHANNEL_CLOSED]。
+     */
+    fun failAll(reason: String, code: String = WS_CHANNEL_CLOSED) {
+        val victims = synchronized(pendings) {
+            val all = pendings.values.toList()
+            pendings.clear()
+            all
+        }
+        // 在锁外完成：completeExceptionally 会唤醒等待中的协程，它们会在 finally 里
+        // 再进一次 synchronized(pendings) 删自己 —— 持锁回调有死锁风险。
+        victims.forEach { entry ->
+            entry.deferred.completeExceptionally(
+                DshApiException(0, code, "WS 通道已断开：$reason（${entry.requestType} 未收到应答）"),
+            )
+        }
+    }
 
     /**
      * 发一帧并等它的应答。

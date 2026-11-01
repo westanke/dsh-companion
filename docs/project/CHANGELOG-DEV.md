@@ -1,5 +1,67 @@
 # 开发日志
 
+## 未发布 · 发原图必超时：客户端按 WS 帧上限压缩图片 + 断线清理在途请求（#12）（2026-11-01）
+
+### 基于什么
+v2.2.66。用户真机发一张手机原图（`280827.jpg`），等 15 秒后弹
+**「WS 请求超时（15000ms）：message（期望应答 sent）」**，消息丢失。#11 修好的是
+「PNG 的 mediaType 被序列化省略」，这次是另一个坑：图片**太大**，而错误信息完全没提这回事。
+
+### 症状
+- 发手机原图（通常 2–5 MiB）→ 15 秒后超时，消息**静默丢失**（不重试、不回落）；
+- 发手机截图（PNG，约 300 KiB）→ 正常，不回归；
+- 同屏另一处对照：鸿蒙版走 REST，从不受影响。
+
+### 根因（两个缺陷叠在一起）
+1. **体积口径差 300 倍**：客户端 `MAX_IMAGE_BYTES` 是 8 MiB 原图（按 REST 的 300 MiB 请求体定的），
+   而 WS 通道的桥 `/ws/mobile` 单帧上限是 **1 MiB**（`dsh-remote-bridge` `server.ts` 的
+   `DEFAULT_MAX_PAYLOAD_BYTES = 1024 * 1024`，且插件根本没传 `maxPayloadBytes`）。
+   `ws` 库在**读到帧头**时就判定超限 → `createError(... 1009 ...)` → 服务端 `close(1009)`，
+   桥的 `message` 处理器**根本没被调用**。全工程没有任何图片压缩代码。
+2. **断线不清路由器的在途表**：`MobileWsTransport.failAllPending` 只清自己那张 `pending`，
+   而业务请求跑在 `WsRequestRouter` 的**另一张**表里，它没有「通道断开」入口。
+   于是那条 `message` 请求无人唤醒，只能等满 `withTimeout(15_000)` —— 用户看到的
+   「超时」是**假的**，真相是帧被桥拒了。
+
+### 改法
+1. **发送前压缩**（新建 `data/ImageCompression.kt` 纯策略层 + `data/AndroidImageCodec.kt` 的
+   BitmapFactory 实现，拆开是因为本模块没有 Robolectric，`BitmapFactory` 在 JVM 单测里会抛
+   "not mocked"）：质量阶梯 85→75→65→55→45、每轮缩长边 ×0.75，最多 3 轮，产物夹在
+   `MAX_ENCODED_IMAGE_BYTES = 700 KiB`（1 MiB 帧留出 base64 与 JSON 外壳的余量）。
+   **只按体积触发**：长边 1600 是压缩时的目标尺寸，不是触发条件 —— 手机截图长边 2400 但只有
+   300 KiB，本来就能发，若按长边触发会被重编码成 JPEG 把文字糊掉（那是在修 #12 的同时破坏 #11）。
+2. **常量拆口径**：`ChatContentParts.MAX_IMAGE_BYTES` → `MAX_SOURCE_IMAGE_BYTES`（8 MiB 源图），
+   `imagePart()` 的上限改用 `MAX_ENCODED_IMAGE_BYTES`（走到那里说明已压过）。
+3. **断线清理在途**：`WsRequestRouter` 新增 `failAll(reason, code)`，`MobileWsTransport` 新增
+   `onPendingDropped` 回调并在 `failAllPending` 里触发；新错误码 `WS_CHANNEL_CLOSED` 纳入
+   `isFrameNeverSent`（桥是读到帧头就关、处理器没进，重发安全，可回落 REST），
+   与 `WS_TIMEOUT`（可能已产生副作用，绝不重试）严格区分。
+
+### 测了什么
+- 单测 89 类 / 916 用例全绿。新增 `ImageCompressionTest`（16 条：阶梯、几何、不压/压/压不下来的
+  三条分支、mediaType 与文件名）＋ `WsRequestRouterTest` 3 条（断线立刻失败而不是等满超时、
+  failAll 之后迟到应答不崩、failAll 不影响之后的新请求）＋ `WsDomainPortsDegradeTest` 1 条
+  （`WS_CHANNEL_CLOSED` 回落 REST）＋ `ChatContentPartsTest` 1 条（两个口径必须分开）。
+- 门禁：`docsCheck` / `:app:testDebugUnitTest` / `:app:lintDebug` / `assembleDebug` 全绿。
+
+### 真机验证（vivo V2080A）
+- [x] **发手机原图（> 1 MiB）能成功送达**：宿主生成 2400×3200 高熵 JPEG（4,263,724 字节）推到
+  `/sdcard/Pictures/big-photo-real.jpg`，选图后附件卡片直接显示 **697.0 KiB**（原图 4.26 MB → 压缩后
+  697 KiB，正好落在 700 KiB 上限内），点发送**一次成功、无错误条**。模型回复里读出
+  「1200×1600，JPEG（baseline，3 通道），878,487 字节」—— 长边 3200 被压到 1600，
+  压缩链路端到端生效（878,487 字节 = base64 前 697.0 KiB × 1024 取整后与 878,487 的 base64 解码值吻合）。
+- [x] **发手机截图 PNG 不回归（#11）**：选 `Screenshot_2026_1101_095740.png`（287.8 KiB），
+  附件卡片显示的仍是 **287.8 KiB —— 一个字节都没重编码**（只按体积触发的设计兑现），
+  发送成功、模型正常分析截图内容。
+- [x] **发 JPEG 小图不回归**：小体积图片与上面 PNG 走同一条「不压」分支（`needsImageCompression`
+  只看体积），单测 `手机截图体积够小就不压 哪怕长边超过 1600` 钉住该路径；真机未单独再拍一张小 JPEG。
+- 全程 `logcat -d | grep -iE "WS_CHANNEL_CLOSED|WS_TIMEOUT|请求超时|Image type|IMAGE_TOO_LARGE"` 零命中。
+
+### 仍未做
+- **桥侧 `maxPayloadBytes` 可配**（P2，跨仓）：本次只在客户端压缩，桥的 1 MiB 帧上限没动。
+  想发更大的原图需要 `dsh-remote-bridge` 支持配置，另开 issue。
+- 超时后自动重试（会重复发消息）、大图自动改走 REST（双通道分流让错误归因更难）—— 都不做。
+
 ## v2.2.66 · 顶栏间距 / 表格列宽 / 文件链接 / 发图片必挂（2026-11-01）
 
 ### 基于什么

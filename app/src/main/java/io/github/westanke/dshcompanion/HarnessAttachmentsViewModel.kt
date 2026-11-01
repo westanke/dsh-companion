@@ -4,7 +4,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.westanke.dshcompanion.data.QUESTION_STATE_CONTINUED
 import io.github.westanke.dshcompanion.data.CHUNKED_UPLOAD_THRESHOLD
+import io.github.westanke.dshcompanion.data.AndroidImageCodec
 import io.github.westanke.dshcompanion.data.ChatContentParts
+import io.github.westanke.dshcompanion.data.MAX_ENCODED_IMAGE_BYTES
+import io.github.westanke.dshcompanion.data.prepareImageForWire
 import io.github.westanke.dshcompanion.data.MAX_UPLOAD_BYTES
 import io.github.westanke.dshcompanion.data.UploadedAttachment
 import io.github.westanke.dshcompanion.data.ChunkPlan
@@ -115,22 +118,46 @@ import kotlinx.serialization.json.intOrNull
 /**
  * 把选中的图片内联进「待发附件」。
  *
- * 图片不走上传端点（内核的 image part 直接带 base64），所以这里唯一要防的就是
- * 体积：超限当场拒绝并给出可照做的提示，而不是等一个 413。
+ * 图片不走上传端点（内核的 image part 直接带 base64），所以这里要防两件事：
+ *
+ * 1. **源文件太大**：超过 [ChatContentParts.MAX_SOURCE_IMAGE_BYTES] 当场拒绝，
+ *    免得把几百 MB 读进内存；
+ * 2. **编码后太大**：WS 通道的桥单帧上限只有 1 MiB，所以入队前按
+ *    [MAX_ENCODED_IMAGE_BYTES] 压一遍（issue #12）。不压的后果不是一句「太大」，
+ *    而是桥 `close(1009)` + 客户端等满 15 秒的假超时，消息还丢了。
+ *
+ * 压缩放在 IO 线程：一张 4000×3000 的原图解码 + 多次 JPEG 编码是实打实的 CPU 活，
+ * 放主线程会掉帧。已经在阈值内的图（比如 287.8 KiB 的截图）**一个字节都不动**，
+ * 连 mediaType 都保持原样 —— 这是 #11 的不回归条件。
  */
 internal fun HarnessViewModel.attachImage(name: String, sizeBytes: Long, mediaType: String, openInput: () -> InputStream) {
-    if (sizeBytes > ChatContentParts.MAX_IMAGE_BYTES) {
-        notify(appString(R.string.attachment_image_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_IMAGE_BYTES)))
+    if (sizeBytes > ChatContentParts.MAX_SOURCE_IMAGE_BYTES) {
+        notify(appString(R.string.attachment_image_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_SOURCE_IMAGE_BYTES)))
         return
     }
     viewModelScope.launch {
-        val bytes = readBytes(ChatContentParts.MAX_IMAGE_BYTES, openInput) ?: return@launch
-        if (bytes.size.toLong() > ChatContentParts.MAX_IMAGE_BYTES) {
-            notify(appString(R.string.attachment_image_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_IMAGE_BYTES)))
+        val raw = readBytes(ChatContentParts.MAX_SOURCE_IMAGE_BYTES, openInput) ?: return@launch
+        if (raw.size.toLong() > ChatContentParts.MAX_SOURCE_IMAGE_BYTES) {
+            notify(appString(R.string.attachment_image_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_SOURCE_IMAGE_BYTES)))
             return@launch
         }
-        val part = runCatching { ChatContentParts.imagePart(mediaType, bytes, name) }.getOrElse {
-            notify(appString(R.string.attachment_image_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_IMAGE_BYTES)))
+        val prepared = withContext(Dispatchers.IO) {
+            prepareImageForWire(AndroidImageCodec(), raw, mediaType, name)
+        }
+        if (prepared == null) {
+            // 连尺寸都读不出来 = 这不是一张能发的图（损坏 / 伪装扩展名）。
+            notify(appString(R.string.attachment_image_unreadable))
+            return@launch
+        }
+        if (prepared.bytes.size.toLong() > MAX_ENCODED_IMAGE_BYTES) {
+            // 压过仍超标：极少见（超大尺寸 + 高熵内容），如实说「太大」而不是让桥去拒。
+            notify(appString(R.string.attachment_image_too_large, ChatContentParts.formatBytes(MAX_ENCODED_IMAGE_BYTES)))
+            return@launch
+        }
+        val part = runCatching {
+            ChatContentParts.imagePart(prepared.mediaType, prepared.bytes, prepared.name)
+        }.getOrElse {
+            notify(appString(R.string.attachment_image_too_large, ChatContentParts.formatBytes(MAX_ENCODED_IMAGE_BYTES)))
             return@launch
         }
         update {
@@ -138,9 +165,9 @@ internal fun HarnessViewModel.attachImage(name: String, sizeBytes: Long, mediaTy
                 pendingAttachments = pendingAttachments + PendingAttachment(
                     id = java.util.UUID.randomUUID().toString(),
                     part = part,
-                    name = name,
-                    sizeBytes = bytes.size.toLong(),
-                    imageBytes = bytes,
+                    name = prepared.name,
+                    sizeBytes = prepared.bytes.size.toLong(),
+                    imageBytes = prepared.bytes,
                 ),
             )
         }

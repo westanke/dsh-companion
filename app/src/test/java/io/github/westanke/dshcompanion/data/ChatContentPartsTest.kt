@@ -113,15 +113,27 @@ class ChatContentPartsTest {
 
     @Test
     fun imagePartRejectsOversizedBytesBeforeTheyReachTheNetwork() {
-        val tooLarge = ByteArray(ChatContentParts.MAX_IMAGE_BYTES.toInt() + 1)
+        // #12 之后这里守的是**编码后**的口径（700 KiB，桥的 WS 单帧上限 1 MiB 留出的余量），
+        // 而不是源图的 8 MiB —— 走到 imagePart 时图片已经过 prepareImageForWire 压缩。
+        val tooLarge = ByteArray(MAX_ENCODED_IMAGE_BYTES.toInt() + 1)
         val failure = assertThrows(IllegalArgumentException::class.java) {
             ChatContentParts.imagePart("image/png", tooLarge)
         }
         assertEquals("IMAGE_TOO_LARGE", failure.message)
 
         // 恰好等于上限是允许的（边界不能差一字节就拒）。
-        val atLimit = ChatContentParts.imagePart("image/png", ByteArray(ChatContentParts.MAX_IMAGE_BYTES.toInt()))
+        val atLimit = ChatContentParts.imagePart("image/png", ByteArray(MAX_ENCODED_IMAGE_BYTES.toInt()))
         assertTrue(atLimit is PromptPart.ImagePart)
+    }
+
+    @Test
+    fun sourceImageLimitIsFarLargerThanTheEncodedLimit() {
+        // 两个口径必须分开：源图 8 MiB（读进内存的上限）vs 编码后 700 KiB（上线缆的上限）。
+        // 合成一个数字的话，要么把能发的原图挡在门外，要么放过必被桥 close(1009) 的帧。
+        assertTrue(
+            "源图上限必须远大于编码后上限",
+            ChatContentParts.MAX_SOURCE_IMAGE_BYTES > MAX_ENCODED_IMAGE_BYTES * 8,
+        )
     }
 
     @Test

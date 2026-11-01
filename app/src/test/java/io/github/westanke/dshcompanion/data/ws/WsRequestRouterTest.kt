@@ -356,6 +356,65 @@ class WsRequestRouterTest {
         assertEquals(WsServerFrame.SESSIONS, WsFrames.kindOf(result))
     }
 
+    // ---------------------------------------------------------------- 断线清理（#12）
+
+    @Test
+    fun `通道断开时在途请求立刻失败 而不是等满超时`() = case {
+        val link = FakeLink()
+        // 超时设得很大：只要这条用例能快速跑完，就证明唤醒它的不是超时。
+        val router = WsRequestRouter(sender = link.sender(), timeoutMillis = { 60_000 })
+
+        val job = async {
+            runCatching { router.request(WsClientFrame.MESSAGE, WsServerFrame.SENT) }.exceptionOrNull()
+        }
+        awaitSent(link, 1)
+
+        router.failAll("单帧超过 1 MiB，服务端 close(1009)")
+
+        val failure = withTimeout(2_000) { job.await() }
+        assertTrue("应该抛异常", failure is DshApiException)
+        assertEquals(WS_CHANNEL_CLOSED, (failure as DshApiException).code)
+        assertTrue("原因要出现在消息里", failure.message.contains("close(1009)"))
+        assertEquals("在途表要清空", 0, router.pendingCount())
+    }
+
+    @Test
+    fun `failAll 之后迟到的应答不会再唤醒任何人 也不会崩`() = case {
+        val link = FakeLink()
+        val router = WsRequestRouter(sender = link.sender(), timeoutMillis = { 60_000 })
+
+        val job = async {
+            runCatching { router.request(WsClientFrame.SESSIONS, WsServerFrame.SESSIONS) }.exceptionOrNull()
+        }
+        awaitSent(link, 1)
+        router.failAll("断线")
+        withTimeout(2_000) { job.await() }
+
+        // 连接闪断后桥的旧应答姗姗来迟：在途表已空，应该安静地走 event 出口或丢弃，不抛。
+        router.onFrame(sessionsReply())
+        assertEquals(0, router.pendingCount())
+    }
+
+    @Test
+    fun `failAll 只失败当前在途 不影响之后的新请求`() = case {
+        val link = FakeLink()
+        val router = WsRequestRouter(sender = link.sender(), timeoutMillis = { 60_000 })
+
+        val doomed = async {
+            runCatching { router.request(WsClientFrame.SESSIONS, WsServerFrame.SESSIONS) }.exceptionOrNull()
+        }
+        awaitSent(link, 1)
+        router.failAll("断线")
+        withTimeout(2_000) { doomed.await() }
+
+        // 重连成功后同一种请求必须还能正常走完。
+        val revived = async { router.request(WsClientFrame.SESSIONS, WsServerFrame.SESSIONS) }
+        awaitSent(link, 2)
+        router.onFrame(sessionsReply())
+        val reply = withTimeout(2_000) { revived.await() }
+        assertEquals(WsServerFrame.SESSIONS, WsFrames.kindOf(reply))
+    }
+
     /** 等到至少 [count] 个帧发出去，避免 `async` 还没跑到 sender 就注入回帧。 */
     private suspend fun awaitSent(link: FakeLink, count: Int) {
         repeat(200) {

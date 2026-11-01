@@ -248,6 +248,17 @@ class WsDomainPortsDegradeTest {
     }
 
     @Test
+    fun `通道断开也算帧没发出去 会回落 REST`() = runBlocking {
+        // #12：桥对超限帧是读到帧头就 close(1009)，处理器没进，重发安全。
+        val channelClosed = DshApiException(0, "WS_CHANNEL_CLOSED", "WS 通道已断开：单帧超过 1 MiB")
+        val rest = Recorder("rest")
+
+        hitl(Recorder("ws", channelClosed), rest) { ChannelState.WsReady }.decideApproval("s-1", "ap-1", true)
+
+        assertEquals(listOf("rest.decideApproval(s-1,ap-1,true).also{}"), rest.calls)
+    }
+
+    @Test
     fun `提问答复的业务失败不许回落 REST`() = runBlocking {
         // 桥回 accepted:false（QUESTION_*）—— 这是业务结果，不是传输失败。
         val rejected = DshApiException(409, "QUESTION_NOT_PENDING", "提问已不在等待中")

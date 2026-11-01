@@ -632,6 +632,7 @@
     <string name="attachment_pick_file">选择文件</string>
     <string name="attachment_uploading">正在上传…</string>
     <string name="attachment_remove">移除这个附件</string>
+    <string name="attachment_image_unreadable">读不出这张图片的尺寸，可能已损坏或不是图片。换一张试试。</string>
     <string name="attachment_image_too_large">图片超过 %1$s，没法内联发送。请先压缩或裁剪，或改用「发送文件」。</string>
     <string name="attachment_file_too_large">文件超过 %1$s，没法作为消息附件上传。</string>
     <string name="attachment_file_rejected">服务端拒绝了该文件：超过了服务器允许的附件大小。请换一个更小的文件。</string>
