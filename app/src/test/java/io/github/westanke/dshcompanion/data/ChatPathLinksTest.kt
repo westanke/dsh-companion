@@ -81,4 +81,95 @@ class ChatPathLinksTest {
         assertTrue(out.contains("[$long]" .removePrefix("[") ) || out.contains("report-a.md]($long)"))
         assertFalse(out.contains("[a.md]($short)report"))
     }
+
+    // ---- #10：行内代码（反引号）里的文件名 ----
+    //
+    // 真机取证：模型习惯写 `report.md`，早先实现产出 `[report.md](/abs/path)`，
+    // 渲染器按 CommonMark 当行内代码整段显示原文 —— 屏幕上一串点不动的长路径。
+
+    @Test
+    fun linksAFileNameWrappedInInlineCode() {
+        val text = "已落盘：`dsh-public-deployments-项目适配评估_2026-10-19.md`"
+
+        val out = linkifyKnownFiles(text, listOf(report))
+
+        // 反引号必须被一起吃掉，否则又变回「代码里塞链接语法」。
+        assertEquals("已落盘：[dsh-public-deployments-项目适配评估_2026-10-19.md]($report)", out)
+        assertFalse(out.contains('`'))
+    }
+
+    @Test
+    fun keepsInlineCodeUntouchedWhenItIsNotJustTheFileName() {
+        // 代码里出现文件名不等于「这段代码就是那个文件」——往代码里注入 Markdown 会让它原样显示。
+        val text = "跑一下 `cat dsh-public-deployments-项目适配评估_2026-10-19.md | head` 就行"
+
+        val out = linkifyKnownFiles(text, listOf(report))
+
+        assertEquals(text, out)
+    }
+
+    @Test
+    fun leavesFencedCodeBlocksAlone() {
+        val text = "```bash\ncat dsh-public-deployments-项目适配评估_2026-10-19.md\n```"
+
+        val out = linkifyKnownFiles(text, listOf(report))
+
+        assertEquals(text, out)
+    }
+
+    @Test
+    fun linksBothBareTextAndInlineCodeInTheSameMessage() {
+        val text = "见 `dsh-public-deployments-项目适配评估_2026-10-19.md`，或直接读 dsh-public-deployments-项目适配评估_2026-10-19.md"
+
+        val out = linkifyKnownFiles(text, listOf(report))
+
+        // 约束 3 不变：整条消息里该文件名只链接一次。
+        assertEquals(1, Regex("""\]\(""").findAll(out).count())
+        assertTrue(out.contains("[dsh-public-deployments-项目适配评估_2026-10-19.md]($report)"))
+    }
+
+    @Test
+    fun keepsInlineCodeWithDoubleBackticksIntact() {
+        // 等长反引号闭合：``x`` 里的单反引号是字面量，不能被当成代码段的边界。
+        val text = "标记 ``a`b`` 与 `dsh-public-deployments-项目适配评估_2026-10-19.md`"
+
+        val out = linkifyKnownFiles(text, listOf(report))
+
+        assertTrue(out.contains("``a`b``"))
+        assertTrue(out.contains("[dsh-public-deployments-项目适配评估_2026-10-19.md]($report)"))
+    }
+
+    @Test
+    fun keepsUnclosedBacktickAsPlainText() {
+        // 流式输出里半截反引号很常见：不能因此把后半行全当代码吞掉。
+        val text = "见 ` 半截 与 dsh-public-deployments-项目适配评估_2026-10-19.md"
+
+        val out = linkifyKnownFiles(text, listOf(report))
+
+        assertTrue(out.contains("见 ` 半截"))
+        assertTrue(out.contains("[dsh-public-deployments-项目适配评估_2026-10-19.md]($report)"))
+    }
+
+    @Test
+    fun unwrapsAMarkdownLinkThatWasWrappedInInlineCode() {
+        // 用户截图里的原始形态：模型把整条链接套进了反引号 —— 屏幕上是一条
+        // 「长得像链接却点不动的等宽文本」。
+        val name = "dsh-public-deployments-项目适配评估_2026-10-19.md"
+        val text = "见 `[$name]($report)`"
+
+        val out = linkifyKnownFiles(text, listOf(report))
+
+        assertEquals("见 [$name]($report)", out)
+    }
+
+    @Test
+    fun keepsInlineCodeLinkUntouchedWhenTargetIsAnotherFile() {
+        // 目标不是已知文件（比如网页）：不能擅自把它从代码里解放出来。
+        val name = "dsh-public-deployments-项目适配评估_2026-10-19.md"
+        val text = "见 `[$name](https://example.com/x)`"
+
+        val out = linkifyKnownFiles(text, listOf(report))
+
+        assertEquals(text, out)
+    }
 }

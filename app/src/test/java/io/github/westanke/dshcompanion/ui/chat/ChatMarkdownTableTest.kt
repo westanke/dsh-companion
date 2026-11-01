@@ -3,6 +3,7 @@ package io.github.westanke.dshcompanion.ui.chat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -184,5 +185,82 @@ class ChatMarkdownTableTest {
         // 第一列整串必须在，不能在数据层就丢字（省略只允许发生在两列字段表的 UI 层）。
         assertEquals("内核 `@deepseek-ai/dsh` 0.2.0-rc.2", table.rows[0][0])
         assertEquals("插件（web profile）", table.rows[2][0])
+    }
+
+    // ────────────── #9 内容感知列宽（对照鸿蒙 MarkdownLite.ts 移植） ──────────────
+
+    @Test
+    fun `wide chars count one unit and narrow chars 0_6`() {
+        assertEquals(1f, charWidthUnits('中'), 0.001f)
+        assertEquals(0.60f, charWidthUnits('a'), 0.001f)
+        assertEquals(0.60f, charWidthUnits('1'), 0.001f)
+        // 全角标点（0xff08）、假名（0x2e80..0xa4cf）、谚文（0xac00..）都算全角。
+        assertEquals(1f, charWidthUnits('（'), 0.001f)
+        assertEquals(1f, charWidthUnits('あ'), 0.001f)
+        assertEquals(1f, charWidthUnits('가'), 0.001f)
+    }
+
+    @Test
+    fun `display width sums characters`() {
+        assertEquals(1.6f, displayWidthUnits("中a"), 0.001f)
+        assertEquals(0f, displayWidthUnits(""), 0.001f)
+    }
+
+    @Test
+    fun `column widths clamp to 64 and 240`() {
+        // 全短列：0.6×1×14+20 = 28.4 → 夹到下限 64。
+        val narrow = markdownTableColumnWidthsDp(listOf("a", "b"), listOf(listOf("1", "2")), 14f)
+        assertEquals(listOf(64f, 64f), narrow)
+        // 超长列：100 个西文字符 → 0.6×100×14+20 = 860 → 夹到上限 240（超宽文字列内折行）。
+        val wide = markdownTableColumnWidthsDp(listOf("h"), listOf(listOf("x".repeat(100))), 14f)
+        assertEquals(listOf(240f), wide)
+    }
+
+    @Test
+    fun `longer content gets a wider column`() {
+        val widths = markdownTableColumnWidthsDp(
+            header = listOf("位置", "说明"),
+            rows = listOf(listOf("a", "这一列的说明文字很长很长很长很长")),
+            fontSizeDp = 14f,
+        )
+        assertTrue(widths[1] > widths[0])
+    }
+
+    /** 链接 URL 不许把列宽抬到上限 —— 估宽前必须剥行内标记（鸿蒙 inlineMarkup 同约定）。 */
+    @Test
+    fun `inline links do not inflate column width`() {
+        val widths = markdownTableColumnWidthsDp(
+            listOf("[x](https://example.com/very/long/url)"),
+            emptyList(),
+            14f,
+        )
+        assertEquals(listOf(64f), widths)
+    }
+
+    @Test
+    fun `strip inline markup keeps link text only`() {
+        assertEquals("文字", stripInlineMarkup("[文字](https://example.com/a/b/c)"))
+        assertEquals("图", stripInlineMarkup("![图](https://example.com/a.png)"))
+        assertEquals("粗体", stripInlineMarkup("**粗体**"))
+        assertEquals("代码", stripInlineMarkup("`代码`"))
+        assertEquals("中a", stripInlineMarkup("**中**a"))
+    }
+
+    /** 装得下：剩余宽度按各列估宽比例摊回，列宽之和（不含列间 gap）正好等于可用宽度。 */
+    @Test
+    fun `fit distributes spare width proportionally`() {
+        // est=[100, 200]，gap=17，总需求=317；可用=417 → 剩 100 按比例摊。
+        val widths = resolveColumnWidthsDp(listOf(100f, 200f), 417f)!!
+        assertEquals(133.33f, widths[0], 0.01f)
+        assertEquals(266.67f, widths[1], 0.01f)
+        assertEquals(400f, widths.sum(), 0.01f)
+    }
+
+    /** 装不下返回 null（调用方转横向滚动，列宽保持估宽定死，不压缩）。 */
+    @Test
+    fun `fit returns null when content exceeds available width`() {
+        assertNull(resolveColumnWidthsDp(listOf(300f, 300f), 417f))
+        // 恰好装下（含 17dp gap）：不摊也不缩。
+        assertEquals(listOf(200f, 200f), resolveColumnWidthsDp(listOf(200f, 200f), 417f))
     }
 }

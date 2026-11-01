@@ -149,10 +149,13 @@ import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -541,5 +544,14 @@ internal fun compactMarkdownTypography() = markdownTypography(
     ordered = MaterialTheme.typography.bodyMedium,
     bullet = MaterialTheme.typography.bodyMedium,
     list = MaterialTheme.typography.bodyMedium,
+    // #10：链接必须**看得出来能点**。库默认 textLink 不带任何样式，链接与正文同色，
+    // 于是「能点」这件事全靠用户猜（真机反馈「看不出哪里能点」）。这里统一给主色 +
+    // 下划线：既符合 Material 链接惯例，也不依赖用户先点一次才知道。
+    textLink = TextLinkStyles(
+        style = SpanStyle(
+            color = MaterialTheme.colorScheme.primary,
+            textDecoration = TextDecoration.Underline,
+        ),
+    ),
     table = MaterialTheme.typography.bodySmall,
 )
