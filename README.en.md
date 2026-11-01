@@ -303,7 +303,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.66.apk
+DSH伴侣-companion-v2.2.67.apk
 ```
 
 Requirements:
@@ -598,16 +598,37 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.66` (`versionCode` 10091)
+- Version: `v2.2.67` (`versionCode` 10092)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
 - Unit tests: 89 test classes / 916 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.66.apk`, **3,382,128 bytes**, SHA-256
-  `b33297306d50b8de6bb2dba0c8f3f60b48236c2e1bd9e4e75d17188703544a25` (kept in sync in
+- Current APK: `DSH伴侣-companion-v2.2.67.apk`, **3,382,740 bytes**, SHA-256
+  `e297138bbf1ee13c3d7acdba5d5dc8b03a39744dca8f08dd138a9c46a7aa9929` (kept in sync in
   `artifacts/SHA256SUMS.txt`; real values are backfilled by release stage A).
-  **This release (v2.2.66: four UI and protocol defects closed)**: the first three came from
+  **This release (v2.2.67: sending a full-resolution photo no longer times out)**: one user report —
+  sending a camera original waited 15 seconds, popped "WS request timed out (15000ms)", and the
+  message was **silently lost**. Two defects stacked on top of each other:
+  (1) **A 300-fold size mismatch**: the client allowed 8 MiB originals based on REST's 300 MiB body
+  limit, while the WS channel (`/ws/mobile`) caps a single frame at 1 MiB. The `ws` library rejects
+  the frame **as soon as it reads the header** with `close(1009)` — the bridge's message handler was
+  never called. There was no image-compression code anywhere in the project.
+  (2) **Disconnects did not clear in-flight requests**: `WsRequestRouter` had no "channel closed"
+  entry point, so the pending `message` request had nobody to wake it and simply waited out
+  `withTimeout(15_000)` — the "timeout" the user saw was fabricated.
+  The fix compresses before sending: a quality ladder (85→75→65→55→45), shrinking the long edge by
+  0.75 each round for at most 3 rounds, landing under **700 KiB** (headroom for base64 and the JSON
+  envelope). **Compression triggers on size only** — a screenshot is 2400px on the long edge but only
+  300 KiB, so it already fit; gating on the long edge would re-encode it as JPEG and smear the text,
+  breaking the previous release's fix while fixing this one. The constants split into
+  `MAX_SOURCE_IMAGE_BYTES` (8 MiB source) and `MAX_ENCODED_IMAGE_BYTES` (700 KiB on the wire);
+  `WsRequestRouter.failAll` plus a new `WS_CHANNEL_CLOSED` code joined `isFrameNeverSent` (the bridge
+  closes on the header before the handler runs, so resending is safe and REST fallback is allowed),
+  kept strictly apart from `WS_TIMEOUT` (which may already have had side effects and is never retried).
+  On device: a 4.26 MB original showed **697.0 KiB** on the attachment card and sent in one try; the
+  model read back "1200×1600 JPEG". The same 287.8 KiB screenshot was not re-encoded at all.
+  **Previous release (v2.2.66: four UI and protocol defects closed)**: the first three came from
   screen-by-screen comparisons against the HarmonyOS port, the fourth from a user report.
   (1) **Top-bar spacing tightened** (#8): following the values measured on the HarmonyOS build,
   the gap between the app bar and the big "Sessions" title drops from 53 to 18px, the chat detail
@@ -636,7 +657,7 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
   mediaType is not the default — that asymmetry was the clue. The WS port now has its own
   `wireJson` (`encodeDefaults`) for encoding.
   Details, root causes and on-device verification for all four are in `docs/project/CHANGELOG-DEV.md`.
-  **Previous release (v2.2.65: the drawer shows the device you are actually on)**: fixes an old
+  **v2.2.65 (the drawer shows the device you are actually on)**: fixes an old
   problem that looked like a bug but was not. The drawer header used to read `HarmonyOS · ICL-AL10`
   while the phone was a vivo V2080A. The bridge row already had `model = V2080A`; only `name` was
   still the value declared when this pairing token was first used, and "a declared name is never
@@ -649,7 +670,7 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
   `assets/chat/*.js`: the debt ledger declared that scope back on 2026-10-18, but the guard never
   implemented it, so `interact.js` grew from 803 to 1,059 lines while still being waved through as
   "3 lines over budget". A rule written but not enforced is not a rule.
-  **Previous release (v2.2.64: teammates are readable + models fold by provider)**: three device reports
+  **v2.2.64 (teammates are readable + models fold by provider)**: three device reports
   fixed in one go. (1) Every subagent card in the team panel is now tappable (with a trailing chevron)
   and opens a read-only "teammate conversation" window showing exactly what that teammate said and
   produced; the data comes from the bridge's new read-only narrow port

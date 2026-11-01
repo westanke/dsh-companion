@@ -1153,8 +1153,40 @@ android {
         //     真机没翻到样本；#11 的 JPEG 真机未复测（相册无 JPEG 素材，由单测守着）。
         //   依赖：无（四件都是纯客户端改动，不需要新桥能力位）。
         //
-        versionCode = 10091
-        versionName = "2.2.66"
+        // v2.2.67（versionCode 10092）：**发原图必超时 —— 按 WS 帧上限压缩图片 + 断线清理在途请求**（2026-11-01，补丁版）。
+        //   基于什么：用户报「发手机原图等 15 秒弹 WS 请求超时，消息丢了」，issue #12。
+        //   干了什么：
+        //     ① 发送前压缩（新建 data/ImageCompression.kt 纯策略层 + data/AndroidImageCodec.kt 的
+        //        BitmapFactory 实现，拆两半是因为本模块没有 Robolectric，BitmapFactory 在 JVM 单测里
+        //        会抛 not mocked）：质量阶梯 85→75→65→55→45、每轮缩长边 ×0.75，最多 3 轮，
+        //        产物夹在 MAX_ENCODED_IMAGE_BYTES = 700 KiB（1 MiB 帧扣掉 base64 与 JSON 外壳）。
+        //        **只按体积触发**：长边 1600 是压缩时的目标尺寸，不是触发条件 —— 手机截图长边 2400
+        //        但只有 300 KiB，本来就能发，若按长边触发会被重编码成 JPEG 把文字糊掉（那是在修
+        //        #12 的同时破坏 #11）。
+        //     ② 常量拆两个口径：ChatContentParts.MAX_IMAGE_BYTES → MAX_SOURCE_IMAGE_BYTES（8 MiB
+        //        源图），imagePart() 的上限改用 MAX_ENCODED_IMAGE_BYTES（走到那里说明已经压过）。
+        //     ③ 断线清理在途请求：WsRequestRouter 新增 failAll(reason, code)，MobileWsTransport 新增
+        //        onPendingDropped 回调并在 failAllPending 里触发；新错误码 WS_CHANNEL_CLOSED 纳入
+        //        isFrameNeverSent（桥是读到帧头就 close(1009)、处理器没进，重发安全，可回落 REST），
+        //        与 WS_TIMEOUT（可能已产生副作用，绝不重试）严格区分。
+        //   测了什么：89 类 / 916 用例 / 0 失败（ImageCompressionTest 16 条、WsRequestRouterTest +3、
+        //     WsDomainPortsDegradeTest +1、ChatContentPartsTest +1）；docsCheck 10 文档 /
+        //     README 双站 780 项 / STRUCTURE 169 锚点 149 源文件 / INTERFACES 136 锚点；
+        //     lintDebug 0 error；assembleDebug 全绿。
+        //   真机验了什么：V2080A（1080x2400，3px/dp）——
+        //     ① 发手机原图能成功送达：4,263,724 字节高熵 JPEG → 附件卡片显示 697.0 KiB →
+        //        一次发送成功无错误条，模型读出「1200×1600，JPEG，878,487 字节」（长边 3200→1600，
+        //        压缩链路端到端生效）；
+        //     ② 发手机截图 PNG 不回归（#11）：287.8 KiB 的截图一个字节都没重编码，发送成功、
+        //        模型正常分析内容（只按体积触发的设计兑现）；
+        //     ③ 全程 logcat 查 WS_CHANNEL_CLOSED|WS_TIMEOUT|请求超时|Image type|IMAGE_TOO_LARGE 零命中。
+        //   仍未做：桥侧 maxPayloadBytes 可配（P2，跨仓）已在 dsh-remote-bridge #10 完成，但本仓
+        //     700 KiB 上限先于它生效——客户端永远压不到 1 MiB 以上，桥放宽目前对 App 无实际影响；
+        //     超时后自动重试与「大图自动改走 REST」都不做（前者会重复发消息，后者让错误归因更难）。
+        //   依赖：无（纯客户端改动，不需要新桥能力位；桥的 maxPayloadBytes 是可选的，不配也照常工作）。
+        //
+        versionCode = 10092
+        versionName = "2.2.67"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。

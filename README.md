@@ -294,7 +294,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.66.apk
+DSH伴侣-companion-v2.2.67.apk
 ```
 
 安装要求：
@@ -545,14 +545,28 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.66`（`versionCode` 10091）
+- 当前版本：`v2.2.67`（`versionCode` 10092）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：89 个测试类 / 916 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.66.apk`，**3,382,128 字节**，
-  SHA-256 `b33297306d50b8de6bb2dba0c8f3f60b48236c2e1bd9e4e75d17188703544a25`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
-  **本版（v2.2.66，四处界面与协议缺陷收口）**：四件事，前三件来自「安卓与鸿蒙版逐屏对照」，
+- 当前 APK：`DSH伴侣-companion-v2.2.67.apk`，**3,382,740 字节**，
+  SHA-256 `e297138bbf1ee13c3d7acdba5d5dc8b03a39744dca8f08dd138a9c46a7aa9929`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
+  **本版（v2.2.67，发原图不再必超时）**：一条用户报障 —— 发手机原图等 15 秒弹
+  「WS 请求超时（15000ms）」且消息**静默丢失**。两个缺陷叠在一起：
+  ① **体积口径差 300 倍**：客户端按 REST 的 300 MiB 请求体定了 8 MiB 的原图上限，而 WS 通道
+  `/ws/mobile` 的单帧上限只有 1 MiB（`ws` 库**读到帧头**就 `close(1009)`，桥的处理器根本没被调用），
+  全工程此前没有任何图片压缩代码；② **断线不清在途请求**：`WsRequestRouter` 没有「通道断开」入口，
+  在途的 `message` 请求无人唤醒，只能等满 `withTimeout(15_000)` —— 用户看到的「超时」是假象。
+  改法：发送前按质量阶梯（85→75→65→55→45）+ 每轮缩长边 ×0.75（最多 3 轮）压到 **700 KiB**
+  （给 base64 与 JSON 外壳留余量）；**只按体积触发** —— 手机截图长边 2400 但只有 300 KiB，
+  本来就能发，若按长边触发会被重编码成 JPEG 把文字糊掉（那是在修这个 bug 的同时破坏上一版的修复）。
+  常量拆成 `MAX_SOURCE_IMAGE_BYTES`（8 MiB 源图）与 `MAX_ENCODED_IMAGE_BYTES`（700 KiB 上线）；
+  `WsRequestRouter.failAll` + 新错误码 `WS_CHANNEL_CLOSED` 纳入 `isFrameNeverSent`（桥是读到帧头就关、
+  处理器没进，重发安全可回落 REST），与 `WS_TIMEOUT`（可能已产生副作用，绝不重试）严格区分。
+  真机验证：4.26 MB 原图 → 附件卡片显示 697.0 KiB → 一次发送成功，模型读出「1200×1600 JPEG」；
+  同一张 287.8 KiB 截图**一个字节都没重编码**、正常发送。
+  **上一版（v2.2.66，四处界面与协议缺陷收口）**：四件事，前三件来自「安卓与鸿蒙版逐屏对照」，
   第四件是用户报障。
   ① **顶栏三处大留白收齐**（issue #8）：按鸿蒙版实测值，列表「会话」大字距应用栏 53→18px、
   详情标题 48→23.5px、状态行 108→84px。状态行取 `height(28dp)` 而非 24dp —— 文件按钮
@@ -572,7 +586,7 @@ keyPassword=...
   （`Image type undefined is not accepted by this deployment.`）。JPEG 因非默认值侥幸通过，
   这条不对称就是定位钥匙。改为 WS 端口内建 `wireJson`（`encodeDefaults`）专用于编码。
   以上四件各自的现象、根因、改法与真机验证见 `docs/project/CHANGELOG-DEV.md`。
-  **上一版 v2.2.65（抽屉显示真实设备）**：修一个「看着像 bug、其实不是」的老问题 ——
+  **更早的 v2.2.65（抽屉显示真实设备）**：修一个「看着像 bug、其实不是」的老问题 ——
   抽屉顶部此前显示 `HarmonyOS · ICL-AL10`，而这台机器是 vivo V2080A。根因是桥侧那条设备记录
   `model` 早已跟着换成了 V2080A，只有 `name` 停在配对时声明的旧值，而「声明过的名字不再自动覆盖」
   是刻意的（免得盖掉用户自己起的名字）。界面只有一行名字，用户无从判断它是「声明过的名字」还是
@@ -581,7 +595,7 @@ keyPassword=...
   这一版还把行数守卫从「只扫 `app/src/main/java`」扩到 `assets/chat/*.js` ——
   台账早在 2026-10-18 就声明了这个登记范围，但守卫没做，导致 `interact.js` 从 803 行长到 1059 行
   却一直以「超预算 3 行」被放过。制度写了、守卫没做，等于没写。
-  **上一版 v2.2.64（团队成员可点开查看 + 模型弹窗按供应商折叠）**：三条真机反馈一次解决——
+  **v2.2.64（团队成员可点开查看 + 模型弹窗按供应商折叠）**：三条真机反馈一次解决——
   ①团队面板里的子会话整卡可点（行尾加右箭头），点开弹只读「成员的对话」窗口，能完整读到该成员当初
   说的话与产出；数据走桥新增的只读窄口 `GET /chat/sessions/{lead}/subagents/{sub}/messages`
   （**需 dsh-remote-bridge ≥ 2.9.0**，旧桥会显示「桥版本太旧」的降级提示）。②模型选择器改成按供应商
