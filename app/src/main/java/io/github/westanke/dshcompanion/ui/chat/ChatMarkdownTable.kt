@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mikepenz.markdown.m3.Markdown
+import org.intellij.markdown.ast.ASTNode
 import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
 
 /**
@@ -59,8 +60,18 @@ internal data class MarkdownTable(
 /**
  * 从一段 Markdown 里解析表格；**不是表格就返回 null**（调用方回落到默认渲染）。
  *
- * 只认「以 `|` 开头且以 `|` 结尾」的行，其余一律忽略 —— 这样不管传进来的是整段消息
- * 还是只有表格的片段，都能正确工作。
+ * 只认「以 `|` 开头且以 `|` 结尾」的行，其余一律忽略。
+ *
+ * ## 调用方必须先切片（#13）
+ *
+ * 这里的「把所有 `|…|` 行收进同一批」只有在**输入就是一张表**时才成立。渲染库交给
+ * `table` 回调的 `MarkdownComponentModel.content` 是**整篇 markdown 全文**，直接喂进来会把
+ * 后面每一张表的行都并进第一批：第二张表的表头行与 `|---|---|` 分隔行被 `normalizeColumns`
+ * 截成第一张表的列数，渲染成「# 内容」「--- ---」两行数据，第二张表整列消失（真机 #13 截图）。
+ * 所以调用方要先用 [tableNodeSlice] 按 AST 节点切出这一张表，再调用本函数。
+ *
+ * 兜底：即使切片出错，含**多个分隔行**的输入也判为非表格（返回 null，回落纯文本）——
+ * 一张合法的 GFM 表格只有一个分隔行，多出来说明上游切错了，宁可显示原文也不显示错结构。
  */
 internal fun parseMarkdownTable(content: String): MarkdownTable? {
     val lines = content.lines()
@@ -71,6 +82,8 @@ internal fun parseMarkdownTable(content: String): MarkdownTable? {
     val cells = lines.map { splitTableRow(it) }
     // 第二行必须是 |---|---| 这样的分隔行：这是表格与「竖线列表」的区别。
     if (!isSeparatorRow(cells[1])) return null
+    // 一张表只能有一个分隔行；出现第二个说明输入是「多张表拼在一起」，别硬渲染。
+    if (cells.drop(2).any(::isSeparatorRow)) return null
 
     val header = cells[0]
     // 列数不齐时以表头为准补齐/截断：截断会丢数据，补齐只多出空单元格，选后者。
@@ -79,6 +92,26 @@ internal fun parseMarkdownTable(content: String): MarkdownTable? {
     if (rows.isEmpty()) return null
     return MarkdownTable(header, rows)
 }
+
+/**
+ * 把渲染库给的整篇 markdown 按 TABLE 节点的偏移**切成一张表的文本**（#13）。
+ *
+ * `org.intellij.markdown` 产出的 `TABLE` 节点，`startOffset` 正好是表头行的 `|`，
+ * `endOffset` 是最后一行数据的行尾 —— 不含尾随空行，切出来是干净的单表文本。
+ *
+ * 偏移越界时（理论上不该发生）夹回合法范围，而不是抛异常：渲染路径上一次崩溃
+ * 会让整条消息消失，比表格画错严重得多。
+ */
+internal fun tableNodeSlice(content: String, node: ASTNode): String =
+    tableSliceRange(content, node.startOffset, node.endOffset)
+
+/** [tableNodeSlice] 的纯函数内核：便于单测直接断言夹取边界，不需要构造 ASTNode。 */
+internal fun tableSliceRange(content: String, startOffset: Int, endOffset: Int): String {
+    val from = startOffset.coerceIn(0, content.length)
+    val to = endOffset.coerceIn(from, content.length)
+    return content.substring(from, to)
+}
+
 
 /** 按表头列数补齐空单元格或截掉多出来的（转义竖线已经在切分时处理过）。 */
 private fun normalizeColumns(row: List<String>, width: Int): List<String> =
@@ -360,9 +393,14 @@ private fun TableRow(
                 val fixedWidth = columnWidths?.getOrNull(columnIndex)
                 when {
                     // 两列表的第一列是字段名：窄列、最多两行、超出省略（Whaleness 定稿布局，勿动）。
+                    //
+                    // #13：**必须剥掉行内标记**。这一列当初直接 Text(cell)，于是 `**Gitee**（主站）`
+                    // 把星号原样画出来 —— 同一张表第二列走 TableCellValue → Markdown，粗体正常，
+                    // 两列行为不一致。这里不做完整 Markdown 渲染（那会把 labelMedium 换成 bodyMedium，
+                    // 抹平字段名与值的层级），只剥壳：字段名需要的是「加粗的文字」，不是嵌套排版。
                     fixedWidth == null && columnIndex == 0 && cells.size < 3 -> {
                         Text(
-                            cell,
+                            stripInlineMarkup(cell),
                             modifier = Modifier.widthIn(max = LABEL_MAX_WIDTH).padding(start = 10.dp),
                             color = if (isHeader) {
                                 MaterialTheme.colorScheme.onSurface

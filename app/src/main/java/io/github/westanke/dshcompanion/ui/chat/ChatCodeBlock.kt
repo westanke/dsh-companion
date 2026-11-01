@@ -75,8 +75,14 @@ internal val chatMarkdownComponents: MarkdownComponents = markdownComponents(
     //
     // 该库的 MarkdownComponents 是开放接口（有 getTable()），所以不必换库 —— 覆盖这一项即可。
     // 解析失败时**不吞内容**：回落到 MarkdownText，原文至少还在。
+    //
+    // #13：**必须按 AST 节点切片，不能拿 model.content 直接解析**。`model.content` 是整篇
+    // markdown 全文（与上面代码块注释说的是同一件事），而 `parseMarkdownTable` 会把 content
+    // 里所有 `|…|` 行收进同一批 —— 一条消息里有两张表时，第二张的表头与 `|---|---|` 分隔行
+    // 会被当成第一张的数据行渲染（真机看到的是「# 内容」+「--- ---」两行，且第二张表整列消失）。
+    // TABLE 节点的 startOffset/endOffset 精确卡在整张表首尾（AST 探针实测），切完再解析就对了。
     table = { model ->
-        val table = parseMarkdownTable(model.content)
+        val table = parseMarkdownTable(tableNodeSlice(model.content, model.node))
         if (table == null) {
             MarkdownText(
                 content = model.content,

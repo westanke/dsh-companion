@@ -1323,3 +1323,41 @@ JsonDecodingException。修复：WS 侧直接
 
 **同类**：`### 契约文档写着「requestId 回显」，实测一半的帧不回显`
 （都是「想当然以为两条通道行为一致」，真帧才拆穿）。
+
+---
+
+### 渲染库回调拿到的 content 是整篇，别拿它重新解析自己那一块
+
+**症状**：一条消息里有**两张** Markdown 表格时，第二张不按表渲染 —— 它的**表头行**与
+`|---|` **分隔行**被当成第一张表的数据行画出来（真机上是灰底一行「# 内容」，
+再一行「--- ---」），第二张表自己的列则整列消失、数据被截到第一张的列数里。
+只有一张表时一切正常，**两张表才复现**。
+
+**根因**：`ui/chat/ChatCodeBlock.kt` 的 `table` 回调写的是
+`parseMarkdownTable(model.content)`，而 `MarkdownComponentModel.content` 是**整篇 markdown 全文**，
+不是这一段。证据（javap 逐方法扫过的）：`MarkdownExtensionKt.MarkdownElement` 直接拿
+`MarkdownKt` 传进来的 `State$Success.getContent()` 构造 model，全 jar 只有
+`MarkdownCodeKt` / `MarkdownListKt` / `MarkdownTextKt` 三处做切片，**表格这处不切**。
+于是 `parseMarkdownTable` 里那句
+`filter { it.startsWith("|") && it.endsWith("|") }` 把两张表的行收进同一批：
+`cells[1]` 恰好是第一张表的分隔行 → 判为合法表 → header 只取第一张表的列数 →
+第二张表的表头与分隔行被 `normalizeColumns(…, width)` 截断成数据行。
+
+**怎么发现**：两条路径互证 —— ①把会话原文抽出来，用 python 逐字复刻
+`parseMarkdownTable` 的过滤与分组，复现出「表 A 的 rows 里出现 `['#','内容','状态']`
+与 `['---','---','---']`」；②用 `MarkdownParser(GFMFlavourDescriptor())` 探针打印 TABLE 节点，
+得到两个独立节点、偏移 [10,227] 与 [642,835] —— 说明**解析层没问题**，错在渲染层拿全文重解析。
+
+**现在怎么办（铁律）**：
+
+1. **要重解析某一段，先按 AST 偏移切片**：`tableNodeSlice(content, node)` 就是干这个的
+   （`node.startOffset` / `node.endOffset` 精确卡在整张表首尾）。别信「回调给我的就是这一段」——
+   这个库只保证 `content` 是全文、`node` 是这一段。
+2. **任何「从 content 里挑行」的解析器都要有跨段兜底**：`parseMarkdownTable` 现在会在数据行里
+   再遇到分隔行时直接返回 null（回落纯文本），宁可画差也不静默画错。
+3. **写这类修复必须配端到端用例**：只用字符串切片测解析器是测不出这个坑的，
+   得用真实 `MarkdownParser` 解析含两表的原文、walk 出 `TABLE` 节点再切
+   （见 `ChatMarkdownTableTest.real ast slices keep the two tables apart`）。
+
+**同类**：`### 表格贴上一行：intellij-markdown 不认无空行 GFM 表格`
+（都是「解析器对输入的形状有隐含假设」——那条假设换行，这条假设范围）。

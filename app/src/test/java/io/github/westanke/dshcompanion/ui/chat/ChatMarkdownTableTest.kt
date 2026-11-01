@@ -1,5 +1,9 @@
 package io.github.westanke.dshcompanion.ui.chat
 
+import org.intellij.markdown.ast.ASTNode
+import org.intellij.markdown.flavours.gfm.GFMElementTypes
+import org.intellij.markdown.flavours.gfm.GFMFlavourDescriptor
+import org.intellij.markdown.parser.MarkdownParser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -262,5 +266,157 @@ class ChatMarkdownTableTest {
         assertNull(resolveColumnWidthsDp(listOf(300f, 300f), 417f))
         // 恰好装下（含 17dp gap）：不摊也不缩。
         assertEquals(listOf(200f, 200f), resolveColumnWidthsDp(listOf(200f, 200f), 417f))
+    }
+    // ────────────── #13 一条消息两张表：表头/分隔行不许串进上一张 ──────────────
+
+    /**
+     * 真机原文（v2.2.65 发版汇报，session `session-ed737838` seq 7355）：两张表之间隔着
+     * 代码块与小标题。渲染库交给 table 回调的是**整篇全文**，早期实现直接拿全文解析 ——
+     * 表 B 的表头 `| # | 内容 | 状态 |` 与分隔行被当成表 A 的数据行，真机画成灰底
+     * 「# 内容」+「--- ---」两行，且表 B 的 `状态` 列整列消失（issue #13 截图）。
+     *
+     * 守的是：**多张表拼在一起的文本一律判非表格**，交给调用方回落纯文本，宁可显示原文
+     * 也不显示错结构。真正的修法是调用方先按 AST 节点切片（[tableNodeSlice]）。
+     */
+    @Test
+    fun `two tables concatenated are not parsed as one`() {
+        val twoTables = """
+            | 渠道 | 状态 |
+            |---|---|
+            | **Gitee**（主站） | tag v2.2.65 + Release **id 1259990**，APK 与 SHA256SUMS 都在 |
+            | **AtomGit**（备站） | tag + Release（正文含 Gitee 下载链接） |
+
+            中间还有一段说明文字。
+
+            | # | 内容 | 状态 |
+            |---|---|---|
+            | #1 | `ChatDetail.kt` 正好 800 行 | 未动 |
+            | #2 | 清 DEBT-006（WebView 桥自持 OkHttp） | 未动 |
+        """.trimIndent()
+        // 全文喂进去：出现两个分隔行 → 判非表格，不硬渲染成「表 A + 表 B 的表头当数据」。
+        assertNull(parseMarkdownTable(twoTables))
+    }
+
+    /** 切片之后各自解析：表 A 得 2 列 2 行，表 B 得 3 列 2 行，互不污染。 */
+    @Test
+    fun `sliced tables parse independently`() {
+        val tableA = """
+            | 渠道 | 状态 |
+            |---|---|
+            | **Gitee**（主站） | tag v2.2.65 |
+        """.trimIndent()
+        val tableB = """
+            | # | 内容 | 状态 |
+            |---|---|---|
+            | #1 | `ChatDetail.kt` 正好 800 行 | 未动 |
+        """.trimIndent()
+
+        val a = parseMarkdownTable(tableA)!!
+        assertEquals(listOf("渠道", "状态"), a.header)
+        assertEquals(1, a.rows.size)
+        assertEquals("**Gitee**（主站）", a.rows[0][0])
+
+        val b = parseMarkdownTable(tableB)!!
+        assertEquals(listOf("#", "内容", "状态"), b.header)
+        assertEquals(1, b.rows.size)
+        // 三列必须都在：状态列不许被截掉。
+        assertEquals(listOf("#1", "`ChatDetail.kt` 正好 800 行", "未动"), b.rows[0])
+    }
+
+    /** AST 节点偏移切片：越界夹回合法范围，绝不抛异常（渲染路径崩一次整条消息就没了）。 */
+    @Test
+    fun `table slice range clamps instead of throwing`() {
+        val content = "前文\n| a | b |\n|---|---|\n| 1 | 2 |\n后文"
+        val start = content.indexOf("| a")
+        val end = content.indexOf("后文").let { if (it < 0) content.length else it }
+        assertEquals("| a | b |\n|---|---|\n| 1 | 2 |", tableSliceRange(content, start, end).trimEnd())
+
+        // 越界：起点负数夹到 0，终点超长夹到 length。
+        assertEquals(content, tableSliceRange(content, -5, content.length + 100))
+        // 终点小于起点：夹成空串，不抛。
+        assertEquals("", tableSliceRange(content, 10, 3))
+    }
+
+    // ────────────── #13 窄表首列：粗体标记不许原样露出 ──────────────
+
+    /**
+     * 窄表（≤2 列）第一列走 `Text(cell)` 直出，于是 `**Gitee**（主站）` 把星号画了出来 ——
+     * 同一张表的第二列走 Markdown 渲染，粗体正常，两列行为不一致（issue #13 截图）。
+     * 修法是首列渲染前过 [stripInlineMarkup]：字段名要的是「加粗的文字」，不是嵌套排版。
+     */
+    @Test
+    fun `narrow label strips bold markdown so no asterisks reach the screen`() {
+        assertEquals("Gitee（主站）", stripInlineMarkup("**Gitee**（主站）"))
+        assertEquals("AtomGit（备站）", stripInlineMarkup("**AtomGit**（备站）"))
+        assertEquals("GitHub（从站）", stripInlineMarkup("**GitHub**（从站）"))
+        // 纯字段名不受影响。
+        assertEquals("渠道", stripInlineMarkup("渠道"))
+        // 下划线粗体、行内代码也一并剥掉。
+        assertEquals("超时", stripInlineMarkup("__超时__"))
+        assertEquals("timeout", stripInlineMarkup("`timeout`"))
+    }
+    /**
+     * **端到端**：用真实的 `org.intellij.markdown` 解析器跑真机原文，取出两个 TABLE 节点，
+     * 各自切片后分别解析 —— 这才是 #13 修复的真正证据（前面几条测的是切片内核与兜底）。
+     *
+     * 原文取自 v2.2.65 发版汇报（session `session-ed737838` seq 7355）。缺陷的成因是
+     * `MarkdownComponentModel.content` 是整篇全文，所以这里直接用「整篇 raw」模拟它，
+     * 而不是手写一段只有表格的片段 —— 那样测不出串表。
+     */
+    @Test
+    fun `real ast slices keep the two tables apart`() {
+        val raw = """
+            ## v2.2.65 发版完成
+
+            ### 发版结果
+
+            | 渠道 | 状态 |
+            |---|---|
+            | **Gitee**（主站） | tag v2.2.65 + Release **id 1259990** |
+            | **AtomGit**（备站） | tag + Release |
+
+            ```
+            APK DSH伴侣-companion-v2.2.65.apk
+            ```
+
+            ### 还欠着三件
+
+            | # | 内容 | 状态 |
+            |---|---|---|
+            | #1 | `ChatDetail.kt` 正好 800 行 | 未动 |
+            | #2 | 清 DEBT-006（WebView 桥自持 OkHttp） | 未动 |
+        """.trimIndent()
+
+        // 全文直接解析：判非表格（两个分隔行），回落纯文本 —— 不是「悄悄渲染错结构」。
+        assertNull(parseMarkdownTable(raw))
+
+        // 按 AST 节点切片后：两张表各自正确。
+        val tables = tableNodes(raw)
+        assertEquals(2, tables.size)
+
+        val a = parseMarkdownTable(tableNodeSlice(raw, tables[0]))!!
+        assertEquals(listOf("渠道", "状态"), a.header)
+        assertEquals(2, a.rows.size)
+        assertEquals("**Gitee**（主站）", a.rows[0][0])
+
+        val b = parseMarkdownTable(tableNodeSlice(raw, tables[1]))!!
+        assertEquals(listOf("#", "内容", "状态"), b.header)
+        assertEquals(2, b.rows.size)
+        // 三列都在：状态列不许被第一张表的 2 列宽截掉。
+        assertEquals("#1", b.rows[0][0])
+        assertEquals("`ChatDetail.kt` 正好 800 行", b.rows[0][1])
+        assertEquals("未动", b.rows[0][2])
+    }
+
+    /** 用真实解析器取出所有 TABLE 节点（顺序即文档顺序）。 */
+    private fun tableNodes(content: String): List<ASTNode> {
+        val root = MarkdownParser(GFMFlavourDescriptor()).buildMarkdownTreeFromString(content)
+        val found = mutableListOf<ASTNode>()
+        fun walk(node: ASTNode) {
+            if (node.type.equals(GFMElementTypes.TABLE)) found += node
+            node.children.forEach(::walk)
+        }
+        walk(root)
+        return found
     }
 }

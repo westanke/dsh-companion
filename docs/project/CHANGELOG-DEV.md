@@ -1,5 +1,66 @@
 # 开发日志
 
+## 未发布 · 一条消息两张表：第二张串进第一张 + 窄表首列粗体原样露出（#13）（2026-11-01）
+
+### 基于什么
+v2.2.67。用户贴来一张 v2.2.65 的会话截图（「推荐DSH插件到插件市场」），正文里有
+「### 发版结果」表（2 列：渠道 / 状态）和「### 还欠着三件」表（3 列：# / 内容 / 状态）。
+真机上看到两处不对：
+
+- 第一张表的渠道列里 `**Gitee**（主站）`、`**AtomGit**（备站）`、`**GitHub**（从站）`
+  的**星号原样露在屏幕上**；
+- 第一张表末尾莫名多出两行：一行灰底的「# 内容」，一行「--- ---」——那正是**第二张表的表头行
+  与分隔行**；第二张表自己的数据（`#1` `#2` `#3` `#4 后半`）则被截成两列混在第一张表里。
+
+### 根因（两个独立缺陷）
+1. **表回复调拿到的 content 是整篇 markdown，不是这一段**。`ui/chat/ChatCodeBlock.kt` 里
+   `table = { model -> parseMarkdownTable(model.content) }`，而渲染库
+   `com.mikepenz:multiplatform-markdown-renderer` 的 `MarkdownComponentModel.content`
+   是**整篇全文**（`MarkdownExtensionKt.MarkdownElement` 直接透传 `MarkdownKt` 传进来的
+   `State$Success.getContent()`，全 jar 只有 code / list / text 三处做切片，表格这处不切）。
+   于是 `parseMarkdownTable` 那句 `filter { it.startsWith("|") && it.endsWith("|") }`
+   把**两张表的行全收进同一批**：`cells[1]` 是表 A 的分隔行 → 判为合法表 → header 取
+   表 A 的 2 列 → 表 B 的表头 `| # | 内容 | 状态 |` 与分隔行 `|---|---|---|` 被
+   `normalizeColumns(…, 2)` 截成 2 列，当成表 A 的数据行渲染出来。
+   一条消息里只有一张表时看不出问题，**两张表是触发条件**。
+2. **窄表第一列根本不解析行内 Markdown**。`ChatMarkdownTable` 在 `header.size < 3` 时整表
+   转 `ChatMarkdownNarrowTable`，其 `TableRow` 的
+   `fixedWidth == null && columnIndex == 0 && cells.size < 3` 分支直接
+   `Text(cell, …)` —— 这一分支是为「字段名列」定稿的（窄表首列限宽 104dp、两行省略），
+   当时没人试过首列带粗体。
+
+### 改法
+1. **按 AST 节点切片再解析**（`ChatMarkdownTable.kt` 新增 `tableNodeSlice(content, node)` +
+   纯函数内核 `tableSliceRange(content, start, end)`）：`TABLE` 节点的
+   `startOffset` / `endOffset` 正好卡在整张表首尾（AST 探针实测：含两表的原文切出
+   [10,227] 与 [642,835] 两段），切完再喂 `parseMarkdownTable`。
+   偏移越界时 `coerceIn` 夹取、终点小于起点返回空串 —— 渲染路径上抛异常会让整条消息消失。
+2. **`parseMarkdownTable` 加兜底**：数据行里若再出现分隔行
+   （`cells.drop(2).any(::isSeparatorRow)`）直接判非表格、回落原文，防「万一还有调用方喂全文」
+   时静默画错。
+3. **窄表首列剥行内标记再显示**：`Text(stripInlineMarkup(cell), …)`。复用估宽用的
+   `stripInlineMarkup`（剥图片 / 链接 / 粗体 / 删除线 / 斜体 / 反引号），零新增代码。
+   没有改成整块 `Markdown(...)`，因为那会把 `labelMedium` 层级与 104dp 限宽一起抹平。
+
+### 测了什么
+`ChatMarkdownTableTest` 19 → 24 条，新增 5 条：
+`two tables concatenated are not parsed as one`（全文直接喂进去返回 null）、
+`sliced tables parse independently`、`table slice range clamps instead of throwing`、
+`narrow label strips bold markdown so no asterisks reach the screen`、
+**`real ast slices keep the two tables apart`**（端到端：用真实
+`MarkdownParser(GFMFlavourDescriptor())` 解析含两张表的整篇原文，walk 出 `TABLE` 节点断言 2 个，
+再各自切片解析，验证 2 列 / 3 列两张表互不串味）。
+全量 89 类 / 921 用例 0 失败。
+
+### 真机验证（2026-11-01，v2.2.65 那条真实会话，vivo V2080A）
+- [x] 两张表各自独立渲染、无「--- ---」行：同一张消息里表 A（渠道 / 状态，2 列）之后直接是代码块，
+      表 B（# / 内容 / 状态，3 列）在下方独立成表，`#1 #2 #3 #4 后半` 四行数据都在，**灰底「# 内容」
+      与「--- ---」两行已消失**。
+- [x] 窄表首列不再露出星号：`**Gitee**（主站）`、`**AtomGit**（备站）`、`**GitHub**（从站）`
+      显示为 `Gitee（主站）` 纯文字。**注意是剥掉标记、不是渲染成粗体** —— 窄表首列要保住
+      104dp 限宽与 `labelMedium` 层级，没走整块 Markdown 渲染。
+- [x] ≥3 列表格不回归：表 B 三列 fit 分支正常，左滑后「未动」列完整可见，与 #9 的内容估宽一致。
+
 ## v2.2.67 · 发原图必超时：客户端按 WS 帧上限压缩图片 + 断线清理在途请求（#12）（2026-11-01）
 
 ### 基于什么
