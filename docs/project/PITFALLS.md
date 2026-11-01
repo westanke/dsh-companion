@@ -1361,3 +1361,55 @@ JsonDecodingException。修复：WS 侧直接
 
 **同类**：`### 表格贴上一行：intellij-markdown 不认无空行 GFM 表格`
 （都是「解析器对输入的形状有隐含假设」——那条假设换行，这条假设范围）。
+
+### WS 半死：socket 断了但状态还写着「已连接」，帧写进去等满超时且不回落 REST
+
+**症状**（2026-11-01 真机，issue #16）：从相册选图返回后点发送，界面转圈 **15 秒**，
+然后弹「WS 请求超时（15000ms）：message（期望应答 sent）」，消息退回输入框，得手点重发。
+`files/diag.log` 的现场是：
+
+```
+21:51:24.937 #12 LIFE onPause 暂停时 px=1080x2316
+21:51:25.496 #13 LIFE onStop
+21:51:34.003 #14 LIFE onStart
+21:51:34.006 #15 LIFE onResume 恢复时 px=1080x2316
+21:52:11.013 #16 SEND 请求失败：DshApiException: WS 请求超时（15000ms）：message（期望应答 sent）
+```
+
+注意时间差：**只离开了 10 秒**。同一张图重发一次就成功（`#26 WS 配对：requestId 快路 message ← sent`）。
+
+**根因三条，缺一条都解释不完**：
+
+1. **状态机只在收帧时更新**。`onClosing` / `onClosed` / `onFailure` 三条断线通知都要等
+   **对端发话或者 TCP 超时**；App 进 `onStop` 时那条 socket 既没关也没人写，状态就停在
+   `WsReady` 一动不动。这与 `### WebSocket 断连只挂 onClosed` 是同一个家族：
+   那条讲「对端发 close 时别漏」，这条讲「谁都没说话时怎么发现」。
+2. **OkHttp 的 `pingInterval(20s)` 救不了**。它是连接层的 ping，靠回调线程驱动 ——
+   进程被冻结时（`onStop` 之后）它自己也停摆，回来之后不会补一次「你还好吗」。
+   而 `readTimeout(45s)` 意味着「半死」最多能持续 45 秒才被发现。
+3. **`WS_TIMEOUT` 刻意不回落 REST，而且这个刻意在这里是错的**。超时的语义是
+   「帧**可能**已送达」，发消息不幂等、重发等于问两遍，所以 `isFrameNeverSent` 不含它。
+   但上面那个现场里帧**根本没送达** —— 判据看到的现象（超时）和真实原因（连接早死了）
+   不是一回事。这就是为什么不能靠「放宽 WS_TIMEOUT 的回落」来修：那是把安全判据改松，
+   换来的只是「大概率能重发」。真正该做的是**在写 socket 之前就判定连接不可信**。
+
+**现在怎么办（三层，都在 `data/ws/MobileWsTransport.kt`）**：
+
+1. **判据前移**：`refuseIfStale()` 在 `send()` / `sendNoReply()` **写 socket 之前**跑。
+   静默超过 `livenessTimeoutMillis`（= 心跳 2 倍 + 5 秒，即 45 秒）就当场 `abandon`
+   （换代 + 关旧连接 + 排重连），并让帧以「没发出去」的姿态失败 ——
+   `sendNoReply` 返回 `false` → 路由器抛 `WS_SEND_FAILED`；`send` 抛 `WS_CHANNEL_STALE`。
+   两个码都在 `isFrameNeverSent` 里，**回落 REST 天然成立**，不需要动安全判据。
+2. **回前台当场问一句**：`revalidateLiveness()`（由 `MainActivity.onResume` →
+   `recheckWsLivenessOnResume()` 调用）发一条 `ping`，在 3 秒窗口内等**任何**入站帧。
+   回得来是活的，回不来就当场换连接。这一步专治「只离开 10 秒、还没到 45 秒阈值」
+   那个窗口 —— 光靠静默时长判不出来，因为冻结期间心跳和 pong 一起停了，事后无法
+   从时间戳分辨「安静」和「死了」，只能当场逼一次往返。
+3. **应用层心跳**：每 20 秒发一条 `ping`（比桥的 30 秒心跳短），回帧落在 `onPush` 里被丢掉 ——
+   它的全部价值是刷新 `lastInboundAtMillis`。顺带保住 NAT 空闲连接。
+
+**判据**：以后凡是「连接看起来还在」，先问**「这个结论是多久以前的事实」**。
+时间戳必须是「最近一次收到帧」的时刻（`onMessage` 里 `decode` 之前就刷新，
+连解析不了的帧也算活着），不能是「最近一次状态迁移」。
+**哨兵值不要用 `0`** —— 真机时钟是 `System.currentTimeMillis()`，单测假时钟却从 0 起步，
+两者语义会撞（第一版用例就是这么集体红的），用 `NO_INBOUND_YET = Long.MIN_VALUE`。

@@ -196,6 +196,162 @@ class MobileWsTransportTest {
         assertEquals(0, transport.pendingCount())
     }
 
+    // ───────────────────────── 连接陈旧（issue #16）─────────────────────────
+
+    @Test
+    fun `连接静默超过阈值时业务帧在写 socket 前就被拒 于是能回落 REST`() {
+        // 这是 issue #16 的核心：sendNoReply 返回 false → 路由器抛 WS_SEND_FAILED
+        // → isFrameNeverSent 成立 → 调用方回落 REST。帧一个字节都没写出去。
+        server.enqueue(upgrade(onOpen = sendHello(capabilities = ALL_REQUIRED)))
+        var now = 0L
+        val transport = transport(clock = { now })
+        transport.start()
+        awaitState(transport) { it == ChannelState.WsReady }
+
+        transport.sendNoReply(WsFrames.command(WsClientFrame.PING))
+        awaitFirstFrame()
+
+        // 静默但没到阈值：帧照发（真机上这就是「安静一会儿」的正常连接）。
+        now += 1_000
+        assertTrue(
+            "没到阈值，连接仍应可信",
+            transport.sendNoReply(WsFrames.command(WsClientFrame.PING)),
+        )
+
+        // 越过阈值：下一帧必须在写 socket 之前就被拒。
+        now += FAST_LIVENESS_MS
+        assertFalse(
+            "静默超阈值后帧必须发不出去",
+            transport.sendNoReply(WsFrames.command(WsClientFrame.PING)),
+        )
+        awaitState(transport) { it is ChannelState.WsDown }
+    }
+
+    @Test
+    fun `send 撞上陈旧连接时抛 WS_CHANNEL_STALE 而不是等满超时`() = runBlocking {
+        server.enqueue(upgrade(onOpen = sendHello(capabilities = ALL_REQUIRED)))
+        var now = 0L
+        val transport = transport(clock = { now })
+        transport.start()
+        awaitState(transport) { it == ChannelState.WsReady }
+        transport.sendNoReply(WsFrames.command(WsClientFrame.PING))
+        awaitFirstFrame()
+
+        now += FAST_LIVENESS_MS + 1
+
+        try {
+            transport.send(WsFrames.command(WsClientFrame.SESSIONS))
+            fail("应抛陈旧异常")
+        } catch (error: DshApiException) {
+            assertEquals(MobileWsTransport.WS_CHANNEL_STALE, error.code)
+            assertTrue("消息应带上静默时长：${error.message}", error.message!!.contains("静默"))
+        }
+        assertEquals("陈旧判定不该留下 pending", 0, transport.pendingCount())
+    }
+
+    @Test
+    fun `重连出来的新连接不继承上一条连接的静默时长`() {
+        // 陈旧判定用的是「这条连接最后一次收到帧」的时刻。换代后必须重新起算，
+        // 否则一条刚连好的连接会被上一条的静默时长判死，直接进入重连风暴。
+        server.enqueue(upgrade(onOpen = sendHello(capabilities = ALL_REQUIRED)))
+        server.enqueue(upgrade(onOpen = sendHello(capabilities = ALL_REQUIRED)))
+        var now = 0L
+        val transport = transport(clock = { now })
+        transport.start()
+        awaitState(transport) { it == ChannelState.WsReady }
+
+        // 第一条连接静默超阈值 → 当场放弃、排重连。
+        now += FAST_LIVENESS_MS + 1
+        assertFalse(transport.sendNoReply(WsFrames.command(WsClientFrame.PING)))
+
+        // 重连成功（第二条连接的 hello 刷新了时间戳），此刻不该再被判陈旧。
+        awaitState(transport, timeoutMs = 5_000) { it == ChannelState.WsReady }
+        Thread.sleep(100)
+        assertTrue(
+            "新连接不该继承旧连接的静默时长",
+            transport.sendNoReply(WsFrames.command(WsClientFrame.PING)),
+        )
+    }
+
+    @Test
+    fun `任何入站帧都会刷新存活时间戳`() {
+        // pong 的价值就在这里：它不带 requestId、业务上没人认领，但证明链路此刻通。
+        server.enqueue(
+            upgrade(
+                onOpen = sendHello(capabilities = ALL_REQUIRED),
+                onText = { socket, _ -> socket.send("""{"kind":"pong","data":{"at":1}}""") },
+            ),
+        )
+        var now = 0L
+        val transport = transport(clock = { now })
+        transport.start()
+        awaitState(transport) { it == ChannelState.WsReady }
+
+        now += FAST_LIVENESS_MS - 1_000
+        assertTrue(transport.sendNoReply(WsFrames.command(WsClientFrame.PING)))
+        transport.sendNoReply(WsFrames.command(WsClientFrame.PING))
+        awaitFirstFrame()
+        Thread.sleep(120)
+
+        // 收到 pong 之后时间戳被刷新：再走一段本来会判死的静默，仍然可用。
+        now += FAST_LIVENESS_MS - 1_000
+        assertTrue(
+            "入站帧刷新过时间戳，连接应仍然可信",
+            transport.sendNoReply(WsFrames.command(WsClientFrame.PING)),
+        )
+    }
+
+    @Test
+    fun `回前台探活拿不到任何入站帧就当场换连接`() = runBlocking {
+        // 真机场景：从相册回来 socket 已经死了，但状态还写着「已连接」。
+        // 探活必须在观察窗内等不到帧时主动 abandon，让界面进入重连而不是假装没事。
+        server.enqueue(upgrade(onOpen = sendHello(capabilities = ALL_REQUIRED)))
+        server.enqueue(upgrade(onOpen = sendHello(capabilities = ALL_REQUIRED)))
+        var now = 0L
+        val transport = transport(
+            clock = { now },
+            probeTimeoutMillis = 300L,
+        )
+        transport.start()
+        awaitState(transport) { it == ChannelState.WsReady }
+
+        transport.revalidateLiveness()
+
+        awaitState(transport, timeoutMs = 5_000) { it == ChannelState.WsReady }
+        assertTrue("探活失败应触发重连：${server.requestCount}", server.requestCount >= 2)
+    }
+
+    @Test
+    fun `回前台探活收到 pong 就保持原连接不动`() = runBlocking {
+        server.enqueue(
+            upgrade(
+                onOpen = sendHello(capabilities = ALL_REQUIRED),
+                onText = { socket, _ -> socket.send("""{"kind":"pong","data":{"at":1}}""") },
+            ),
+        )
+        val transport = transport(probeTimeoutMillis = 1_000L)
+        transport.start()
+        awaitState(transport) { it == ChannelState.WsReady }
+
+        transport.revalidateLiveness()
+
+        awaitState(transport) { it == ChannelState.WsReady }
+        assertEquals("探活成功不该换连接", 1, server.requestCount)
+    }
+
+    @Test
+    fun `心跳按间隔发 ping 让连接不停留在静默状态`() {
+        // 不心跳的话，一条正常空闲的连接会被 refuseIfStale 误判成死的。
+        server.enqueue(upgrade(onOpen = sendHello(capabilities = ALL_REQUIRED)))
+        val transport = transport(heartbeatIntervalMillis = 60L)
+        transport.start()
+        awaitState(transport) { it == ChannelState.WsReady }
+
+        val pings = received.poll(3, TimeUnit.SECONDS)!!
+        assertTrue("心跳应是 ping 帧：$pings", pings.contains(""""type":"ping""""))
+        assertEquals(ChannelState.WsReady, transport.state.value)
+    }
+
     // ───────────────────────── 超时 ─────────────────────────
 
     @Test
@@ -464,6 +620,10 @@ class MobileWsTransportTest {
     private fun transport(
         token: String = "tok",
         onPush: ((JsonObject) -> Unit)? = null,
+        heartbeatIntervalMillis: Long = HEARTBEAT_OFF_MS,
+        livenessTimeoutMillis: Long = FAST_LIVENESS_MS,
+        probeTimeoutMillis: Long = FAST_PROBE_MS,
+        clock: () -> Long = System::currentTimeMillis,
     ) = MobileWsTransport(
         endpoint = server.url("/").toString(),
         token = token,
@@ -471,6 +631,10 @@ class MobileWsTransportTest {
         defaultTimeoutMillis = FAST_TIMEOUT_MS,
         fileTimeoutMillis = FAST_TIMEOUT_MS,
         backoffMillis = { FAST_BACKOFF_MS },
+        heartbeatIntervalMillis = heartbeatIntervalMillis,
+        livenessTimeoutMillis = livenessTimeoutMillis,
+        probeTimeoutMillis = probeTimeoutMillis,
+        clock = clock,
     )
 
     private fun upgrade(
@@ -525,6 +689,15 @@ class MobileWsTransportTest {
     private companion object {
         const val FAST_TIMEOUT_MS = 400L
         const val FAST_BACKOFF_MS = 60L
+
+        /** 大多数用例不关心心跳，关掉它免得后台协程干扰断言。 */
+        const val HEARTBEAT_OFF_MS = 0L
+
+        /** 陈旧阈值：故意取很小，让「静默超阈值」不必真等 35 秒。 */
+        const val FAST_LIVENESS_MS = 5_000L
+
+        /** 探活窗口。 */
+        const val FAST_PROBE_MS = 200L
         val ALL_REQUIRED = REQUIRED_CAPABILITIES_FOR_WS.toList()
         val ALL_REQUIRED_JSON = ALL_REQUIRED.joinToString(",") { "\"$it\"" }
     }

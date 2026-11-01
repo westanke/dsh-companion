@@ -12,6 +12,7 @@ import io.github.westanke.dshcompanion.data.SessionModels
 import io.github.westanke.dshcompanion.data.ws.ChannelState
 import io.github.westanke.dshcompanion.data.ws.CommandPort
 import io.github.westanke.dshcompanion.data.ws.HitlPort
+import io.github.westanke.dshcompanion.data.ws.MobileWsTransport
 import io.github.westanke.dshcompanion.data.ws.ModelPort
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -254,6 +255,22 @@ class WsDomainPortsDegradeTest {
         val rest = Recorder("rest")
 
         hitl(Recorder("ws", channelClosed), rest) { ChannelState.WsReady }.decideApproval("s-1", "ap-1", true)
+
+        assertEquals(listOf("rest.decideApproval(s-1,ap-1,true).also{}"), rest.calls)
+    }
+
+    @Test
+    fun `连接陈旧也算帧没发出去 会回落 REST`() = runBlocking {
+        // #16：陈旧判定发生在 webSocket.send 之前，帧一个字节都没写出去，
+        // 与 WS_CHANNEL_CLOSED 同级 —— 归「没送达」，必须回落。
+        val stale = DshApiException(
+            0,
+            MobileWsTransport.WS_CHANNEL_STALE,
+            "WS 连接已静默 40000ms，帧未发出：session-stats",
+        )
+        val rest = Recorder("rest")
+
+        hitl(Recorder("ws", stale), rest) { ChannelState.WsReady }.decideApproval("s-1", "ap-1", true)
 
         assertEquals(listOf("rest.decideApproval(s-1,ap-1,true).also{}"), rest.calls)
     }

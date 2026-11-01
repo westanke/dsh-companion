@@ -154,6 +154,11 @@ class MainActivity : AppCompatActivity() {
         // 翻成 false，而 `App.kt` 的门闩判据（`!connectGatePassed || !state.connected`）
         // 因此成立 —— 界面自然会停/回到连接页，不会把用户送进一个已经断了的会话页。
         viewModel.recheckConnectionIfOnConnectScreen()
+        // 上面那条只覆盖「还停在连接页」——进了 App 之后它第一句就短路了
+        // （`data/ConnectionLiveness.shouldRecheckActiveConnection`）。
+        // WS 通道另有一步更轻的探活：发一条 ping、等任何入站帧（issue #16）。
+        // 开相册往返后 socket 已经僵死而状态还写着「已连接」，靠的就是这一步收口。
+        viewModel.recheckWsLivenessOnResume()
     }
 
     override fun onPause() {

@@ -1,5 +1,92 @@
 # 开发日志
 
+## 未发布 · WS 半死：从相册返回后发送等满 15 秒且不回落 REST（#16）（2026-11-01）
+
+### 基于什么
+#15 真机验证时暴露的既有缺陷。发一张 287.8 KiB 的截图，界面转圈 15 秒后弹
+「WS 请求超时（15000ms）：message（期望应答 sent）」，消息退回输入框；重发一次就成功。
+`files/diag.log` 显示中间只离开过 10 秒（`onPause` → `onStop` → `onStart` → `onResume`），
+回来之后那条 WebSocket 已经不中用了，但 App 仍认为「已连接」。
+
+用户 2026-11-01 的裁定：「必须修」。
+
+### 根因
+不是「连接断了没发现」这么笼统，是三条具体的缺失，缺一条都解释不完：
+
+1. **状态机只在收帧时更新**。`onClosing` / `onClosed` / `onFailure` 三条断线通知都要等
+   **对端发话或者 TCP 超时**。App 进 `onStop` 时那条 socket 既没关也没人写，`ChannelState`
+   就停在 `WsReady` 一动不动 —— 这是 `### WebSocket 断连只挂 onClosed` 的姊妹坑：
+   那条讲「对端发 close 时别漏」，这条讲「谁都没说话时怎么发现」。
+2. **OkHttp 的 `pingInterval(20s)` 救不了**。它是连接层 ping，靠回调线程驱动；进程被冻结时
+   （`onStop` 之后）它自己也停摆，回来不会补一次「你还好吗」。叠加 `readTimeout(45s)`，
+   「半死」最长能安静地存在 45 秒。
+3. **`WS_TIMEOUT` 刻意不回落 REST，而这个「刻意」在这里是错位的**。超时的语义是
+   「帧**可能**已送达」，发消息不幂等、重发等于问两遍，所以 `isFrameNeverSent` 不含它。
+   但上述现场里帧**根本没送达** —— 判据看到的现象（超时）与真实原因（连接早死了）不是一回事。
+   **不能靠放宽 `WS_TIMEOUT` 的回落来修**，那是把安全判据改松；要做的是在写 socket 之前
+   就判定连接不可信。
+
+### 改法（三层，全在 `data/ws/MobileWsTransport.kt`）
+1. **判据前移**：新增 `refuseIfStale()`，在 `send()` / `sendNoReply()` **写 socket 之前**跑。
+   静默超过 `livenessTimeoutMillis`（= 心跳 2 倍 + 5 秒 = 45 秒）就当场 `abandon`
+   （换代 + 关旧连接 + 排重连），并让帧以「没发出去」的姿态失败：`sendNoReply` 返回 `false`
+   → 路由器抛 `WS_SEND_FAILED`；`send` 抛新增的 `WS_CHANNEL_STALE`。两个码都在
+   `isFrameNeverSent` 里，**回落 REST 天然成立**，安全判据一个字没松。
+   存活时间戳 `lastInboundAtMillis` 在 `Listener.onMessage` 里 `decode` **之前**刷新
+   —— 连解析不了的帧也算活着；哨兵值用 `NO_INBOUND_YET = Long.MIN_VALUE` 而不是 `0`
+   （真机时钟几百亿、单测假时钟从 0 起步，用 0 会撞）。
+2. **回前台当场问一句**：新增 `suspend fun revalidateLiveness()`，由 `MainActivity.onResume`
+   → `recheckWsLivenessOnResume()` 调用。**直接**写一条 `ping`（绕过 `refuseIfStale`，
+   因为这一趟就是要逼一次往返），3 秒窗口内等**任何**入站帧：回来即视为活的，回不来当场换连接。
+   这一步专治「只离开 10 秒、还没到 45 秒阈值」那个窗口 —— 冻结期间心跳和 pong 一起停了，
+   事后从时间戳无法分辨「安静」与「死了」，只能当场逼一次。
+   注：`recheckConnectionIfOnConnectScreen()` 管不到这里，它第一句就是
+   `if (connectGatePassed && connected) return false`（进 App 后永不复核）。
+3. **应用层心跳**：每 20 秒发一条 `ping`（比桥的 30 秒心跳短），`pong` 落在 `onPush` 里被丢掉
+   —— 它的全部价值是刷新 `lastInboundAtMillis`，顺带保住 NAT 空闲连接。`onHello` 判定
+   进入 `usesWs` 时启动，`degradeAndRetry` / `close()` 时停。
+
+### 测了什么
+- 单测 **89 类 / 919 用例**全绿（新增 9 条）。
+- `MobileWsTransportTest` 新增 8 条：连接静默超阈值时业务帧在写 socket 前就被拒（于是能回落 REST）、
+  `send` 撞上陈旧连接抛 `WS_CHANNEL_STALE` 而不是等满超时、重连出来的新连接不继承上一条的静默时长、
+  任何入站帧都刷新存活时间戳、回前台探活拿不到入站帧就当场换连接、收到 `pong` 则保持原连接、
+  心跳按间隔发 `ping`。
+- `WsDomainPortsDegradeTest` 新增 1 条：`WS_CHANNEL_STALE` 也算帧没发出去、会回落 REST。
+- 坑位写进 `PITFALLS.md`（`### WS 半死：socket 断了但状态还写着「已连接」…`）并加进 `AGENTS.md` §7 索引。
+
+### 真机验证
+- [x] **正常路径不回归**：不切后台直接发 `cur.png`（320.0 KiB 原图，未压缩），diag.log 出现
+      `23:20:05.151 #153 WS 配对：requestId 快路 message ← sent` —— 走 WS、配对正常。
+- [x] **心跳确实在跑、且不刷屏**：每次进 `usesWs` 后日志出现
+      `WS 心跳启动：每 20000ms 一条 ping（陈旧阈值 45000ms）`（`#138`/`#144`/`#266`/`#270` 等）；
+      静置期间日志里**没有**任何 ping/pong 行，心跳帧本身不打日志，噪音为零。
+- [x] **前后台往返后连接能自愈**：`adb_action lock` 锁屏放置 **55 秒**（远超 45 秒陈旧阈值）→
+      `wake` 解锁。diag.log 序列为 `#252 WsDown(reason=Software caused connection abort)` →
+      `#259 onResume` → `#264 WS 事件通道切到 WS` → `#266 心跳启动` → `#277` 起 `commands`/`history`
+      正常配对。**没有出现任何 `WS_TIMEOUT`，也没有等到 15 秒**。
+- [ ] **半死窗口内不丢消息**（`WS_CHANNEL_STALE` 回落 REST 分支）：**未在真机触发**。
+      原因见下，属设备行为不属缺陷。
+
+### 真机验证的附加发现（比原缺陷更本质，记录备查）
+
+上面第 3 项之所以没走到 `revalidateLiveness()`／`refuseIfStale()`，是因为 **vivo 这台机器
+的 socket 在后台总被系统判成显式断开**（`SocketException: Software caused connection abort`），
+`onDisconnected` 抢在回前台之前就把状态降到 `WsDown` 了，`usesWs` 变 false →
+回前台探活第一句 `if (!state.value.usesWs) return` 直接短路。这是**好事**（自愈比探活更早），
+但也意味着「socket 活着、桥不应答」这个更阴的半死场景没法用普通锁屏构造出来。
+两条新增判据（`refuseIfStale` / `revalidateLiveness`）目前只有单测覆盖。
+
+顺带记录一条**独立于本 issue 的既有语义问题**（未在本 issue 修，避免混改动）：
+
+- 23:19:43 出现一次 `WS 请求超时（15000ms）：message（期望应答 sent）`，但随后
+  `23:20:05` 桥回了 `sent` —— 间隔 37 秒。查桥 `src/host/ws-basic.ts:message()`：
+  它要等 `chat.prompt(...)` **整个跑完**才发 `sent`，会话正忙时这条应答天然会晚于 15 秒。
+- 即「会话忙」与「连接半死」在客户端看起来是**同一个** `WS_TIMEOUT`，而两者该走的处置完全相反：
+  前者应等（或放宽超时），后者应立刻换连接。当前代码把它们混在 `WS_TIMEOUT` 一个码里。
+- 这属于「`message` 帧应答时机」的设计问题，需要单独开 issue 讨论（可选方向：桥在受理时先回
+  一个 `accepted` 帧、或客户端对 `message` 用更长的超时口径）。#16 不动它。
+
 ## 未发布 · 发图按体积选通道：≤500 KiB 走 WS，>500 KiB 走 REST 保原画质（#15）（2026-11-01）
 
 ### 基于什么

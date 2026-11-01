@@ -30,6 +30,7 @@ import io.github.westanke.dshcompanion.data.ws.WsMessagePort
 import io.github.westanke.dshcompanion.data.ws.WsRequestRouter
 import io.github.westanke.dshcompanion.data.ws.WsServerFrame
 import io.github.westanke.dshcompanion.data.ws.WsSessionPort
+import androidx.lifecycle.viewModelScope
 import java.io.Closeable
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -500,6 +501,28 @@ internal fun HarnessViewModel.closeWsTransport() {
     wsTransport = null
 }
 
+/**
+ * 回到前台时顺手确认 WS 通道还活不活（issue #16）。
+ *
+ * 为什么不在 `recheckConnectionIfOnConnectScreen()` 里做：那条判据第一句就是
+ * `if (connectGatePassed && connected) return false` —— 进了 App 之后它**永远**不复核
+ * （`data/ConnectionLiveness.kt`，KDoc 写明「进了 App 之后有事件流盯着」）。而 issue #16
+ * 恰恰发生在进了 App 之后：开相册往返，事件流自己也是断的，没人发现。
+ *
+ * 这里只做一件很轻的事：让传输层发一条 `ping`、在探活窗口内等任何入站帧。
+ * 判定失败时传输层自己 `abandon` → 状态机翻成 `WsDown` → 退避重连；该连接上的在途请求
+ * 以通道已断的码失败掉，调用方本来就会回落 REST。所以这里不需要额外处理。
+ */
+internal fun HarnessViewModel.recheckWsLivenessOnResume() {
+    val transport = wsTransport ?: return
+    // 只在通道「自称可用」时探活：已经降级/关闭的，状态机自己会处理，再探一次只是噪音。
+    if (!transport.state.value.usesWs) return
+    viewModelScope.launch {
+        runCatching { transport.revalidateLiveness() }
+            .onFailure { DiagLog.w("WS", "回前台探活异常：${it.message ?: it::class.java.simpleName}") }
+    }
+}
+
 // ───────────────────────── 自适应端口 ─────────────────────────
 
 /**
@@ -629,10 +652,21 @@ internal class AdaptiveMessagePort(
  *
  * 别把它和 `WS_TIMEOUT` 混为一谈：超时时帧**可能**已经送达并产生了副作用，
  * 那种情况绝不能偷偷重试（发消息不幂等，重试等于问两遍）。
+ *
+ * ## 为什么 `WS_CHANNEL_STALE` 也在这里（issue #16）
+ *
+ * 它是「发帧之前就发现这条连接早死了」的失败码（见 `MobileWsTransport.refuseIfStale`）：
+ * 判定发生在 `webSocket.send(...)` **之前**，帧一个字节都没写出去，语义与
+ * `WS_CHANNEL_CLOSED` 完全同级 —— 唯一区别是成因（那个是「通道被关时还有在途请求」，
+ * 这个是「连接静默太久，主动放弃」）。
+ *
+ * 业务请求实际走 `sendNoReply`（返回 `false` → 路由器抛 `WS_SEND_FAILED`），所以
+ * 落不到这个码；但 `send()` 这条路径会抛它，两边判据必须一致，否则哪天有人把某条
+ * 请求改回 `send()`，就会静默退化成「不回落、丢消息」。
  */
 internal fun isFrameNeverSent(failure: DshApiException): Boolean =
     failure.code == "WS_NOT_READY" || failure.code == "WS_SEND_FAILED" ||
-        failure.code == "WS_CHANNEL_CLOSED"
+        failure.code == "WS_CHANNEL_CLOSED" || failure.code == "WS_CHANNEL_STALE"
 
 /** WS 传输层失败（而不是服务端业务错误）：读操作遇到它就该回落 REST。理由见 [isFrameNeverSent]。 */
 internal fun isWsTransportFailure(failure: DshApiException): Boolean =

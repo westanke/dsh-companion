@@ -1,4 +1,21 @@
 - 日期：2026-11-01
+- **未发布：WS 半死收口（#16）**：从相册返回后发送等满 15 秒报「WS 请求超时（15000ms）」且不回落 REST
+  （`isFrameNeverSent` 刻意不含 `WS_TIMEOUT`），消息退回输入框，重发才成功。三条根因：状态机只在收帧时
+  更新（`onStop` 期间 socket 既不关也没人写，`ChannelState` 停在 `WsReady`）；OkHttp `pingInterval(20s)`
+  在进程冻结时同样停摆，叠加 `readTimeout(45s)`，「半死」可安静存在 45 秒；`WS_TIMEOUT` 的「不回落」
+  语义与真实原因错位。三层改法（全在 `data/ws/MobileWsTransport.kt`）：①`refuseIfStale()` 判据前移，
+  在写 socket 之前按「最近一次收到帧」的静默时长判陈旧，当场换代并把帧以「没发出去」的姿态失败
+  （`sendNoReply` 返回 false → `WS_SEND_FAILED`；`send` 抛 `WS_CHANNEL_STALE`，两者都在
+  `isFrameNeverSent` 里，回落 REST 天然成立，安全判据不松）；②`revalidateLiveness()` 由
+  `MainActivity.onResume` 调用，回前台直接写一条 `ping` 逼一次往返，3 秒窗口无入站帧就当场换连接；
+  ③每 20 秒应用层心跳刷新存活时间戳（顺带保 NAT）。哨兵值用 `NO_INBOUND_YET = Long.MIN_VALUE`
+  而非 0（真机时钟与单测假时钟会撞）。单测 89 类 / 919 用例全绿（+9），坑位进 `PITFALLS.md` 与
+  `AGENTS.md` §7。**真机已验三条**（正常路径 `message ← sent`／心跳在跑且静置零噪音／锁屏 55 秒后
+  自行重连且未等满 15 秒）；`WS_CHANNEL_STALE` 回落分支**未在真机触发**——vivo 后台总把 socket
+  判成 `Software caused connection abort`，`onDisconnected` 抢在回前台之前就降级，探活第一句
+  `if (!usesWs) return` 直接短路，两条新判据目前只有单测覆盖。另记录一条独立既有问题：
+  `message` 帧要等桥 `chat.prompt` 整个跑完才回 `sent`，会话忙时天然超 15 秒，与「连接半死」共用
+  同一个 `WS_TIMEOUT` 码却该有相反处置，需单独开 issue。
 - **未发布：发图按体积选通道（#15）**：用户裁定「图片 500K 以下走 WS、500 以上走 REST」。原方案（#12）
   是入队前一律压到 700 KiB，好处是永远塞得进 WS，代价是画质 —— 4.26 MB 原图被重编码成 697 KiB、
   长边 3200→1600。改法：新增 `WS_INLINE_IMAGE_BUDGET_BYTES = 500 KiB` 与纯函数
@@ -13,9 +30,9 @@
   diag.log 抓到 `message ← sent` 配对；两张各 287.8 KiB 合计 575.6 KiB 时 diag.log 无 `message` 配对
   （即走了 REST），但该会话正跑着一轮 agent，桥侧 `RPC sessions.prompt timed out after 10000ms`，
   消息没被受理 —— **通道分流正确，失败原因是会话忙碌**。
-  同轮还暴露一个**既有缺陷（未修）**：从相册返回后 WS 半死（`onPause`/`onStop` 期间连接失效但状态仍为「已连接」），
+  同轮还暴露一个**既有缺陷**：从相册返回后 WS 半死（`onPause`/`onStop` 期间连接失效但状态仍为「已连接」），
   首次发送等满 15 s 抛 `WS_TIMEOUT` 且**不回落 REST**（`isFrameNeverSent` 刻意不含 WS_TIMEOUT），
-  消息丢失；重发即成功。这条与体积无关，见下方遗留项。
+  消息丢失；重发即成功。这条与体积无关，已另立 issue #16 修掉（见上方条目）。
 - **未发布（真机已验）：一条消息两张表时第二张串进第一张（#13）**：用户贴 v2.2.65 会话截图，正文两张表
   （2 列「渠道/状态」+ 3 列「#/内容/状态」），真机看到①第一张表末尾多出灰底「# 内容」与「--- ---」两行、
   第二张表整列消失；②窄表首列 `**Gitee**` 星号原样露出。根因：`table` 回调拿到的
