@@ -303,7 +303,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.65.apk
+DSH伴侣-companion-v2.2.66.apk
 ```
 
 Requirements:
@@ -598,16 +598,45 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.65` (`versionCode` 10090)
+- Version: `v2.2.66` (`versionCode` 10091)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
 - Unit tests: 88 test classes / 894 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.65.apk`, **3,382,128 bytes**, SHA-256
-  `44dd2f68d31898e1bc254150d8d9e03b2e866df9156e7ac37545f76c83170be9` (kept in sync in
+- Current APK: `DSH伴侣-companion-v2.2.66.apk`, **3,382,128 bytes**, SHA-256
+  `b33297306d50b8de6bb2dba0c8f3f60b48236c2e1bd9e4e75d17188703544a25` (kept in sync in
   `artifacts/SHA256SUMS.txt`; real values are backfilled by release stage A).
-  **This release (v2.2.65: the drawer shows the device you are actually on)**: fixes an old
+  **This release (v2.2.66: four UI and protocol defects closed)**: the first three came from
+  screen-by-screen comparisons against the HarmonyOS port, the fourth from a user report.
+  (1) **Top-bar spacing tightened** (#8): following the values measured on the HarmonyOS build,
+  the gap between the app bar and the big "Sessions" title drops from 53 to 18px, the chat detail
+  title row from 48 to 23.5px, and the status row from 108 to 84px. The status row uses an explicit
+  `height(28dp)` rather than 24dp: with a 36dp file button the 6dp overflow would sit on top of the
+  title row's ⋯ hit target (Compose does not clip, last declared wins).
+  (2) **Column widths for tables with 3+ columns are now content-estimated** (#9): ported from the
+  HarmonyOS `MarkdownLite.ts` algorithm — full-width characters count as 1, Latin as 0.60, inline
+  markup is stripped before measuring (otherwise one long link pins a column at the cap), and widths
+  are clamped to [64,240]dp. When everything fits, columns scale up proportionally to fill the row;
+  when it does not, the whole table scrolls horizontally. The old implementation gave every column
+  of a 3+ column table `weight(1f)`, leaving ~90dp per column on a 4-column table: dense walls of
+  text with the rightmost column clipped.
+  (3) **File references in message bodies are clickable** (#10): the renderer was not the culprit —
+  `ChatPathLinks` swapped the file name for a link but kept the surrounding backticks, producing
+  self-contradictory Markdown like `` `[name](path)` ``, which CommonMark renders verbatim as inline
+  code. It is now an inline-code-aware scanner (skips fenced blocks, matches equal-length backtick
+  runs, and only unwraps the code span when its content is exactly a known file name), and
+  `compactMarkdownTypography` finally gets a `textLink` style (primary + underline) — it was missing,
+  so bare links looked exactly like body text.
+  (4) **Sending PNG images always failed — fixed** (#11): `ImagePart.mediaType` defaults to
+  `"image/png"`, and the WS port reused `DshClient.json` (which only sets `ignoreUnknownKeys`) to
+  encode it. kotlinx.serialization omits fields equal to their default by default, so mediaType
+  vanished from the frame and the kernel rejected it with
+  `Image type undefined is not accepted by this deployment.` JPEG slipped through because its
+  mediaType is not the default — that asymmetry was the clue. The WS port now has its own
+  `wireJson` (`encodeDefaults`) for encoding.
+  Details, root causes and on-device verification for all four are in `docs/project/CHANGELOG-DEV.md`.
+  **Previous release (v2.2.65: the drawer shows the device you are actually on)**: fixes an old
   problem that looked like a bug but was not. The drawer header used to read `HarmonyOS · ICL-AL10`
   while the phone was a vivo V2080A. The bridge row already had `model = V2080A`; only `name` was
   still the value declared when this pairing token was first used, and "a declared name is never

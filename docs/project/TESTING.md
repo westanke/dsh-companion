@@ -310,3 +310,21 @@ apksigner verify --verbose app\build\outputs\apk\release\app-release.apk
   空 `files` / 缺说明容忍、DELIVERABLE 不折进过程组。
   真机状态：表格贴行已复验（2026-10-20）、更新检查已复验（2026-10-21，检查/解析链路）；
   交付物卡片与更新下载/安装链路未上机 —— 按用户既定口径由用户自行完成。单测绿 ≠ 行为对。
+- `v2.2.66`（顶栏间距 / 表格列宽 / 文件链接 / 发图片必挂）通过 `docsCheck`（10 文档 / ROADMAP 任务 /
+  STATUS 引用 / README 双站 774 项 / STRUCTURE 167 锚点 147 源文件 / INTERFACES 136 锚点）、
+  `:app:testDebugUnitTest`（**88 个测试类 / 894 用例 / 0 失败**）、`:app:lintDebug`（0 error）与 `assembleDebug`。
+  本轮新增用例：`ChatMarkdownTableTest` +8（全角/西文字符宽度、显示宽度求和、[64,240]dp 夹取、
+  长内容列更宽、行内链接不抬列宽、`stripInlineMarkup`、按比例摊回、装不下返回 null）；
+  `ChatPathLinksTest` +8（行内代码里的文件名可点、代码里有别的命令不动、围栏块跳过、
+  同一消息里裸文本与行内代码都链接化且只链接一次、双反引号、未闭合反引号当普通文字、
+  已包链接的行内代码解开、目标不是已知文件时不动）；`WsDomainPortsTest` +2
+  （发 PNG / JPEG 时 `mediaType` 必须在帧里 —— 实测把编码改回旧实例时 PNG 那条立刻红）。
+  **真机（vivo V2080A / Android 11 / 1080×2400 / serial 9540718532001JR）逐条核对**：
+  ① 顶栏三处 53→18px / 48→23.5px / 108→84px，返回/⋯/文件按钮点击无热区重叠；
+  ② 4 列对比表列中心 x=240/536/818（旧均分 270 等距）屏内无横滚无截断，3 列表左滑后
+  「关键点」列完整进视口、列内折行、右边框正常；③ `` `ChatPathLinks.kt` `` 渲染成蓝色下划线，
+  点击弹出「文件详情」工作表（`text/plain · 9.9 KiB`），运行卡摘要里的命令名仍是等宽小字未被误改；
+  ④ 修复前必挂的同一张 PNG 截图（287.8 KiB）发送成功，模型回复「收到，两张截图都看到了」，
+  `logcat` 里 `Image type|unsupported|mediaType` 零命中。
+  **未验**：表格的人造极端表（64dp 下限 / 240dp 上限折行）与 ≤2 列字段表只有单测覆盖，
+  真机没翻到样本；#11 的 JPEG 未真机复测（相册无 JPEG 素材，由单测守着）。

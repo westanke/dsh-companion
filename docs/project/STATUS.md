@@ -1,34 +1,14 @@
 - 日期：2026-11-01
-- **WS 通道发 PNG 图片必失败已修（#11，未发版）**：issue #11。用户报「APP 发不了图片」，
-  真机复现弹「Image type undefined is not accepted by this deployment.」。根因不在选图也不在
-  字节读取，而在**编码**：`PromptPart.ImagePart.mediaType` 的默认值恰好是 `"image/png"`，
-  而 WS 端口复用的 `DshClient.json` 没有 `encodeDefaults` → 序列化时这个字段被整个省略 →
-  内核 `validateImageBatch` 读到 `undefined` 直接拒。PNG（截图默认格式）100% 挂，JPEG/WebP
-  因非默认值侥幸逃过 —— 这条不对称就是定位钥匙。改法：`WsMessagePort` 内建
-  `wireJson`（`encodeDefaults = true` + `explicitNulls = false`）专用于编码，不动全局
-  `DshClient.json`（会影响所有 REST 请求体形状）。新增 2 条回归测试（PNG/JPEG 帧里必须有
-  mediaType，实测改回旧编码立刻红）。单测 88 类/894 用例全绿，README 双站与 AGENTS.md §5
-  数字同步。真机验证待做。
-- **正文文件链接可点且有样式（#10，未发版）**：issue #10。两端真机对照发现鸿蒙把文件引用
-  渲染成可点链接、安卓显示 `[文件名](/绝对路径)` 语法原文。真凶是 `data/ChatPathLinks.kt`
-  自己 —— 它把文件名替换成链接却把反引号留着，产出 `` `[name](path)` `` 这种自相矛盾的
-  Markdown，渲染器按 CommonMark 当行内代码原样显示。改法：链接化改为「行内代码感知」的
-  扫描器（围栏块跳过、等长反引号闭合、内容恰好是已知文件名才连反引号一起换成链接、
-  代码里塞文件名不动），外加 `compactMarkdownTypography()` 补 `textLink`
-  （primary + 下划线，此前漏传导致裸链接与正文同色看不出能点）。单测 88 类/892 用例全绿
-  （新增 8 条），README 双站与 AGENTS.md §5 数字同步。真机复验待做。
-- **≥3 列表格列宽按内容估宽（#9，未发版）**：issue #9。对照移植鸿蒙 `MarkdownLite.ts` 的
-  内容感知列宽（全角 1/西文 0.60 估字符宽、夹 [64,240]dp、估前剥行内标记）+ 渲染层两级
-  （装得下摊回剩余撑满整行、装不下最外层横向滚动）。病根是旧 `TableRow` 对 ≥3 列全部
-  `weight(1f)` 均分，4 列表每列 ~90dp 密排且长词被裁断。≤2 列 Whaleness 定稿布局未动。
-  单测 88 类/884 用例全绿（新增 8 条），README 双站与 AGENTS.md §5 数字同步。真机复验待做。
-- **顶栏间距对齐鸿蒙实测值（#8，未发版）**：按 issue #8 带来的鸿蒙版收敛值，把三处大留白
-  收齐 —— ① `ChatSessionPane.kt` 列表标题行 `top 16→6dp`（真机复验：应用栏底→「会话」大字
-  53px→18px，目标 17px；首版 4dp 落地 12px，Text 行框无上空，回补 6dp）；② `ChatHeader.kt`
-  详情标题行返回/⋯ IconButton 显式 32dp（48px→23.5px，目标 22px）；③ 状态行显式
-  `height(28dp)` + 文件按钮 36→28dp（行高 108px→84px；不取 24dp 是因为 36dp 按钮溢出会与
-  ⋯ 热区重叠）。三处真机复验达标，返回/⋯/文件按钮点击无热区重叠。应用栏本体按 issue 备注
-  跳过。未推送、未发版。
+- **v2.2.66（versionCode 10091，发）**：**四处缺陷收口 —— 顶栏间距（#8）、表格列宽（#9）、
+  文件链接（#10）、发图片必挂（#11）**。前三件来自「安卓与鸿蒙版逐屏对照」，第四件是用户报障。
+  ① 顶栏三处留白按鸿蒙实测值收齐：列表「会话」大字 53→18px、详情标题 48→23.5px、状态行
+  108→84px（状态行取 28dp 而非 24dp，因为 36dp 文件按钮溢出会压到 ⋯ 热区）。
+  ② ≥3 列表格列宽从 `weight(1f)` 均分改为内容估算（全角 1 / 西文 0.60、夹 [64,240]dp、
+  估前剥行内标记），装得下按比例摊回、装不下横向滚动；≤2 列定稿布局未动。
+  ③ 文件引用可点：真凶是 `ChatPathLinks` 自己把链接塞进反引号里，改为「行内代码感知」扫描器 +
+  补 `textLink` 样式。④ PNG 发不出去：`ImagePart.mediaType` 默认值命中 `encodeDefaults=false`
+  的省略规则，WS 端口改用自己的 `wireJson`（`encodeDefaults`）编码。
+  单测 88 类 / 894 用例全绿；四项均已真机复验（详见 CHANGELOG-DEV）。
 - 日期：2026-10-31
 - **v2.2.65（versionCode 10090，发）**：**抽屉显示真实设备（#7）+ 行数守卫覆盖 `assets/chat/`（#4 的一半）**。
   抽屉在配对名与桥回传的 model 不一致时补一行「当前设备」；`ArchitectureGuardTest` 的行数扫描面从

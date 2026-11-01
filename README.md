@@ -294,7 +294,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.65.apk
+DSH伴侣-companion-v2.2.66.apk
 ```
 
 安装要求：
@@ -545,14 +545,34 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.65`（`versionCode` 10090）
+- 当前版本：`v2.2.66`（`versionCode` 10091）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：88 个测试类 / 894 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.65.apk`，**3,382,128 字节**，
-  SHA-256 `44dd2f68d31898e1bc254150d8d9e03b2e866df9156e7ac37545f76c83170be9`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
-  **本版（v2.2.65，抽屉显示真实设备）**：修一个「看着像 bug、其实不是」的老问题 ——
+- 当前 APK：`DSH伴侣-companion-v2.2.66.apk`，**3,382,128 字节**，
+  SHA-256 `b33297306d50b8de6bb2dba0c8f3f60b48236c2e1bd9e4e75d17188703544a25`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
+  **本版（v2.2.66，四处界面与协议缺陷收口）**：四件事，前三件来自「安卓与鸿蒙版逐屏对照」，
+  第四件是用户报障。
+  ① **顶栏三处大留白收齐**（issue #8）：按鸿蒙版实测值，列表「会话」大字距应用栏 53→18px、
+  详情标题 48→23.5px、状态行 108→84px。状态行取 `height(28dp)` 而非 24dp —— 文件按钮
+  36dp 时溢出 6dp 会压到标题行 ⋯ 的热区上（Compose 无裁切，后声明者赢）。
+  ② **≥3 列表格列宽改为按内容估算**（issue #9）：移植鸿蒙 `MarkdownLite.ts` 的算法 ——
+  全角字符算 1 个宽度、西文算 0.60、估宽前先剥掉行内标记（否则一条长链接把列顶到上限），
+  夹在 [64,240]dp 之间；装得下就按比例摊回撑满整行，装不下则整表横向滚动。
+  旧实现把 ≥3 列全部 `weight(1f)` 均分，4 列表每列只剩 ~90dp，长内容密排成小字墙且右侧被裁断。
+  ③ **正文文件引用可点**（issue #10）：真凶不是渲染器 —— `ChatPathLinks` 把文件名换成链接
+  却把反引号留着，产出 `` `[name](path)` `` 这种自相矛盾的 Markdown，渲染器按 CommonMark
+  当行内代码原样显示。改为「行内代码感知」的扫描器（围栏块跳过、等长反引号闭合、
+  内容恰好是已知文件名才连反引号一起换成链接），并给 `compactMarkdownTypography` 补上
+  `textLink` 样式（primary + 下划线，此前漏传，裸链接与正文同色看不出能点）。
+  ④ **发 PNG 图片必挂已修**（issue #11）：`ImagePart.mediaType` 的默认值恰好是 `"image/png"`，
+  而 WS 端口复用了只开 `ignoreUnknownKeys` 的 `DshClient.json` 去编码 —— kotlinx.serialization
+  默认省略等于默认值的字段，于是 mediaType 从帧里消失，内核读到 `undefined` 直接拒绝
+  （`Image type undefined is not accepted by this deployment.`）。JPEG 因非默认值侥幸通过，
+  这条不对称就是定位钥匙。改为 WS 端口内建 `wireJson`（`encodeDefaults`）专用于编码。
+  以上四件各自的现象、根因、改法与真机验证见 `docs/project/CHANGELOG-DEV.md`。
+  **上一版 v2.2.65（抽屉显示真实设备）**：修一个「看着像 bug、其实不是」的老问题 ——
   抽屉顶部此前显示 `HarmonyOS · ICL-AL10`，而这台机器是 vivo V2080A。根因是桥侧那条设备记录
   `model` 早已跟着换成了 V2080A，只有 `name` 停在配对时声明的旧值，而「声明过的名字不再自动覆盖」
   是刻意的（免得盖掉用户自己起的名字）。界面只有一行名字，用户无从判断它是「声明过的名字」还是
