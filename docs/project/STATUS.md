@@ -1,4 +1,14 @@
 - 日期：2026-11-01
+- **WS 通道发 PNG 图片必失败已修（#11，未发版）**：issue #11。用户报「APP 发不了图片」，
+  真机复现弹「Image type undefined is not accepted by this deployment.」。根因不在选图也不在
+  字节读取，而在**编码**：`PromptPart.ImagePart.mediaType` 的默认值恰好是 `"image/png"`，
+  而 WS 端口复用的 `DshClient.json` 没有 `encodeDefaults` → 序列化时这个字段被整个省略 →
+  内核 `validateImageBatch` 读到 `undefined` 直接拒。PNG（截图默认格式）100% 挂，JPEG/WebP
+  因非默认值侥幸逃过 —— 这条不对称就是定位钥匙。改法：`WsMessagePort` 内建
+  `wireJson`（`encodeDefaults = true` + `explicitNulls = false`）专用于编码，不动全局
+  `DshClient.json`（会影响所有 REST 请求体形状）。新增 2 条回归测试（PNG/JPEG 帧里必须有
+  mediaType，实测改回旧编码立刻红）。单测 88 类/894 用例全绿，README 双站与 AGENTS.md §5
+  数字同步。真机验证待做。
 - **正文文件链接可点且有样式（#10，未发版）**：issue #10。两端真机对照发现鸿蒙把文件引用
   渲染成可点链接、安卓显示 `[文件名](/绝对路径)` 语法原文。真凶是 `data/ChatPathLinks.kt`
   自己 —— 它把文件名替换成链接却把反引号留着，产出 `` `[name](path)` `` 这种自相矛盾的

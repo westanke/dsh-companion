@@ -1,5 +1,77 @@
 # 开发日志
 
+## 未发布 · WS 通道发 PNG 图片必失败：mediaType 被序列化省略（#11）（2026-11-01）
+
+### 基于什么
+#10 的未发版改动之上。用户报「APP 发不了图片了，和模型没关系」—— 真机复现：选一张
+PNG 截图（287.8 KiB）附加后点发送，正文区仍是「暂无可显示的正文」，屏上弹出
+「Image type undefined is not accepted by this deployment.」
+
+### 症状
+1. **PNG 图片 100% 发不出去**（手机截图默认就是 PNG，等于「发截图」这个最高频场景全挂）；
+2. JPEG / WebP / GIF / HEIC 正常 —— 这条不对称是定位根因的钥匙；
+3. 附件卡片正常显示（文件名 + 体积），说明选图与读字节都没问题，坏在**发出去的那一帧**；
+4. 纯文字消息、文件附件不受影响。
+
+### 根因（探针实证）
+`data/Models.kt:529` 的 `PromptPart.ImagePart` 三个字段**都带默认值**，其中
+`mediaType: String = "image/png"`。而 WS 发消息走 `WsMessagePort`（`data/ws/WsPorts.kt`），
+它用的 Json 实例是 `DshClient.json`（`data/DshClient.kt:38`）：
+
+```kotlin
+internal val json = Json { ignoreUnknownKeys = true }   // 没有 encodeDefaults
+```
+
+kotlinx.serialization 默认 `encodeDefaults = false` → **等于默认值的字段被整个省略** →
+`mediaType = "image/png"` 从帧里消失。内核 `@deepseek-ai/dsh-attachment`
+（`lib/index.js:221` 的 `validateImageBatch`）读到 `undefined`，与白名单比对失败，
+抛 `UNSUPPORTED_IMAGE_TYPE`。JPEG 的 mediaType 不等于默认值，侥幸留在帧里，所以不受影响。
+
+探针单测实测（临时 `ImagePartWireProbeTest`，验完已删）：
+
+```
+PROBE-lenient=[{"type":"image","data":"QUJD","name":"s.png"}]                          ← mediaType 消失
+PROBE-wire   =[{"type":"image","mediaType":"image/png","data":"QUJD","name":"s.png"}]  ← REST 正常
+PROBE-jpeg   =[{"type":"image","mediaType":"image/jpeg","data":"QUJD","name":"s.jpg"}] ← 非默认值侥幸
+```
+
+**REST 路径一直是好的**：`ChatContentParts.messageBody` 用它自己那份 `wireJson`
+（`data/ChatContentParts.kt:50`，`encodeDefaults = true`）。只有 WS 优先改造新建的
+WS 端口直接复用了 `api.json` —— 而 `api.json` 是为**解码**宽容设计的
+（`ignoreUnknownKeys`），拿来**编码**就会省略默认值。`ChatContentParts.kt:22` 的类注释
+早就写明了这条规矩，WS 端口没遵守。
+
+### 改法
+1. **`WsMessagePort` 内建 `wireJson`**（`encodeDefaults = true` + `explicitNulls = false`），
+   编码 prompt part 一律走它，不再用构造参数传进来的 `json`。类注释补第三处差异说明，
+   写清「解码宽容」与「编码完整」是两种需求，不该共用一个实例。
+   没有选择改 `DshClient.json` 全局开 `encodeDefaults`：那会影响所有 REST 请求体的形状
+   （很多类型靠省略默认值保持与内核严格 schema 的兼容），风险面远大于收益。
+2. **补两条回归测试**（`WsDomainPortsTest`）：发 PNG `ImagePart` 断言帧里
+   `content[0].mediaType == "image/png"`；发 JPEG 同样断言。已实测把编码改回 `json`
+   时第一条立刻红 —— 证明它真的守着这个坑。
+3. **`QuestionAnswer.custom` 的默认值省略保持原样**：那里是**有意**的（注释写明
+   「这题不填自由文本时请求体里干脆没有 `custom` 键」），与 #11 不是同一类问题。
+
+### 门禁与测试
+- `:app:testDebugUnitTest`：88 类 / **894 用例**全绿（新增 2 条）；README 中英双站 +
+  AGENTS.md §5 同步 892→894。
+- `docsCheck` / `lintDebug` / `assembleDebug`：全绿。
+
+### 真机验证（vivo V2080A · 1080×2400 · 3px/dp）
+- [x] **PNG 截图发送成功**（2026-11-01 13:31，修复前必挂的同一张
+      `Screenshot_2026_1101_095740.png` 287.8 KiB）：附件卡片 → 点发送 → 消息进入会话，
+      消息流里出现 `Img ~"Screenshot_2026_1101_095740.png" @815,1053`，模型回复
+      「收到，两张截图都看到了」。`logcat -d | grep -iE "image type|unsupported|mediaType"`
+      **零命中** —— 修复前那条 `Image type undefined is not accepted by this deployment.`
+      不再出现。截图 `.dsh-images/verify-png-send-fixed.png`。
+- [x] **纯文字消息不回归**：同一次会话里的文本消息（输入 → 发送 → 回复）全程正常。
+- [ ] **JPEG 真机未复测**（相册里没有 JPEG 样本）：该格式修复前就能发（mediaType 非默认值
+      侥幸留在帧里），修复只是把编码改成 `encodeDefaults = true`，不会让已有字段消失；
+      由 `发 JPEG 图片时 mediaType 也要在帧里` 这条单测守着。
+- [x] **文件附件路径未动**：本次只改 `WsMessagePort` 的 Json 实例，`OpenDocument` → 上传端点
+      那条链路一行未碰。
+
 ## 未发布 · 正文文件链接：行内代码里的文件名可点 + 链接有视觉样式（#10）（2026-11-01）
 
 ### 基于什么

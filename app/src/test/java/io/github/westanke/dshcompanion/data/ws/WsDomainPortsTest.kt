@@ -462,6 +462,67 @@ class WsDomainPortsTest {
         assertEquals(0, link.router.pendingCount())
     }
 
+    // -------------------------------------------------- 发消息的 content 编码（#11）
+
+    /**
+     * `ImagePart.mediaType` 的默认值恰好是 `"image/png"` —— 而 `DshClient.json` 没开
+     * `encodeDefaults`，于是 PNG 的 mediaType 会被序列化整个省略，内核读到 `undefined`
+     * 抛「Image type undefined is not accepted by this deployment.」（issue #11）。
+     *
+     * 这条测试钉住「默认值也必须上线缆」：只发 PNG 一种，因为只有它踩在默认值上。
+     */
+    @Test
+    fun `发 PNG 图片时 mediaType 不许被序列化省略`() = case {
+        val link = Link()
+        val messages = WsMessagePort(link.router, json) { "zh" }
+        val png = PromptPart.ImagePart(mediaType = "image/png", data = "QUJD", name = "shot.png")
+
+        val job = async { messages.sendMessage("s-1", listOf(png), steer = false) }
+        link.awaitSent(1)
+
+        val part = (link.sentData(0)["content"] as JsonArray).single() as JsonObject
+        assertEquals("image", part["type"]?.jsonPrimitive?.content)
+        assertEquals(
+            "PNG 的 mediaType 等于默认值，被 encodeDefaults=false 省略后内核会判 UNSUPPORTED_IMAGE_TYPE",
+            "image/png",
+            part["mediaType"]?.jsonPrimitive?.content,
+        )
+
+        link.reply(
+            WsServerFrame.SENT,
+            buildJsonObject {
+                put("type", WsClientFrame.MESSAGE)
+                put("sessionId", "s-1")
+                put("accepted", true)
+            },
+        )
+        withTimeout(2_000) { job.await() }
+    }
+
+    /** 非默认值的 mediaType 同样要在（JPEG 侥幸通过不等于规矩对）。 */
+    @Test
+    fun `发 JPEG 图片时 mediaType 也要在帧里`() = case {
+        val link = Link()
+        val messages = WsMessagePort(link.router, json) { "zh" }
+        val jpeg = PromptPart.ImagePart(mediaType = "image/jpeg", data = "QUJD", name = "shot.jpg")
+
+        val job = async { messages.sendMessage("s-1", listOf(jpeg), steer = false) }
+        link.awaitSent(1)
+
+        val part = (link.sentData(0)["content"] as JsonArray).single() as JsonObject
+        assertEquals("image/jpeg", part["mediaType"]?.jsonPrimitive?.content)
+
+        link.reply(
+            WsServerFrame.SENT,
+            buildJsonObject {
+                put("type", WsClientFrame.MESSAGE)
+                put("sessionId", "s-1")
+                put("accepted", true)
+            },
+        )
+        withTimeout(2_000) { job.await() }
+    }
+
     @Test
     fun `select-model 应答缺 selected 时抛 WS_BAD_FRAME 而不是崩溃`() = case {
         val link = Link()

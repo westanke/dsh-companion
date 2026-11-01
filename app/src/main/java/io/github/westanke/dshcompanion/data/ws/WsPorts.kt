@@ -262,6 +262,13 @@ internal class WsSessionPort(
  * 2. **必须显式带 `locale`**：REST 走 `DshClient.authenticated()`，会自动加
  *    `Accept-Language`（`interfaceLanguageTag()`），桥据此判 handoff 语言；WS 建连只用
  *    `Sec-WebSocket-Protocol`，不经过那条路径，不显式带就永远是桥的默认值（`zh`）。
+ *
+ * 第三处差异是**编码语义**，不是桥的约束，而是客户端自己的坑（#11，2026-11-01）：
+ * 传进来的 `json` 来自 `DshClient.json`，它只开了 `ignoreUnknownKeys` —— 那是为**解码**
+ * 宽容设计的；拿来**编码**会省略等于默认值的字段，于是 `ImagePart.mediaType` 的默认值
+ * `"image/png"` 被整个丢掉，内核收到 `undefined` 直接拒绝：
+ * 「Image type undefined is not accepted by this deployment.」PNG 必挂、JPEG 侥幸。
+ * 所以编码 prompt part 一律走本类的 [wireJson]，**不要用构造参数那个**。
  */
 internal class WsMessagePort(
     private val router: WsRequestRouter,
@@ -269,12 +276,25 @@ internal class WsMessagePort(
     private val localeTag: () -> String?,
 ) : MessagePort {
 
+    /**
+     * 编码 prompt part 专用的 Json：`encodeDefaults = true` 保证 `mediaType` 这类
+     * 「值恰好等于默认值」的字段也会上线缆；`explicitNulls = false` 让 `name = null`
+     * 直接不出现，而不是发一个 `"name":null`（内核按严格形状解析，多一个 null 键没好处）。
+     *
+     * 与 `ChatContentParts.wireJson` 是同一个口径，故意各留一份而不是共享：
+     * 那份是 REST 请求体的私有实现细节，这份是 WS 帧的；共享会把两个传输层绑在一起。
+     */
+    private val wireJson = Json {
+        encodeDefaults = true
+        explicitNulls = false
+    }
+
     override suspend fun sendMessage(sessionId: String, parts: List<PromptPart>, steer: Boolean) {
         require(sessionId.isNotBlank()) {
             "sessionId 不能为空：桥在 sessionId 缺失时会静默新建一个空会话（ws-handler.ts 的 handleMessageFrame）"
         }
         require(parts.isNotEmpty()) { "EMPTY_CONTENT" }
-        val content = json.encodeToJsonElement(ListSerializer(PromptPart.serializer()), parts)
+        val content = wireJson.encodeToJsonElement(ListSerializer(PromptPart.serializer()), parts)
         val payload = buildMap {
             put("sessionId", JsonPrimitive(sessionId))
             put("content", content)
