@@ -550,8 +550,8 @@ keyPassword=...
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：89 个测试类 / 919 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.68.apk`，**3,382,740 字节**，
-  SHA-256 `e297138bbf1ee13c3d7acdba5d5dc8b03a39744dca8f08dd138a9c46a7aa9929`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
+- 当前 APK：`DSH伴侣-companion-v2.2.68.apk`，**3,382,128 字节**，
+  SHA-256 `722945357163d5f9b21aa989988378ca2d80484d114d767b1cc1da1858744896`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
   **本版（v2.2.68，表格串表 + 发图通道分流 + WS 半死）**：三件事都是上一版真机跑出来的。
   ① **一条消息两张表时第二张串进第一张**（issue #13）：根因不在表格解析器，而在**渲染库给错了料**
   —— `MarkdownComponentModel.content` 是**整篇 markdown 全文**，不是当前这一段；`parseMarkdownTable`
