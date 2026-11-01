@@ -4,10 +4,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.westanke.dshcompanion.data.QUESTION_STATE_CONTINUED
 import io.github.westanke.dshcompanion.data.CHUNKED_UPLOAD_THRESHOLD
-import io.github.westanke.dshcompanion.data.AndroidImageCodec
 import io.github.westanke.dshcompanion.data.ChatContentParts
-import io.github.westanke.dshcompanion.data.MAX_ENCODED_IMAGE_BYTES
-import io.github.westanke.dshcompanion.data.prepareImageForWire
 import io.github.westanke.dshcompanion.data.MAX_UPLOAD_BYTES
 import io.github.westanke.dshcompanion.data.UploadedAttachment
 import io.github.westanke.dshcompanion.data.ChunkPlan
@@ -118,17 +115,22 @@ import kotlinx.serialization.json.intOrNull
 /**
  * 把选中的图片内联进「待发附件」。
  *
- * 图片不走上传端点（内核的 image part 直接带 base64），所以这里要防两件事：
+ * 图片不走上传端点（内核的 image part 直接带 base64），所以这里只要防一件事：
+ * **源文件太大** —— 超过 [ChatContentParts.MAX_SOURCE_IMAGE_BYTES] 当场拒绝，
+ * 免得把几百 MB 读进内存。
  *
- * 1. **源文件太大**：超过 [ChatContentParts.MAX_SOURCE_IMAGE_BYTES] 当场拒绝，
- *    免得把几百 MB 读进内存；
- * 2. **编码后太大**：WS 通道的桥单帧上限只有 1 MiB，所以入队前按
- *    [MAX_ENCODED_IMAGE_BYTES] 压一遍（issue #12）。不压的后果不是一句「太大」，
- *    而是桥 `close(1009)` + 客户端等满 15 秒的假超时，消息还丢了。
+ * ## 为什么不再压缩（issue #15）
  *
- * 压缩放在 IO 线程：一张 4000×3000 的原图解码 + 多次 JPEG 编码是实打实的 CPU 活，
- * 放主线程会掉帧。已经在阈值内的图（比如 287.8 KiB 的截图）**一个字节都不动**，
- * 连 mediaType 都保持原样 —— 这是 #11 的不回归条件。
+ * #12 的修法是「入队前一律压到 700 KiB，好塞进 WS 的 1 MiB 单帧」。代价是画质：
+ * 一张 4.26 MB 的手机原图被重编码成 JPEG 质量 85~45、长边缩到 1600，细节全丢 ——
+ * 而 REST 通道本来就吃得下 8 MiB 原图（桥的 12 MiB 请求体）。
+ *
+ * 现在改成**按体积选通道**：`ChatContentParts.fitsInWsFrame` 判定整条消息的图片
+ * 装不装得进一帧，装不下就在 [AdaptiveMessagePort] 里直接走 REST。图片一个字节都不动，
+ * 附件芯片上显示的就是真实发送体积，模型拿到的也是原始分辨率。
+ *
+ * 好处还多一条：不再需要 BitmapFactory 解码，损坏文件 / 伪装扩展名的图会在服务端
+ * 报错，客户端不再有「读不出尺寸」这个额外的失败态。
  */
 internal fun HarnessViewModel.attachImage(name: String, sizeBytes: Long, mediaType: String, openInput: () -> InputStream) {
     if (sizeBytes > ChatContentParts.MAX_SOURCE_IMAGE_BYTES) {
@@ -141,23 +143,10 @@ internal fun HarnessViewModel.attachImage(name: String, sizeBytes: Long, mediaTy
             notify(appString(R.string.attachment_image_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_SOURCE_IMAGE_BYTES)))
             return@launch
         }
-        val prepared = withContext(Dispatchers.IO) {
-            prepareImageForWire(AndroidImageCodec(), raw, mediaType, name)
-        }
-        if (prepared == null) {
-            // 连尺寸都读不出来 = 这不是一张能发的图（损坏 / 伪装扩展名）。
-            notify(appString(R.string.attachment_image_unreadable))
-            return@launch
-        }
-        if (prepared.bytes.size.toLong() > MAX_ENCODED_IMAGE_BYTES) {
-            // 压过仍超标：极少见（超大尺寸 + 高熵内容），如实说「太大」而不是让桥去拒。
-            notify(appString(R.string.attachment_image_too_large, ChatContentParts.formatBytes(MAX_ENCODED_IMAGE_BYTES)))
-            return@launch
-        }
         val part = runCatching {
-            ChatContentParts.imagePart(prepared.mediaType, prepared.bytes, prepared.name)
+            ChatContentParts.imagePart(mediaType, raw, name)
         }.getOrElse {
-            notify(appString(R.string.attachment_image_too_large, ChatContentParts.formatBytes(MAX_ENCODED_IMAGE_BYTES)))
+            notify(appString(R.string.attachment_image_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_SOURCE_IMAGE_BYTES)))
             return@launch
         }
         update {
@@ -165,9 +154,9 @@ internal fun HarnessViewModel.attachImage(name: String, sizeBytes: Long, mediaTy
                 pendingAttachments = pendingAttachments + PendingAttachment(
                     id = java.util.UUID.randomUUID().toString(),
                     part = part,
-                    name = prepared.name,
-                    sizeBytes = prepared.bytes.size.toLong(),
-                    imageBytes = prepared.bytes,
+                    name = name,
+                    sizeBytes = raw.size.toLong(),
+                    imageBytes = raw,
                 ),
             )
         }

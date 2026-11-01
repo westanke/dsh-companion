@@ -113,28 +113,73 @@ class ChatContentPartsTest {
 
     @Test
     fun imagePartRejectsOversizedBytesBeforeTheyReachTheNetwork() {
-        // #12 之后这里守的是**编码后**的口径（700 KiB，桥的 WS 单帧上限 1 MiB 留出的余量），
-        // 而不是源图的 8 MiB —— 走到 imagePart 时图片已经过 prepareImageForWire 压缩。
-        val tooLarge = ByteArray(MAX_ENCODED_IMAGE_BYTES.toInt() + 1)
+        // 守的是**源图**口径（8 MiB）：图片不再预压缩（issue #15），所以能走到 imagePart 的
+        // 字节数就是用户选中的那张图。再大就该在 attachImage 里被挡下，这里只是最后一道内存闸。
+        val tooLarge = ByteArray(ChatContentParts.MAX_SOURCE_IMAGE_BYTES.toInt() + 1)
         val failure = assertThrows(IllegalArgumentException::class.java) {
             ChatContentParts.imagePart("image/png", tooLarge)
         }
         assertEquals("IMAGE_TOO_LARGE", failure.message)
 
         // 恰好等于上限是允许的（边界不能差一字节就拒）。
-        val atLimit = ChatContentParts.imagePart("image/png", ByteArray(MAX_ENCODED_IMAGE_BYTES.toInt()))
+        val atLimit = ChatContentParts.imagePart("image/png", ByteArray(ChatContentParts.MAX_SOURCE_IMAGE_BYTES.toInt()))
         assertTrue(atLimit is PromptPart.ImagePart)
     }
 
     @Test
-    fun sourceImageLimitIsFarLargerThanTheEncodedLimit() {
-        // 两个口径必须分开：源图 8 MiB（读进内存的上限）vs 编码后 700 KiB（上线缆的上限）。
-        // 合成一个数字的话，要么把能发的原图挡在门外，要么放过必被桥 close(1009) 的帧。
+    fun imagePartAcceptsBytesWellAboveTheWsBudget() {
+        // #15 的核心：>500 KiB 的图不再被压缩，而是整条消息改走 REST。
+        // 所以 imagePart 必须接受这个区间 —— 它以前会以 700 KiB 为界抛 IMAGE_TOO_LARGE。
+        val big = ByteArray((ChatContentParts.WS_INLINE_IMAGE_BUDGET_BYTES + 1).toInt())
+        val part = ChatContentParts.imagePart("image/jpeg", big, "photo.jpg")
+        assertTrue(part is PromptPart.ImagePart)
+        assertEquals("photo.jpg", (part as PromptPart.ImagePart).name)
+        assertTrue("超预算的图不该被判成能进 WS 帧", !ChatContentParts.fitsInWsFrame(listOf(part)))
+    }
+
+    @Test
+    fun fitsInWsFrameMeasuresEveryImageInTheMessageTogether() {
+        // 按整条消息求和，不是按单张图：三张 200 KiB 各自都「不到 500K」，合起来却会超帧。
+        // 预算取 500 KiB，下面用 1/5 与 3/4 两档，避开 base64 长度取整造成的边界抖动。
+        val budget = ChatContentParts.WS_INLINE_IMAGE_BUDGET_BYTES
+        val fifth = budget / 5
         assertTrue(
-            "源图上限必须远大于编码后上限",
-            ChatContentParts.MAX_SOURCE_IMAGE_BYTES > MAX_ENCODED_IMAGE_BYTES * 8,
+            "两张各占 1/5，合计 2/5，应该走 WS",
+            ChatContentParts.fitsInWsFrame(listOf(imageOfSize(fifth), imageOfSize(fifth))),
+        )
+        assertTrue(
+            "三张各占 3/4，合计 2.25 倍，必须走 REST",
+            !ChatContentParts.fitsInWsFrame(
+                listOf(imageOfSize(budget / 4 * 3), imageOfSize(budget / 4 * 3), imageOfSize(budget / 4 * 3)),
+            ),
+        )
+        assertTrue(
+            "单张略小于预算可以发",
+            ChatContentParts.fitsInWsFrame(listOf(imageOfSize(budget - 4096))),
+        )
+        assertTrue(
+            "单张明显超预算就发不出",
+            !ChatContentParts.fitsInWsFrame(listOf(imageOfSize(budget + 64 * 1024))),
         )
     }
+
+    @Test
+    fun textOnlyMessagesAlwaysFitInWsFrame() {
+        // 纯文本与文件引用（receiptId）都不会撑爆帧，判据只数内联图片。
+        assertTrue(
+            ChatContentParts.fitsInWsFrame(
+                listOf(PromptPart.TextPart("你好"), PromptPart.FilePart("receipt-1")),
+            ),
+        )
+        assertTrue("空消息也不该被判成装不下", ChatContentParts.fitsInWsFrame(emptyList()))
+    }
+
+    /** 造一张原始字节数为 [rawSize] 的 image part（走真实 base64，`fitsInWsFrame` 反算才准）。 */
+    private fun imageOfSize(rawSize: Long): PromptPart.ImagePart =
+        PromptPart.ImagePart(
+            mediaType = "image/png",
+            data = ChatContentParts.base64(ByteArray(rawSize.toInt())),
+        )
 
     @Test
     fun base64IsStandardAlphabetAndUploadPayloadCarriesName() {

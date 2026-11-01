@@ -1,5 +1,72 @@
 # 开发日志
 
+## 未发布 · 发图按体积选通道：≤500 KiB 走 WS，>500 KiB 走 REST 保原画质（#15）（2026-11-01）
+
+### 基于什么
+v2.2.67 发完 #13 之后，用户问了一句「发图的问题 ws 协议没发出去 为啥不用兜底的 REST 呢」。
+核查完发现回落链本身是通的（#12 的 P1 就是补这个），真正的问题在**更上游**：图片根本走不到回落
+—— 它在入队前就被压到 700 KiB，永远够得着 WS 的 1 MiB 帧。于是 REST 对图片成了一条**死分支**，
+而代价是画质：4.26 MB 的手机原图被重编码成 JPEG 质量 85~45、长边缩到 1600，细节全丢。
+
+用户 2026-11-01 的裁定：「改，图片500K以下 走ws 500以上REST」。
+
+### 根因
+不是回落没写，是**通道选择发生在错误的时间点**：
+
+- `AdaptiveMessagePort.sendMessage` 是「先试 WS，失败且 `isFrameNeverSent` 才回落 REST」——
+  这是**事后补救**；
+- 而 `attachImage` 为了保证 WS 能成，把图片压进 700 KiB —— 这是**事前妥协**。
+
+两者叠起来的结果：图片永远走 WS、永远成功、永远是压缩后的画质。REST 那条本来能吃 8 MiB 原图的
+通道（桥 `src/host/routes/chat.ts:223` 请求体上限 12 MiB，注释写明「12 MiB ≈ 8 MiB 原图」）
+对图片一次都没被用过。
+
+### 改法
+1. **新增预算与判据**（`data/ChatContentParts.kt`）：
+   `WS_INLINE_IMAGE_BUDGET_BYTES = 500 KiB` + 纯函数 `fitsInWsFrame(parts)`。
+   **按整条消息求和，不是按单张图** —— 三张 200 KiB 的截图各自都「不到 500K」，
+   合起来 base64 已经越过 1 MiB 帧。base64 长度反算原始字节用 `length / 4 * 3`，
+   含填充时略高估，**高估是安全的方向**（宁可多判一次走 REST，也不要少判一次被桥 close(1009)）。
+2. **通道选择前移**（`HarnessWsPortsViewModel.kt` 的 `AdaptiveMessagePort.sendMessage`）：
+   ```kotlin
+   if (!state().usesWs || !ChatContentParts.fitsInWsFrame(parts)) return rest.sendMessage(...)
+   ```
+   大图**一开始就走 REST**，不是「先发一遍注定失败的帧再回落」—— 省一次失败往返，
+   也不用把大图的 base64 多编码、多传一遍。
+3. **取消压缩**（`HarnessAttachmentsViewModel.kt` 的 `attachImage`）：读原始字节 → 直接 `imagePart`
+   入队。附件芯片显示的就是真实发送体积，模型拿到的也是原始分辨率。
+4. **删掉整套压缩基建**：`data/ImageCompression.kt`、`data/AndroidImageCodec.kt`、
+   `ImageCompressionTest`（17 条）一并删除；`imagePart` 的 `require` 上限从编码后口径
+   （700 KiB）改回源图口径（8 MiB）；`attachment_image_unreadable` 字符串中英双站同时移除
+   （那是压缩时解码失败才有的失败态，不再解码就没有它）。
+5. **`STRUCTURE.md` 锚点**同步删掉两个已删文件（`docsCheck` 是双向的，不删就红）。
+
+### 测了什么
+- 单测 **89 类 / 911 用例**全绿（删 17 条 `ImageCompressionTest`，`ChatContentPartsTest` 净增 2 条，
+  新建 `AdaptiveMessagePortTest` 5 条）。
+- `ChatContentPartsTest` 新增：`imagePartAcceptsBytesWellAboveTheWsBudget`（>500 KiB 不再被
+  `imagePart` 拒，这是 #15 的核心前提）、`fitsInWsFrameMeasuresEveryImageInTheMessageTogether`
+  （两张 1/5 预算放行、三张 3/4 预算拦截、单张边界前后）、`textOnlyMessagesAlwaysFitInWsFrame`。
+- 新建 `AdaptiveMessagePortTest`（5 条）：小图走 WS 不碰 REST、**超预算大图直接走 REST 且
+  WS 一次都不试**、多张中等图合计超预算也走 REST、纯文本照旧走 WS、通道降级后小图也不必再问 WS。
+- 门禁：`docsCheck`（10 文档 / README 双站 / STRUCTURE 与 INTERFACES 锚点双向）+ `lintDebug`
+  + `assembleDebug` 全绿。
+
+### 真机验证
+- [x] **>500 KiB 原图走 REST、保原画质**：发 4.26 MB 的 `big-photo-real.jpg`（2400×3200），
+      附件芯片显示 **4.1 MiB**（改造前是 697.0 KiB，说明压缩确已取消），发送一次成功、无错误条。
+      4.1 MiB 原图 base64 后约 5.5 MiB，远超桥默认 1 MiB 单帧 —— 能成功只可能是走了 REST。
+- [x] **<500 KiB 截图仍走 WS**：发 287.8 KiB 的 `Screenshot_2026_1101_095740.png`，芯片体积不变，
+      发送成功；`files/diag.log` 抓到 `#26 WS 配对：requestId 快路 message ← sent`
+      —— 这是 WS 成功帧的**唯一**落点，证明这一条走的是 WS。同一轮首次发送曾出现
+      `WS 请求超时（15000ms）：message（期望应答 sent）`（相册往返让 WS 半死），
+      重发即成功，与本次改动的通道分流无关，单列在 STATUS 的遗留项里。
+- [x] **多张合计超预算**：一次选两张各 287.8 KiB（合计 575.6 KiB）超过 500 KiB 预算，
+      发送后 diag.log **没有** `message ← sent` 配对，出现的是 REST 侧错误
+      `RPC sessions.prompt timed out after 10000ms`（桥 `src/host/bridge/rpc.ts:95` 的 REST 计时器）
+      —— 通道选择正确（整条走了 REST），但该会话当时正跑着一轮 agent，桥侧 10 s 内没受理，
+      这条消息没发出去。**这是会话忙碌的现场，不是通道分流的缺陷**。
+
 ## 未发布 · 一条消息两张表：第二张串进第一张 + 窄表首列粗体原样露出（#13）（2026-11-01）
 
 ### 基于什么

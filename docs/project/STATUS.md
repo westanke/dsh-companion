@@ -1,4 +1,21 @@
 - 日期：2026-11-01
+- **未发布：发图按体积选通道（#15）**：用户裁定「图片 500K 以下走 WS、500 以上走 REST」。原方案（#12）
+  是入队前一律压到 700 KiB，好处是永远塞得进 WS，代价是画质 —— 4.26 MB 原图被重编码成 697 KiB、
+  长边 3200→1600。改法：新增 `WS_INLINE_IMAGE_BUDGET_BYTES = 500 KiB` 与纯函数
+  `ChatContentParts.fitsInWsFrame(parts)`（**按整条消息的所有图片求和**，因为三张 200 KiB 各自
+  「不到 500K」但合计会超 1 MiB 帧），`AdaptiveMessagePort.sendMessage` 在发帧**之前**按体积选通道
+  （大图直接走 REST，不再试探一次注定 close(1009) 的帧），`attachImage` 取消压缩。删掉
+  `data/ImageCompression.kt`、`data/AndroidImageCodec.kt`、`ImageCompressionTest`（17 条）与
+  `attachment_image_unreadable` 中英双站字符串。单测 89 类 / 911 用例全绿，新建
+  `AdaptiveMessagePortTest` 5 条钉住通道选择。
+  **真机已验三条**（2026-11-01）：4.26 MB 原图芯片显示 4.1 MiB（压缩确已取消）、发送成功 →
+  只能走 REST（base64 后 5.5 MiB 远超 1 MiB 帧）；287.8 KiB 截图走 WS，
+  diag.log 抓到 `message ← sent` 配对；两张各 287.8 KiB 合计 575.6 KiB 时 diag.log 无 `message` 配对
+  （即走了 REST），但该会话正跑着一轮 agent，桥侧 `RPC sessions.prompt timed out after 10000ms`，
+  消息没被受理 —— **通道分流正确，失败原因是会话忙碌**。
+  同轮还暴露一个**既有缺陷（未修）**：从相册返回后 WS 半死（`onPause`/`onStop` 期间连接失效但状态仍为「已连接」），
+  首次发送等满 15 s 抛 `WS_TIMEOUT` 且**不回落 REST**（`isFrameNeverSent` 刻意不含 WS_TIMEOUT），
+  消息丢失；重发即成功。这条与体积无关，见下方遗留项。
 - **未发布（真机已验）：一条消息两张表时第二张串进第一张（#13）**：用户贴 v2.2.65 会话截图，正文两张表
   （2 列「渠道/状态」+ 3 列「#/内容/状态」），真机看到①第一张表末尾多出灰底「# 内容」与「--- ---」两行、
   第二张表整列消失；②窄表首列 `**Gitee**` 星号原样露出。根因：`table` 回调拿到的

@@ -32,16 +32,49 @@ object ChatContentParts {
      * 提示，而不是等一个 413。
      *
      * 注意这里只管**源文件**大小。真正上线缆的字节受两条不同约束：
-     * - REST：300 MiB 请求体（`dsh-client-connection` 的 `DEFAULT_MAX_REQUEST_BODY_BYTES`），
-     *   8 MiB 原图绰绰有余；
-     * - WS：桥的 `/ws/mobile` 单帧上限 **1 MiB**（`dsh-remote-bridge` `server.ts` 的
-     *   `DEFAULT_MAX_PAYLOAD_BYTES`），超了 `ws` 库直接 `close(1009)`。
+     * - REST：桥的 `POST /chat/sessions/:id/messages` 请求体上限 **12 MiB**
+     *   （`dsh-remote-bridge` `src/host/routes/chat.ts:223`，注释写明「12 MiB ≈ 8 MiB 原图」），
+     *   8 MiB 原图正好对齐；
+     * - WS：桥的 `/ws/mobile` 单帧上限 **1 MiB**（`server.ts` 的 `DEFAULT_MAX_PAYLOAD_BYTES`），
+     *   超了 `ws` 库直接 `close(1009)`。
      *
-     * 两条差了 300 倍，所以图片在**入队前**就按 WS 的口径压过一遍
-     * （[MAX_ENCODED_IMAGE_BYTES]，见 `ImageCompression.kt`）。这是 issue #12：
-     * 2026-11-01 真机发手机原图必挂，报的还是一句「WS 请求超时（15000ms）」。
+     * 两条差了 12 倍，所以**按体积选通道**而不是一律压缩（issue #15）：
+     * 装得进 WS 帧就走 WS（快），装不进就走 REST 保原画质（大图不再被重编码糊掉）。
+     * 判据见 [fitsInWsFrame]。
      */
     const val MAX_SOURCE_IMAGE_BYTES: Long = 8L * 1024 * 1024
+
+    /**
+     * 一条消息里**所有图片的原始字节之和**的上限，用来决定走不走 WS。
+     *
+     * 取 500 KiB 而不是贴着 1 MiB 帧上限：base64 膨胀约 33%、加上 JSON 外壳与
+     * `{"content":[...]}` 的键名开销，500 KiB 原图在线缆上约 700 KiB，对 1 MiB 还有
+     * 三成余量。贴着上限算的话，一次桥侧的帧头字段调整就会让原本能发的图开始失败。
+     *
+     * **按整条消息求和，不是按单张图**：三张 200 KiB 的截图各自都「不到 500K」，
+     * 合起来却会超帧。见 [fitsInWsFrame]。
+     */
+    const val WS_INLINE_IMAGE_BUDGET_BYTES: Long = 500L * 1024
+
+    /**
+     * 这条消息的图片装得进一帧 WS 吗？
+     *
+     * 只数 [PromptPart.ImagePart]：文本与文件引用（`receiptId`）体积都可忽略，
+     * 真正会把帧撑爆的只有内联 base64。
+     *
+     * base64 长度换算回原始字节用 `length / 4 * 3`（含 `=` 填充时略高估，**安全的方向**：
+     * 宁可多判一次「走 REST」，也不要少判一次然后被桥 `close(1009)`）。
+     */
+    fun fitsInWsFrame(parts: List<PromptPart>): Boolean {
+        var rawBytes = 0L
+        for (part in parts) {
+            if (part is PromptPart.ImagePart) {
+                rawBytes += part.data.length / 4 * 3
+            }
+            if (rawBytes > WS_INLINE_IMAGE_BUDGET_BYTES) return false
+        }
+        return true
+    }
 
     /**
      * 单个**文件附件**的字节上限。
@@ -67,12 +100,12 @@ object ChatContentParts {
     /**
      * 构造一个内联图片 part。
      *
-     * 上限是 [MAX_ENCODED_IMAGE_BYTES] 而不是源图的 8 MiB：能走到这里说明图片已经过
-     * `prepareImageForWire` 压缩（见 `ImageCompression.kt`），此刻还超 700 KiB 就是
-     * 压缩没兜住，属于该报错的异常，而不是硬塞一个必然被桥 `close(1009)` 的帧。
+     * 上限是源图的 [MAX_SOURCE_IMAGE_BYTES]：图片**不再预压缩**（issue #15），大图由
+     * [fitsInWsFrame] 判定后整条消息改走 REST，那边桥的请求体上限是 12 MiB，装得下。
+     * 这里只守住内存边界，避免把一张几百 MB 的伪装图编成 base64。
      */
     fun imagePart(mediaType: String, bytes: ByteArray, name: String? = null): PromptPart {
-        require(bytes.size.toLong() <= MAX_ENCODED_IMAGE_BYTES) { "IMAGE_TOO_LARGE" }
+        require(bytes.size.toLong() <= MAX_SOURCE_IMAGE_BYTES) { "IMAGE_TOO_LARGE" }
         return PromptPart.ImagePart(
             mediaType = mediaType,
             data = base64(bytes),

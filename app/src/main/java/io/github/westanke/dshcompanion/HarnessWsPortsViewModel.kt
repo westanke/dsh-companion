@@ -14,6 +14,7 @@ import io.github.westanke.dshcompanion.data.localizedErrorRes
 import io.github.westanke.dshcompanion.data.parseBridgeCapabilities
 import io.github.westanke.dshcompanion.data.seqVerdict
 import io.github.westanke.dshcompanion.debug.DiagLog
+import io.github.westanke.dshcompanion.data.ChatContentParts
 import io.github.westanke.dshcompanion.data.DshClient
 import io.github.westanke.dshcompanion.data.PromptPart
 import io.github.westanke.dshcompanion.data.ws.ChannelState
@@ -594,7 +595,12 @@ internal class AdaptiveMessagePort(
 ) : MessagePort {
 
     override suspend fun sendMessage(sessionId: String, parts: List<PromptPart>, steer: Boolean) {
-        if (!state().usesWs) return rest.sendMessage(sessionId, parts, steer)
+        // 大图**一开始就选 REST**，不是「发失败再回退」（issue #15）：WS 单帧 1 MiB，
+        // 图装不下时那个帧注定被桥 `close(1009)` —— 先发一遍再回落，等于白付一次
+        // 失败往返，还要把大图的 base64 多编码、多传一遍。
+        if (!state().usesWs || !ChatContentParts.fitsInWsFrame(parts)) {
+            return rest.sendMessage(sessionId, parts, steer)
+        }
         try {
             ws.sendMessage(sessionId, parts, steer)
         } catch (failure: DshApiException) {

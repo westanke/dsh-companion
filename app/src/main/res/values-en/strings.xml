@@ -623,7 +623,6 @@
     <string name="attachment_pick_file">Choose file</string>
     <string name="attachment_uploading">Uploading…</string>
     <string name="attachment_remove">Remove this attachment</string>
-    <string name="attachment_image_unreadable">This image could not be decoded — it may be corrupt or not an image at all. Try another one.</string>
     <string name="attachment_image_too_large">The image is larger than %1$s and cannot be inlined. Compress or crop it first, or send it with “Send file”.</string>
     <string name="attachment_file_too_large">The file is larger than %1$s and cannot be uploaded as a message attachment.</string>
     <string name="attachment_file_rejected">The server rejected the file: it exceeds the server’s attachment size limit. Try a smaller file.</string>

@@ -264,8 +264,6 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/data/BridgeCapabilities.kt` | file | connection.ready 能力位解析与必需项判据 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/BffModels.kt` | file | 分块上传/定时任务/语音的模型与上限常量 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ChunkPlan.kt` | file | 分块计划、待传块与按块切片 |
-| `app/src/main/java/io/github/westanke/dshcompanion/data/AndroidImageCodec.kt` | file | ImageCodec 的 Android 实现（BitmapFactory 解码 + JPEG 编码） |
-| `app/src/main/java/io/github/westanke/dshcompanion/data/ImageCompression.kt` | file | 图片上线缆前的压缩策略（质量阶梯 + 缩边，夹在 WS 帧上限内） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatContentParts.kt` | file | 文本 + 待发附件 → 请求体，并守住资源上限 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatDisplayGroups.kt` | file | 会话列表显示分组：过程/结论二分与折叠组 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatForkPoint.kt` | file | 这条展示项能否作为分叉点，以及给 forkSession 的 atSeq |
