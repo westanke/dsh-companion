@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
@@ -90,12 +91,22 @@ internal fun ConversationHeader(
     //  ② 状态行独占整行：已连接 · 权限 · 智能团队 从左排满（左缘前移到屏幕边距，
     //     不再缩在返回键+标题的窄列里），文件按钮用 Spacer 顶到行尾 —— 小屏上
     //     「智能团队」胶囊也能完整显示，不再被裁。
+    // 间距收敛（issue #8，2026-11-01）：标题行 IconButton 32dp（默认 48dp 撑出的空隙让
+    //  「顶栏底 → 标题顶」到 48px，收后 ≈ 23px，与鸿蒙版实测目标 22px 对齐）；
+    //  状态行显式 height(28dp)，文件按钮同尺寸不再撑行 —— 胶囊文字不再在 36dp 行里
+    //  上下各空 10dp。鸿蒙版教训（emoji 字号不改变行高）在这里的对应物是
+    //  「IconButton 热区撑行高」：同样只能显式定行高，不能靠缩小图标字号/尺寸。
+    //  28dp 而非 24dp 的原因：文件按钮热区 28dp 与行相切，若行 24dp 则 36dp 按钮上下
+    //  溢出、与标题行 ⋯ 的点击区重叠（Compose 无裁切，后者点击被吃）。
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
         if (onBack != null) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back)) }
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier.size(32.dp),
+            ) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back)) }
         }
             // 标题在窄屏（手机）永远单行；平板（wide）下允许两行 —— 兜底到长 cwd 路径时
             // 不会在顶栏被腰斩，短标题（用户起的名字）依然只占一行，布局无感。
@@ -124,7 +135,10 @@ internal fun ConversationHeader(
         val modelSummary = listOfNotNull(agentName, currentModel?.provider, currentModel?.model)
             .joinToString(" · ")
         Box {
-            IconButton(onClick = { moreOpen = true }) {
+            IconButton(
+                onClick = { moreOpen = true },
+                modifier = Modifier.size(32.dp),
+            ) {
                 Icon(Icons.Outlined.MoreVert, stringResource(R.string.more_actions))
             }
             DropdownMenu(expanded = moreOpen, onDismissRequest = { moreOpen = false }) {
@@ -292,8 +306,11 @@ internal fun ConversationHeader(
         // 状态行独占整行（不再挤在标题的窄列里）：
         // 已连接 / 权限 / 智能团队 三个状态从左排；Spacer 把文件按钮顶到行尾 ——
         // 「已连接」从返回键右缘前移到屏幕边距，文件按钮后移，中间胶囊在小屏放得下、不被裁。
+        // 显式 height(28dp)（issue #8）：此前行高由文件按钮的 36dp IconButton 撑出，
+        // 胶囊在其中垂直居中后上下各空 10dp。行高定死后文件按钮收成同尺寸 28dp，
+        // 既不撑行也不与标题行的 ⋯ 热区重叠（见上方注释）。
         Row(
-            Modifier.fillMaxWidth().padding(start = if (onBack == null) 10.dp else 4.dp, bottom = 2.dp),
+            Modifier.fillMaxWidth().height(28.dp).padding(start = if (onBack == null) 10.dp else 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -311,8 +328,9 @@ internal fun ConversationHeader(
             if (session.pendingInteraction == "approval") ApprovalStatusLabel()
             Spacer(Modifier.weight(1f))
             // 「本会话的文件」（这个页面的主入口，值得占一格）挪到状态行行尾，
-            // 不再与长标题抢标题行的 48dp。
-            IconButton(onClick = onOpenFiles, modifier = Modifier.size(36.dp)) {
+            // 不再与长标题抢标题行的 48dp。28dp（issue #8）：与状态行同高、不撑行
+            // 也不上下溢出 —— 36dp 时代它的热区上下各溢 18px，会与标题行 ⋯ 重叠。
+            IconButton(onClick = onOpenFiles, modifier = Modifier.size(28.dp)) {
                 Icon(
                     Icons.Outlined.FolderOpen,
                     stringResource(R.string.session_files),

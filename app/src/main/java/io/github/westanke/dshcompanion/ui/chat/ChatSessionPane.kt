@@ -256,8 +256,12 @@ internal fun SessionPane(
     val canListArchived = supportsArchiveListing(state.bridgeCapabilities)
     val listedSessions = if (showArchived) state.archivedSessions else state.sessions
     Column(modifier.padding(horizontal = 14.dp)) {
+        // 标题行顶部内距 6dp（issue #8）：此前 16dp 把「会话」大字从应用栏底推远
+        // （真机 dump：TopAppBar 底 → 大字行框顶 = 53px）。鸿蒙版同位置实测收敛到 17px；
+        // Text 节点行框无上空（真机复验：4dp 落地 12px），6dp = 18px，与目标差 1px（3x 屏
+        // 不可感）。列表首屏因此多露约一行。右侧按钮（管理工作区/新建）仍是 48dp 热区。
         Row(
-            Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 10.dp),
+            Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 10.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
             Column(Modifier.weight(1f)) {
