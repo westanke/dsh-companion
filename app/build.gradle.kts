@@ -1185,8 +1185,47 @@ android {
         //     超时后自动重试与「大图自动改走 REST」都不做（前者会重复发消息，后者让错误归因更难）。
         //   依赖：无（纯客户端改动，不需要新桥能力位；桥的 maxPayloadBytes 是可选的，不配也照常工作）。
         //
-        versionCode = 10092
-        versionName = "2.2.67"
+        // v2.2.68（versionCode 10093）：**表格串表 / 发图通道分流 / WS 半死**（2026-11-01，补丁版）。
+        //   基于什么：三件事都是 v2.2.67 上真机跑出来的。#13 是用户贴截图肉眼看到的两处错；
+        //     #15 起于用户一句「ws 协议没发出去 为啥不用兜底的 REST 呢」；#16 是 #15 真机验证
+        //     时顺手撞出来的既有缺陷（用户裁定「必须修」）。
+        //   干了什么：
+        //     ① #13 表格串表：根因是渲染库 `MarkdownComponentModel.content` 给的是**整篇 markdown**
+        //        全文（不是这一段），`parseMarkdownTable` 拿全文重新解析就把两张表的行合并了，
+        //        表 B 的表头行与 `|---|---|---|` 被 normalizeColumns 截成表 A 的数据行。修法是用
+        //        AST 节点偏移切出自己那一块再解析（新增 tableNodeSlice/tableSliceRange），并给
+        //        parseMarkdownTable 加「出现了多个分隔行就不是表格」的兜底。窄表首列 `Text(cell)`
+        //        改 `Text(stripInlineMarkup(cell))` —— 是**剥掉标记**不是渲染粗体（要保住 104dp
+        //        限宽与 labelMedium 层级）。
+        //     ② #15 发图通道前移：新增 ChatContentParts.WS_INLINE_IMAGE_BUDGET_BYTES（500 KiB）
+        //        与 fitsInWsFrame(parts)，AdaptiveMessagePort 在**选通道时**就按体积决定
+        //        （≤500 KiB 走 WS、>500 KiB 直接走 REST），不再「先试 WS 失败再回落」；同时
+        //        取消 attachImage 里的强制压缩，REST 那条能吃 8 MiB 原图的通道终于被用上。
+        //        删掉 ImageCompression.kt / AndroidImageCodec.kt / ImageCompressionTest.kt。
+        //     ③ #16 WS 半死：三层改法全在 MobileWsTransport.kt —— refuseIfStale() 判据前移
+        //        （在写 socket 之前按「最近一次收到帧」的静默时长判陈旧，当场换代并以「没发出去」
+        //        的姿态失败，于是回落 REST 天然成立）、revalidateLiveness() 回前台写一条 ping
+        //        逼一次往返、每 20 秒应用层心跳。哨兵用 NO_INBOUND_YET = Long.MIN_VALUE 而不是 0
+        //        （真机时钟几百亿，用 0 会把「刚重连」算成「静默了几十年」）。
+        //   测了什么：89 类 / 919 用例 / 0 失败（#13 +5、#16 +9、#15 净减 17 加 7）；
+        //     docsCheck 10 文档 / README 双站 774 项 / STRUCTURE 167 锚点 147 源文件 /
+        //     INTERFACES 136 锚点；lintDebug 0 error；assembleRelease 全绿。
+        //   真机验了什么：V2080A（1080x2400，3px/dp）——
+        //     ① #13：v2.2.65 那条真实会话「推荐DSH插件到插件市场」里两张表各自独立、
+        //        `--- ---` 行消失、`**Gitee**（主站）` 显示为纯文字；
+        //     ② #15：4.26 MB 原图附件芯片显示 4.1 MiB（不再压到 697 KiB）且发送成功；
+        //        287.8 KiB 截图仍走 WS（`message ← sent`）；两张合计 575.6 KiB 走 REST；
+        //     ③ #16：正常路径 `message ← sent`；心跳每次进 usesWs 启动且静置零噪音；
+        //        锁屏 55 秒（>45 秒阈值）后 `WsDown` → `onResume` → 切回 WS，未等 15 秒。
+        //   仍未做：#16 的 WS_CHANNEL_STALE 回落分支未在真机触发（vivo 后台总把 socket 判成
+        //     显式断开，onDisconnected 抢在回前台之前降级，探活短路），两条新判据目前只有单测
+        //     覆盖；另记一条独立问题待单独开 issue —— 桥 `message` 帧要等 chat.prompt 整个跑完
+        //     才回 sent，会话忙时天然超 15 秒，与「连接半死」共用同一个 WS_TIMEOUT 码却该有
+        //     相反处置。
+        //   依赖：无（三件都是纯客户端改动，不需要新桥能力位）。
+        //
+        versionCode = 10093
+        versionName = "2.2.68"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。

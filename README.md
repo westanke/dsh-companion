@@ -294,7 +294,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.67.apk
+DSH伴侣-companion-v2.2.68.apk
 ```
 
 安装要求：
@@ -545,14 +545,36 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.67`（`versionCode` 10092）
+- 当前版本：`v2.2.68`（`versionCode` 10093）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：89 个测试类 / 919 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.67.apk`，**3,382,740 字节**，
+- 当前 APK：`DSH伴侣-companion-v2.2.68.apk`，**3,382,740 字节**，
   SHA-256 `e297138bbf1ee13c3d7acdba5d5dc8b03a39744dca8f08dd138a9c46a7aa9929`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
-  **本版（v2.2.67，发原图不再必超时）**：一条用户报障 —— 发手机原图等 15 秒弹
+  **本版（v2.2.68，表格串表 + 发图通道分流 + WS 半死）**：三件事都是上一版真机跑出来的。
+  ① **一条消息两张表时第二张串进第一张**（issue #13）：根因不在表格解析器，而在**渲染库给错了料**
+  —— `MarkdownComponentModel.content` 是**整篇 markdown 全文**，不是当前这一段；`parseMarkdownTable`
+  拿全文重新解析，就把第二张表的表头行与 `|---|---|---|` 一起收进了第一张表的数据行（被
+  `normalizeColumns` 截成两列，于是屏幕上出现「# 内容」和「--- ---」两行）。改为用 AST 节点的
+  `startOffset`/`endOffset` 从全文里切出自己那一块再解析，并给解析器加一道「出现了多个分隔行就
+  不是表格」的兜底。同一处还修了窄表首列：`**Gitee**（主站）` 的星号此前原样上屏（该分支直接
+  `Text(cell)` 不解析行内标记），现在按既有 `stripInlineMarkup` 剥壳——**是剥掉标记、不是渲染成粗体**，
+  因为在窄表首列走整块 Markdown 会抹平 104dp 限宽与 `labelMedium` 层级。
+  ② **发图按体积选通道**（issue #15）：上一版把图片压到 700 KiB 再走 WS，等于让 REST 那条
+  **能吃 8 MiB 原图**的通道成了死分支，代价是画质。现在通道选择**前移到选路时**：整条消息的
+  图片体积 ≤ **500 KiB** 走 WS，更大就直接走 REST 全画质、**不再压缩**。判定按整条消息求和
+  （两张各 300 KiB 合计超预算也算超）。
+  ③ **WS 半死：从相册/后台返回后发送等满 15 秒且不回落 REST**（issue #16）：那条 socket 可能
+  已经名存实亡，但 `ChannelState` 停在 `WsReady` 一动不动——状态机只在收帧时更新，而
+  OkHttp 的 `pingInterval(20s)` 在进程冻结时同样停摆，叠加 `readTimeout(45s)`，「半死」能安静地
+  存在 45 秒。三层修法：**判据前移**（写 socket 之前按「最近一次收到帧」的静默时长判陈旧，
+  当场换代，并让帧以「没发出去」的姿态失败 → 自然回落 REST，`WS_TIMEOUT` 的安全判据一个字没松）；
+  **回前台逼一次往返**（`onResume` 直接写一条 ping，3 秒内没有任何入站帧就换连接）；
+  **每 20 秒应用层心跳**（比桥的 30 秒短，顺带保 NAT 空闲连接）。真机验：锁屏 55 秒后
+  `WsDown` → `onResume` → 切回 WS，未等 15 秒；心跳启动但静置零噪音。
+  三件的现象、根因、改法与真机验证见 `docs/project/CHANGELOG-DEV.md` 的 v2.2.68 一节。
+  **上一版（v2.2.67，发原图不再必超时）**：一条用户报障 —— 发手机原图等 15 秒弹
   「WS 请求超时（15000ms）」且消息**静默丢失**。两个缺陷叠在一起：
   ① **体积口径差 300 倍**：客户端按 REST 的 300 MiB 请求体定了 8 MiB 的原图上限，而 WS 通道
   `/ws/mobile` 的单帧上限只有 1 MiB（`ws` 库**读到帧头**就 `close(1009)`，桥的处理器根本没被调用），
@@ -566,7 +588,7 @@ keyPassword=...
   处理器没进，重发安全可回落 REST），与 `WS_TIMEOUT`（可能已产生副作用，绝不重试）严格区分。
   真机验证：4.26 MB 原图 → 附件卡片显示 697.0 KiB → 一次发送成功，模型读出「1200×1600 JPEG」；
   同一张 287.8 KiB 截图**一个字节都没重编码**、正常发送。
-  **上一版（v2.2.66，四处界面与协议缺陷收口）**：四件事，前三件来自「安卓与鸿蒙版逐屏对照」，
+  **更早的 v2.2.66（四处界面与协议缺陷收口）**：四件事，前三件来自「安卓与鸿蒙版逐屏对照」，
   第四件是用户报障。
   ① **顶栏三处大留白收齐**（issue #8）：按鸿蒙版实测值，列表「会话」大字距应用栏 53→18px、
   详情标题 48→23.5px、状态行 108→84px。状态行取 `height(28dp)` 而非 24dp —— 文件按钮
@@ -586,7 +608,7 @@ keyPassword=...
   （`Image type undefined is not accepted by this deployment.`）。JPEG 因非默认值侥幸通过，
   这条不对称就是定位钥匙。改为 WS 端口内建 `wireJson`（`encodeDefaults`）专用于编码。
   以上四件各自的现象、根因、改法与真机验证见 `docs/project/CHANGELOG-DEV.md`。
-  **更早的 v2.2.65（抽屉显示真实设备）**：修一个「看着像 bug、其实不是」的老问题 ——
+  **v2.2.65（抽屉显示真实设备）**：修一个「看着像 bug、其实不是」的老问题 ——
   抽屉顶部此前显示 `HarmonyOS · ICL-AL10`，而这台机器是 vivo V2080A。根因是桥侧那条设备记录
   `model` 早已跟着换成了 V2080A，只有 `name` 停在配对时声明的旧值，而「声明过的名字不再自动覆盖」
   是刻意的（免得盖掉用户自己起的名字）。界面只有一行名字，用户无从判断它是「声明过的名字」还是

@@ -303,7 +303,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.67.apk
+DSH伴侣-companion-v2.2.68.apk
 ```
 
 Requirements:
@@ -598,16 +598,49 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.67` (`versionCode` 10092)
+- Version: `v2.2.68` (`versionCode` 10093)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
 - Unit tests: 89 test classes / 919 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.67.apk`, **3,382,740 bytes**, SHA-256
+- Current APK: `DSH伴侣-companion-v2.2.68.apk`, **3,382,740 bytes**, SHA-256
   `e297138bbf1ee13c3d7acdba5d5dc8b03a39744dca8f08dd138a9c46a7aa9929` (kept in sync in
   `artifacts/SHA256SUMS.txt`; real values are backfilled by release stage A).
-  **This release (v2.2.67: sending a full-resolution photo no longer times out)**: one user report —
+  **This release (v2.2.68: table bleeding, image-channel split, half-dead WS)**: all three came out of
+  on-device testing of the previous release.
+  (1) **A second table bled into the first** (issue #13): the root cause was not the table parser but
+  **the renderer handing over the wrong material** — `MarkdownComponentModel.content` is the **entire
+  markdown document**, not the current block. `parseMarkdownTable` re-parsed that whole document, so
+  the second table's header row and its `|---|---|---|` separator were swept into the first table's data
+  rows (then truncated to two columns by `normalizeColumns` — hence the stray "# 内容" and "--- ---"
+  lines on screen). The fix slices the node's own range out of the full text using the AST node's
+  `startOffset`/`endOffset`, and adds a "more than one separator row means this is not a table"
+  fallback. The same change fixes the narrow-table first column: `**Gitee**（主站）` used to show its
+  asterisks verbatim because that branch called `Text(cell)` without parsing inline markup; it now
+  goes through the existing `stripInlineMarkup` — **markers are stripped, not rendered bold**, because
+  running full Markdown there would flatten the 104dp width cap and the `labelMedium` hierarchy.
+  (2) **Image channel chosen by size** (issue #15): the previous release squeezed images to 700 KiB so
+  they would fit a WS frame, which made the REST path — **which can carry an 8 MiB original** — a dead
+  branch, paid for in image quality. The decision now happens **when the route is picked**: if the
+  message's images total **≤ 500 KiB** it goes over WS, otherwise straight to REST at full quality with
+  **no compression**. The budget is summed across the whole message (two 300 KiB images together count
+  as over budget).
+  (3) **Half-dead WS: sending after returning from the gallery or background waited the full 15 seconds
+  and did not fall back to REST** (issue #16): that socket could be dead in all but name while
+  `ChannelState` sat at `WsReady` — the state machine only updates when frames arrive, OkHttp's
+  `pingInterval(20s)` stalls along with the frozen process, and `readTimeout(45s)` lets the half-dead
+  state persist quietly for 45 seconds. Three layers: **move the judgement earlier** (before writing to
+  the socket, treat the connection as stale based on how long it has been since the last inbound frame,
+  rotate the socket on the spot, and fail the frame as "never sent" → REST fallback follows naturally,
+  without loosening `WS_TIMEOUT`'s safety rule by a single character); **force one round trip on
+  resume** (`onResume` writes a ping directly and swaps the connection if no inbound frame arrives
+  within 3 seconds); **a 20-second application-level heartbeat** (shorter than the bridge's 30 seconds,
+  which also keeps NAT mappings alive). On device: after locking the screen for 55 seconds the log ran
+  `WsDown` → `onResume` → back to WS with no 15-second wait; the heartbeat starts but stays silent when
+  nothing happens.
+  Details for all three live in the v2.2.68 section of `docs/project/CHANGELOG-DEV.md`.
+  **Previous release (v2.2.67: sending a full-resolution photo no longer times out)**: one user report —
   sending a camera original waited 15 seconds, popped "WS request timed out (15000ms)", and the
   message was **silently lost**. Two defects stacked on top of each other:
   (1) **A 300-fold size mismatch**: the client allowed 8 MiB originals based on REST's 300 MiB body
@@ -628,7 +661,7 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
   kept strictly apart from `WS_TIMEOUT` (which may already have had side effects and is never retried).
   On device: a 4.26 MB original showed **697.0 KiB** on the attachment card and sent in one try; the
   model read back "1200×1600 JPEG". The same 287.8 KiB screenshot was not re-encoded at all.
-  **Previous release (v2.2.66: four UI and protocol defects closed)**: the first three came from
+  **v2.2.66 (four UI and protocol defects closed)**: the first three came from
   screen-by-screen comparisons against the HarmonyOS port, the fourth from a user report.
   (1) **Top-bar spacing tightened** (#8): following the values measured on the HarmonyOS build,
   the gap between the app bar and the big "Sessions" title drops from 53 to 18px, the chat detail
