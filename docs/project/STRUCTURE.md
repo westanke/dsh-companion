@@ -268,6 +268,7 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatDisplayGroups.kt` | file | 会话列表显示分组：过程/结论二分与折叠组 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatForkPoint.kt` | file | 这条展示项能否作为分叉点，以及给 forkSession 的 atSeq |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatHandoff.kt` | file | 纯文本模型发图的交接附件识别与处理 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/ImageTranscoder.kt` | file | 内核不收的图片格式（HEIC/AVIF/BMP）就地转成它收的三种之一 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatHistoryMapping.kt` | file | 一条会话历史 → 一串展示项：逐事件映射 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatJson.kt` | file | 会话数据层共用的 JSON 取值助手与解析实例 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatLinkTarget.kt` | file | 链接目标归一（含末尾行号片段处理） |

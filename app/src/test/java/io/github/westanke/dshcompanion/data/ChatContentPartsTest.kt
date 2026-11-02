@@ -201,6 +201,94 @@ class ChatContentPartsTest {
         assertEquals("image/png", ChatContentParts.imageMediaType(null, "content://media/1234"))
     }
 
+    // ------------------------------------------------------------------ issue #17
+
+    @Test
+    fun theKernelWhitelistIsExactlyTheFourTypesItDocuments() {
+        // 这条断言是**故意的重复**：白名单抄自内核 @deepseek-ai/dsh-attachment-local
+        // 的 imageLimits.mediaTypes（Object.freeze 的死字面量，没有配置入口）。
+        // 内核哪天加了 AVIF，这里会红，提醒我们同步 —— 而不是让用户在发送后才看到
+        // 「Image type ... is not accepted」。
+        assertEquals(
+            setOf("image/png", "image/jpeg", "image/webp", "image/gif"),
+            ChatContentParts.SUPPORTED_IMAGE_MEDIA_TYPES,
+        )
+    }
+
+    @Test
+    fun bmpAliasesNormalizeInsteadOfLeakingTheDeviceSpecificName() {
+        // vivo 上的 .bmp 系统给的是 image/x-ms-bmp —— 这正是 issue #17 里
+        // 真机复现到的那个名字。归一化必须把它收拢，否则每次都要用户自己改名。
+        assertEquals("image/bmp", ChatContentParts.imageMediaType("image/x-ms-bmp", "test.bmp"))
+        assertEquals("image/bmp", ChatContentParts.imageMediaType("image/bmp", "test.bmp"))
+        assertEquals("image/bmp", ChatContentParts.imageMediaType(null, "test.BMP"))
+        assertFalse(ChatContentParts.isSupportedImageMediaType("image/bmp"))
+    }
+
+    @Test
+    fun heicAndAvifAreReportedHonestlyAndMarkedForTranscode() {
+        // 不能假装 HEIC 是 PNG：字节还是 HEIC，内核的解码器会发现对不上，
+        // 而且报错会指向一个跟真实原因无关的类型。
+        assertEquals("image/heic", ChatContentParts.imageMediaType("image/heic", "280857.heic"))
+        assertEquals("image/heic", ChatContentParts.imageMediaType("image/heif", "x.heic"))
+        assertEquals("image/heic", ChatContentParts.imageMediaType(null, "IMG_0001.HEIC"))
+        assertEquals("image/avif", ChatContentParts.imageMediaType("image/avif", "x.avif"))
+
+        for (type in listOf("image/heic", "image/avif", "image/bmp")) {
+            assertFalse("$type 内核不收，必须走转码", ChatContentParts.isSupportedImageMediaType(type))
+            assertTrue("$type 应该被判为需要转码", ChatContentParts.needsTranscode(type))
+        }
+        for (type in listOf("image/png", "image/jpeg", "image/webp", "image/gif")) {
+            assertTrue("$type 内核本来就收，不该白白解码一遍", !ChatContentParts.needsTranscode(type))
+        }
+    }
+
+    @Test
+    fun theWhitelistCheckIsCaseInsensitiveButStrictAboutContent() {
+        // 内核是精确字符串比较，但设备给的大小写不统一（Image/HEIC 见过）。
+        // 大小写归一在客户端做，别让用户为厂商的写法买单。
+        assertTrue(ChatContentParts.isSupportedImageMediaType("IMAGE/PNG"))
+        assertTrue(ChatContentParts.isSupportedImageMediaType(" image/jpeg "))
+        // 带参数的类型（image/jpeg;charset=...) 内核不认，这里也不能算通过。
+        assertFalse(ChatContentParts.isSupportedImageMediaType("image/jpeg; charset=utf-8"))
+        assertFalse(ChatContentParts.isSupportedImageMediaType("application/pdf"))
+        assertFalse(ChatContentParts.isSupportedImageMediaType(""))
+    }
+
+    @Test
+    fun mediaTypeLabelsAreForHumansNotForTheWire() {
+        assertEquals("HEIC", ChatContentParts.mediaTypeLabel("image/heic"))
+        assertEquals("BMP", ChatContentParts.mediaTypeLabel("image/x-ms-bmp"))
+        assertEquals("JPG", ChatContentParts.mediaTypeLabel("image/jpeg"))
+        // 认不出来的也别把裸 MIME 甩给用户
+        assertEquals("OCTET-STREAM", ChatContentParts.mediaTypeLabel("application/octet-stream"))
+        assertEquals("未知格式", ChatContentParts.mediaTypeLabel(""))
+    }
+
+    @Test
+    fun transcodeTargetPrefersPngOnlyWhenAlphaIsPresent() {
+        // 有 alpha 编 JPEG 会把透明区变黑块；没 alpha 编 PNG 会让照片体积翻几倍。
+        assertEquals("image/png", ImageTranscoder.targetMediaType(hasAlpha = true))
+        assertEquals("image/jpeg", ImageTranscoder.targetMediaType(hasAlpha = false))
+        // 两个目标都必须在白名单里，否则转完还是发不出去。
+        assertTrue(ChatContentParts.isSupportedImageMediaType(ImageTranscoder.targetMediaType(true)))
+        assertTrue(ChatContentParts.isSupportedImageMediaType(ImageTranscoder.targetMediaType(false)))
+    }
+
+    @Test
+    fun sampleSizeStaysOneUntilThePixelBudgetIsExceeded() {
+        // 12 MP 的手机原图（4000×3000）在预算内，必须原分辨率解码 —— 转码不是为了缩图。
+        assertEquals(1, ImageTranscoder.sampleSizeFor(4000, 3000))
+        assertEquals(1, ImageTranscoder.sampleSizeFor(4096, 4096))
+        // 超过 16 M 像素才降档，且只能是 2 的幂（BitmapFactory 的约定）。
+        assertEquals(2, ImageTranscoder.sampleSizeFor(6000, 6000))
+        // 400 M 像素：1→2→4 都还在 16.7 M 之上，到 8 才落回（100M/25M/6.25M）。
+        assertEquals(8, ImageTranscoder.sampleSizeFor(20000, 20000))
+        // 尺寸读不出来时别降采样（调用方会当成解不开处理）。
+        assertEquals(1, ImageTranscoder.sampleSizeFor(0, 0))
+        assertEquals(1, ImageTranscoder.sampleSizeFor(-1, 100))
+    }
+
     @Test
     fun readAtMostKeepsSmallStreamsWholeAndFlagsOversizedOnes() {
         // 小于上限：原样读完，调用方按长度 <= limit 放行。

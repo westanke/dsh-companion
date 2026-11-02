@@ -1224,8 +1224,30 @@ android {
         //     相反处置。
         //   依赖：无（三件都是纯客户端改动，不需要新桥能力位）。
         //
-        versionCode = 10093
-        versionName = "2.2.68"
+        // v2.2.69（versionCode 10094）：**HEIC/AVIF/BMP 发图必失败**（2026-11-02，补丁版，#17）。
+        //   基于什么：v2.2.68。用户发手机截图 —— 发 280857.heic 被
+        //     `Image type image/heic is not accepted by this deployment.` 打回。
+        //   干了什么：
+        //     ① 白名单落地成客户端常量：ChatContentParts.SUPPORTED_IMAGE_MEDIA_TYPES（png/jpeg/
+        //        webp/gif 四种）+ isSupportedImageMediaType() + needsTranscode()。内核那份是
+        //        Object.freeze 的死字面量、无配置入口，客户端只能自己对一遍。
+        //     ② imageMediaType 不再「image/ 开头就原样透传」：先按别名归一（image/x-ms-bmp 与
+        //        image/bmp 都是 BMP）、归不了就如实返回（HEIC 不假装成 PNG），最终由白名单裁决。
+        //        else 兜底也从「假装是 PNG」改成交回调用方 —— 猜错类型会让报错指向无关原因。
+        //     ③ 新增 data/ImageTranscoder.kt：有 alpha 编 PNG、无 alpha 编 JPEG 90，**不主动缩图**
+        //        （与 #15「取消无谓重编码」一致：这是换格式不是降质），超 16 M 像素才降采样防 OOM。
+        //        attachImage 里未通过白名单就走转码，放 Dispatchers.IO。
+        //     ④ 三种失败各给人话：解不开 / 转完超限 / 转出来仍不收（我们常量脱钩）。中英各 +3 条字符串。
+        //   测了什么：89 类 / 926 用例 / 0 失败（+7）；docsCheck 全绿；STRUCTURE 已登记新文件。
+        //   真机验了什么：V2080A（1080x2400，3px/dp）—— 见 CHANGELOG-DEV.md 的「真机验证」一节。
+        //   仍未做：不改内核白名单（那是它的部署决策）、不在桥侧转码（手机上有现成解码器）、
+        //     不推翻 #15 的「不预压缩」（白名单内的图一个字节没动）、不按 SDK_INT 猜能否解 HEIC
+        //     （Android 8.0 有 HEIF 软解码但 ImageDecoder 是 API 28、强制项到 Android 11 的 CDD 才写，
+        //     版本判断两处对不上，统一改成运行时试解）。
+        //   依赖：无（纯客户端改动，不需要新桥能力位）。
+        //
+        versionCode = 10094
+        versionName = "2.2.69"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。

@@ -28,6 +28,7 @@ import io.github.westanke.dshcompanion.data.DshApiException
 import io.github.westanke.dshcompanion.data.DshClient
 import io.github.westanke.dshcompanion.data.DshConnectionException
 import io.github.westanke.dshcompanion.data.FileEntry
+import io.github.westanke.dshcompanion.data.ImageTranscoder
 import io.github.westanke.dshcompanion.data.handoffPathOf
 import io.github.westanke.dshcompanion.data.LiveChatState
 import io.github.westanke.dshcompanion.data.RootView
@@ -143,8 +144,15 @@ internal fun HarnessViewModel.attachImage(name: String, sizeBytes: Long, mediaTy
             notify(appString(R.string.attachment_image_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_SOURCE_IMAGE_BYTES)))
             return@launch
         }
+        // 内核只收 png/jpeg/webp/gif（issue #17），别的格式在这里就地转码。
+        // 转码要解码整张图，属于重活，放到 IO 线程上，别在主线程啃一张 12 MP 的 HEIC。
+        val accepted = if (ChatContentParts.isSupportedImageMediaType(mediaType)) {
+            SourcedImage(raw, mediaType)
+        } else {
+            withContext(Dispatchers.IO) { transcodeForKernel(name, mediaType, raw) } ?: return@launch
+        }
         val part = runCatching {
-            ChatContentParts.imagePart(mediaType, raw, name)
+            ChatContentParts.imagePart(accepted.mediaType, accepted.bytes, name)
         }.getOrElse {
             notify(appString(R.string.attachment_image_too_large, ChatContentParts.formatBytes(ChatContentParts.MAX_SOURCE_IMAGE_BYTES)))
             return@launch
@@ -155,10 +163,54 @@ internal fun HarnessViewModel.attachImage(name: String, sizeBytes: Long, mediaTy
                     id = java.util.UUID.randomUUID().toString(),
                     part = part,
                     name = name,
-                    sizeBytes = raw.size.toLong(),
-                    imageBytes = raw,
+                    sizeBytes = accepted.bytes.size.toLong(),
+                    imageBytes = accepted.bytes,
                 ),
             )
+        }
+    }
+}
+
+/** 一张已经「内核敢收」的图片：字节 + 与之匹配的 mediaType。 */
+private class SourcedImage(val bytes: ByteArray, val mediaType: String)
+
+/**
+ * 把内核不收的格式转成它收的，转不动就给用户一句能照做的话。
+ *
+ * 返回 null 表示已经向用户报过错，调用方直接结束即可 —— 这与 [attachImage] 里
+ * 其它失败分支的写法一致（都是 notify + return，而不是抛异常让协程崩）。
+ *
+ * 三种失败各说各的：
+ * - 解不开（[ImageTranscoder.Result.Undecodable]）：文件坏了，或这台设备没有该格式的解码器
+ *   （老机型缺 HEIF 很常见 —— Android 11 的 CDD 才把 HEIC 解码写进强制项）；
+ * - 转完超限（[ImageTranscoder.Result.TooLarge]）：少见但可能有，JPEG 90 一般比 HEIC 大；
+ * - 转出来了但内核仍不收：不该发生，说明 [ChatContentParts.SUPPORTED_IMAGE_MEDIA_TYPES]
+ *   与 [ImageTranscoder.targetMediaType] 脱钩了，属于我们自己的一致性 bug。
+ */
+private suspend fun HarnessViewModel.transcodeForKernel(name: String, mediaType: String, raw: ByteArray): SourcedImage? {
+    val label = ChatContentParts.mediaTypeLabel(mediaType)
+    return when (val result = ImageTranscoder.transcode(raw, ChatContentParts.MAX_SOURCE_IMAGE_BYTES)) {
+        is ImageTranscoder.Result.Success -> {
+            if (!ChatContentParts.isSupportedImageMediaType(result.mediaType)) {
+                notify(appString(R.string.attachment_read_failed))
+                null
+            } else {
+                DiagLog.i("ATTACH", "$name：$mediaType 转成 ${result.mediaType}（${raw.size} → ${result.bytes.size} 字节）")
+                SourcedImage(result.bytes, result.mediaType)
+            }
+        }
+        ImageTranscoder.Result.Undecodable -> {
+            notify(appString(R.string.attachment_image_transcode_failed, label))
+            null
+        }
+        is ImageTranscoder.Result.TooLarge -> {
+            notify(
+                appString(
+                    R.string.attachment_image_transcoded_too_large,
+                    ChatContentParts.formatBytes(ChatContentParts.MAX_SOURCE_IMAGE_BYTES),
+                ),
+            )
+            null
         }
     }
 }

@@ -1,4 +1,21 @@
-- 日期：2026-11-01
+- 日期：2026-11-02
+- **v2.2.69（versionCode 10094，待发）：HEIC/AVIF/BMP 发图必失败收口（#17）**。
+  用户发截图：发 `280857.heic` 被 `Image type image/heic is not accepted by this deployment.` 打回，
+  且失败发生在**点发送之后**（附件已进框、输入框已填），用户看不到能照做的指引。
+  两条独立漏口：①内核 `@deepseek-ai/dsh-attachment-local` 的 `imageLimits.mediaTypes` 是
+  `Object.freeze` 的四元素死字面量（png/jpeg/webp/gif），同组其余上限都读 `config.*`，
+  **只有媒体类型没有配置入口**；②客户端 `imageMediaType` 对任何 `image/` 开头的类型原样透传，
+  而设备给的名字不规矩（vivo 上 `.bmp` 是 `image/x-ms-bmp`）。真机还证了透传分支才是主路径：
+  `.bmp` 报错里的类型是 `image/x-ms-bmp` 而非映射表里的 `image/bmp`，所以只改映射表修不好。
+  改法三层：①白名单落地成 `ChatContentParts.SUPPORTED_IMAGE_MEDIA_TYPES` + `isSupportedImageMediaType`
+  + `needsTranscode`；②`imageMediaType` 先按别名归一再裁决，归不了如实返回（HEIC 不假装成 PNG），
+  `else` 兜底从「假装是 PNG」改为交回调用方；③新增 `data/ImageTranscoder.kt`，有 alpha 编 PNG、
+  无 alpha 编 JPEG 90，**不主动缩图**（与 #15 一致：换格式不是降质），超 16 M 像素才降采样防 OOM，
+  转码放 `Dispatchers.IO`。三种失败各给人话，中英各 +3 条字符串。单测 89 类 / 926 用例全绿（+7）。
+  **真机已复现**（v2.2.68 产物上：HEIC 三条 `#1962/#1976/#2002`、BMP `#2018`），
+  **修复已真机复验**（v2.2.69 产物 10094 上：HEIC 19,291 字节 → 转 JPEG 后 `message ← sent`、
+  BMP 1,440,138 字节 → 转 JPEG 后 `message ← sent`、白名单内 PNG 287.8 KiB 零重编码照发，
+  08:06 之后 diag.log 零条 `not accepted`）。
 - **v2.2.68（versionCode 10093，发）：三件真机缺陷收口 —— 表格串表（#13）/ 发图通道分流（#15）/ WS 半死（#16）**。
   三件都是 v2.2.67 上真机跑出来的，各节见下。
 - **v2.2.68 之一：WS 半死（#16）** —— 从相册返回后发送等满 15 秒报「WS 请求超时（15000ms）」且不回落 REST

@@ -177,23 +177,112 @@ object ChatContentParts {
     }
 
     /**
+     * 内核对图片 MIME 的**唯一权威白名单**（issue #17）。
+     *
+     * 抄自 `@deepseek-ai/dsh-attachment-local` 的 `imageLimits.mediaTypes`
+     * （`lib/index.js:1004`）。那个数组是 `Object.freeze` 的字面量，**没有配置入口** ——
+     * 同一个 `imageLimits` 里 `maxImageBytes`、`maxImagesPerMessage` 等都读 `config.*`，
+     * 只有媒体类型被写死。所以任何 deployment 都只收这四种，客户端必须自己对齐。
+     *
+     * 不在这个集合里的类型发出去必被拒（`UNSUPPORTED_IMAGE_TYPE`），
+     * 且报错发生在**用户点发送之后**——附件都已经在输入框里了，所以这条校验
+     * 必须在客户端、在选图那一刻做完。
+     */
+    val SUPPORTED_IMAGE_MEDIA_TYPES: Set<String> = setOf(
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "image/gif",
+    )
+
+    /**
+     * 内核收不收这个图片类型。大小写与前缀都按内核的口径来（它是精确字符串比较）。
+     */
+    fun isSupportedImageMediaType(mediaType: String): Boolean =
+        mediaType.trim().lowercase() in SUPPORTED_IMAGE_MEDIA_TYPES
+
+    /**
      * 图片的 mediaType。
      *
-     * 系统选择器给的 MIME 是首选；拿不到时就按扩展名推，最后兜底 `image/png` ——
-     * 能走到这里的文件都是从图片选择器里挑出来的，确实是一张图，
-     * 缺一个精确的 MIME 不该让用户发不出去。
+     * 系统选择器给的 MIME 是首选；拿不到时就按扩展名推，最后兜底 `image/png`。
+     *
+     * **但首选不等于照抄**（issue #17 的根因）：内核只认 [SUPPORTED_IMAGE_MEDIA_TYPES]
+     * 四种，而系统给的 MIME 五花八门——`.bmp` 在 vivo 上给的是 `image/x-ms-bmp`，
+     * HEIC 给 `image/heic`，苹果互传的可能给 `image/heif`。原来这里对任何
+     * 以 `image/` 开头的类型一律原样透传，等于把「类型是不是内核能吃的」这件事完全交给设备。
+     *
+     * 现在的口径：**先归一化到内核认识的名字**，归不了就返回原值让调用方去决定
+     * （转码还是拒绝），由 [isSupportedImageMediaType] 做最终裁决。
+     * 把归一化与裁决分开，是因为「这张图实际是什么格式」和「内核吃不吃」是两个问题：
+     * HEIC 确实是 `image/heic`，归一化只会把它变成 JPEG（转码后），而不是假装它是 PNG。
      */
     fun imageMediaType(contentType: String?, fileName: String): String {
         val declared = contentType?.trim()?.lowercase().orEmpty()
-        if (declared.startsWith("image/")) return declared
-        return when (fileName.substringAfterLast('.', "").lowercase()) {
+        val normalized = normalizeImageMediaType(declared)
+        if (normalized != null) return normalized
+        // 声明缺失或不认识时按扩展名推。**注意 `else` 兜底不再假装是 PNG**：
+        // 猜错类型会让内核报一个和真实原因无关的错，不如把选择权交回调用方。
+        val byExtension = when (fileName.substringAfterLast('.', "").lowercase()) {
             "png" -> "image/png"
             "jpg", "jpeg" -> "image/jpeg"
             "webp" -> "image/webp"
             "gif" -> "image/gif"
             "heic", "heif" -> "image/heic"
-            "bmp" -> "image/bmp"
-            else -> "image/png"
+            "bmp", "dib" -> "image/bmp"
+            "avif" -> "image/avif"
+            else -> null
+        }
+        return byExtension ?: declared.takeIf { it.startsWith("image/") } ?: "image/png"
+    }
+
+    /**
+     * 把设备/文件管理器给的 MIME 归一到内核认识的名字。
+     *
+     * 归一化只处理**同一格式的别名**，不做跨格式搬运：`image/x-ms-bmp` 与 `image/bmp`
+     * 都是 BMP，归成同一个名字是安全的；但 HEIC 归成 PNG 就是撒谎（字节还是 HEIC，
+     * 内核的魔数嗅探或解码器会发现对不上）。跨格式只能靠转码，见
+     * `HarnessAttachmentsViewModel.attachImage`。
+     *
+     * 认不出来返回 null，交给调用方按扩展名推或拒绝。
+     */
+    private fun normalizeImageMediaType(declared: String): String? = when (declared) {
+        "image/png", "image/x-png" -> "image/png"
+        "image/jpeg", "image/jpg", "image/pjpeg" -> "image/jpeg"
+        "image/webp" -> "image/webp"
+        "image/gif" -> "image/gif"
+        // BMP 没有统一的注册名，各平台各叫各的；两种写法都见过
+        "image/bmp", "image/x-bmp", "image/x-ms-bmp", "image/x-ms-bmp2" -> "image/bmp"
+        // 以下三种内核都不收，归一化只为让报错可读（避免把 image/heic 说成「未知」）
+        "image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence" -> "image/heic"
+        "image/avif", "image/avif-sequence" -> "image/avif"
+        else -> null
+    }
+
+    /**
+     * 这个类型需要客户端转码成 [SUPPORTED_IMAGE_MEDIA_TYPES] 里的一种吗。
+     *
+     * 内核不收的格式（HEIC/HEIF/AVIF/BMP 等）在客户端解成位图再编码，比让用户
+     * "自己先转成 JPG" 体面得多 —— 用户选图时根本不知道内核收什么。
+     */
+    fun needsTranscode(mediaType: String): Boolean = !isSupportedImageMediaType(mediaType)
+
+    /**
+     * 给用户看的格式名。`image/x-ms-bmp` 这种内部名直接上屏只会让人更困惑。
+     *
+     * 认不出来的就取 `/` 后面那段转大写 —— 说「这张图是 OCTET-STREAM 格式」虽然也没多有用，
+     * 但比裸 MIME 强，至少提示了「这是个格式问题」。
+     */
+    fun mediaTypeLabel(mediaType: String): String {
+        val key = mediaType.trim().lowercase().substringBefore(';').trim()
+        return when (key) {
+            "image/png", "image/x-png" -> "PNG"
+            "image/jpeg", "image/jpg", "image/pjpeg" -> "JPG"
+            "image/webp" -> "WebP"
+            "image/gif" -> "GIF"
+            "image/heic", "image/heif", "image/heic-sequence", "image/heif-sequence" -> "HEIC"
+            "image/avif", "image/avif-sequence" -> "AVIF"
+            "image/bmp", "image/x-bmp", "image/x-ms-bmp", "image/dib" -> "BMP"
+            else -> key.substringAfter('/').uppercase().ifBlank { "未知格式" }
         }
     }
 

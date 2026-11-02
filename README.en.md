@@ -598,16 +598,34 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.68` (`versionCode` 10093)
+- Version: `v2.2.69` (`versionCode` 10094)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
-- Unit tests: 89 test classes / 919 cases at the last run (0 failures). The counts move with the code, so
+- Unit tests: 89 test classes / 926 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
 - Current APK: `DSH伴侣-companion-v2.2.68.apk`, **3,382,128 bytes**, SHA-256
   `722945357163d5f9b21aa989988378ca2d80484d114d767b1cc1da1858744896` (kept in sync in
   `artifacts/SHA256SUMS.txt`; real values are backfilled by release stage A).
-  **This release (v2.2.68: table bleeding, image-channel split, half-dead WS)**: all three came out of
+  **This release (v2.2.69: HEIC/AVIF/BMP images always fail to send)**: a user sent a screenshot —
+  attaching `280857.heic` came back with
+  `Image type image/heic is not accepted by this deployment.`, and **the failure happens after you hit
+  send**: the attachment is already in the composer, the text is already typed, then the whole message
+  is bounced with one line of English and no actionable hint.
+  Two independent gaps: **the kernel's image allow-list is a frozen literal**
+  (`imageLimits.mediaTypes` in `@deepseek-ai/dsh-attachment-local` is an `Object.freeze` of
+  png/jpeg/webp/gif while every other limit in that same object reads `config.*` — media types have no
+  config entry), **and the client passes any `image/…` type through verbatim**. On-device testing also
+  proved the pass-through branch is the main path: the `.bmp` error names `image/x-ms-bmp` (not the
+  `image/bmp` in the mapping table), so touching the mapping table alone cannot fix it.
+  Three-part fix: the allow-list becomes a client constant with an explicit verdict function;
+  `imageMediaType` normalises aliases first and otherwise reports the truth (HEIC is not disguised as
+  PNG); and a new `data/ImageTranscoder.kt` converts in place — PNG when alpha is present, JPEG at
+  quality 90 when it is not, **without downscaling** (this is a format change, not a quality cut,
+  consistent with #15's "no needless re-encoding"), sampling down only past 16 M pixels to avoid OOM.
+  Each of the three failure modes gets a human sentence (undecodable / too large after conversion /
+  still rejected after conversion). Previous releases:
+  **v2.2.68 (table bleeding, image-channel split, half-dead WS)**: all three came out of
   on-device testing of the previous release.
   (1) **A second table bled into the first** (issue #13): the root cause was not the table parser but
   **the renderer handing over the wrong material** — `MarkdownComponentModel.content` is the **entire

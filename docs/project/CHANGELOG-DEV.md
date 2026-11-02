@@ -1,5 +1,103 @@
 # 开发日志
 
+## v2.2.69 · HEIC/AVIF/BMP 发图必失败：客户端转码 + 白名单收敛（#17）（2026-11-02）
+
+### 基于什么
+v2.2.68。用户发来一张手机截图：会话里发 `280857.heic`，底部浮出红字
+`Image type image/heic is not accepted by this deployment.`，附件芯片还挂在输入框里。
+用户补了一句「这个图片应该是华为的图片格式，」—— 华为/荣耀相机默认的「高效格式」
+就是 HEIC，iPhone 默认也是。
+
+### 现象
+点发送之后才失败：附件已经进框、芯片已经显示体积、输入框里的字也填好了，
+然后服务端一句英文把整条消息打回。用户看到的是「白忙一场」，看不到任何能照做的指引。
+
+### 根因（两条独立漏口，缺一条都不会挂）
+1. **内核的图片白名单是死字面量，只收四种**。`@deepseek-ai/dsh-attachment-local` 的
+   `imageLimits.mediaTypes` 是 `Object.freeze(["image/png", "image/jpeg", "image/webp", "image/gif"])`
+   （`lib/index.js:1004`）。同一个 `imageLimits` 里 `maxImageBytes`、`maxImagesPerMessage`、
+   `maxImagePixels` 全都读 `config.*`，**只有媒体类型写死且没有配置入口** —— 任何 deployment
+   都只收这四种。校验点在 `@deepseek-ai/dsh-attachment/lib/index.js:221`：不在数组里就抛
+   `UNSUPPORTED_IMAGE_TYPE`。
+2. **客户端对任何 `image/` 开头的类型一律原样透传**。`ChatContentParts.imageMediaType` 的第一句
+   就是 `if (declared.startsWith("image/")) return declared`，于是设备给什么就发什么。
+   而设备给的并不规矩：vivo 上 `.bmp` 是 `image/x-ms-bmp`、HEIC 是 `image/heic`、
+   苹果互传的可能是 `image/heif`。`attachImage` 只守体积（8 MiB），**不守类型**。
+
+真机上还证了一件事：`.bmp` 的报错是 `Image type image/x-ms-bmp is not accepted`，
+而 `imageMediaType` 的扩展名映射表里写的是 `image/bmp` —— 说明**走的是透传分支，
+扩展名映射根本没被用到**。所以「只改映射表」是修不好的，白名单校验必须落在最终返回值上。
+
+### 改法（三层）
+1. **白名单落地成客户端常量**（`data/ChatContentParts.kt`）：
+   `SUPPORTED_IMAGE_MEDIA_TYPES` 四种、`isSupportedImageMediaType()` 裁决、`needsTranscode()` 判转码。
+   裁决与「归一化」**刻意分成两步**：`imageMediaType` 先按别名归一
+   （`image/x-ms-bmp` / `image/bmp` → `image/bmp`，`image/x-png` → `image/png`），
+   归不了就如实返回原值（`image/heic` 就是 `image/heic`，**不假装它是 PNG** —— 字节还是 HEIC，
+   谎报类型只会让报错指向无关原因），由白名单做最终裁决。
+   `else` 兜底也从「假装是 PNG」改成「交回调用方决定」，猜错类型比明说更坏。
+2. **客户端转码**（新增 `data/ImageTranscoder.kt`）：内核不收的格式就地解成位图再编码。
+   有 alpha → PNG（无损，保住透明），无 alpha → JPEG 质量 90（HEIC/AVIF 本身已是有损，
+   二次压缩在 90 上看不出差别）。**不主动缩尺寸** —— 这与 #15「取消无谓重编码」的裁定一致：
+   这是格式转换，不是降质压缩；只有像素数超过 16 M 才降采样，那是防 OOM。
+   `attachImage` 里判断走不走转码，转码本身放 `Dispatchers.IO`（解一张 12 MP 的图是重活）。
+3. **三种失败各说各的话**：解不开（文件坏了 / 这台设备没有该格式的解码器 —— Android 11 的
+   CDD 才把 HEIC 解码写进强制项，更早的设备是可选项）、转完超限、以及「转出来了但内核仍不收」
+   （那是我们自己常量脱钩的一致性 bug）。新增中英双站三条字符串。
+
+### 明确不做
+- **不改内核白名单**：那是内核的部署决策，客户端没资格替它放宽；而且改了会影响所有
+  deployment 的契约（`@deepseek-ai/dsh-attachment` 的类型面）。
+- **不在桥侧转码**：手机上现成的解码器在 App 进程里，绕一趟服务器只会更慢、更费流量。
+- **不推翻 #15 的「不预压缩」**：这里只在类型不被接受时转码，白名单内的图（含 4.26 MB 的
+  JPEG 原图）一个字节都不动。
+- **不按 `SDK_INT` 猜能不能解 HEIC**：Android 8.0 就有 HEIF 软解码，但 `ImageDecoder` 这个类
+  是 API 28 才有，而「必须支持 HEIC 解码」到 Android 11 的 CDD 才是强制项 —— 版本号判断
+  两处都对不上。统一改成**运行时试解**（解不开就是解不开）。
+
+### 测了什么
+- 单测 **89 类 / 926 用例**全绿（+7）。新增 7 条钉住：白名单就是那四种（故意与内核重复声明，
+  内核哪天加了格式这里会红）、BMP 的厂商别名被收拢而不是漏出去、HEIC/AVIF 如实上报且被标为需转码、
+  白名单裁决大小写不敏感但不容忍带参数的类型、给人看的格式名不泄露裸 MIME、
+  转码目标只在有 alpha 时选 PNG、降采样在 16 M 像素预算内保持原分辨率。
+- 转码里选「编成什么 / 降几档」的取舍全抽成纯函数（本模块没有 Robolectric，
+  `BitmapFactory` 在 JVM 单测里一碰就 "not mocked"），Android 那半层只剩照做。
+
+### 真机验了什么（v2.2.68 发版产物，10093）
+vivo V2080A（1080×2400，3px/dp）：
+- **HEIC 必失败已复现**：`280857.heic / 18.8 KiB` → 发送 → 浮层
+  `Image type image/heic is not accepted by this deployment.`；
+  `diag.log` 三次原始行 `#1962` / `#1976` / `#2002`。
+  样本是构造的：设备上没有现成 `.heic`（用户截图那张是华为传过来、未落盘），
+  把一个 PNG 改名成 `.heic` 让 MediaStore 按扩展名收成 `image/heic` —— 与真实 HEIC
+  走的是同一条客户端代码路径。
+- **BMP 也挂，且证了透传分支**：`test-bmp.bmp`（1.44 MB）→ MediaStore 给
+  `image/x-ms-bmp` → `#2018 Image type image/x-ms-bmp is not accepted`。
+### 真机验证
+设备 vivo V2080A（1080×2400，3px/dp），**本版产物** 10094 / 2.2.69，
+`app-debug.apk` 与设备 `base.apk` MD5 两侧同为 `61e0d3bb2f1e1346dc90a7829d1c8ba2`。
+
+- [x] **HEIC 不再被拒**：同一张 `280857.heic`（19,291 字节）→ 附件芯片 28.6 KiB
+  （转成 JPEG 后的体积，比原文件大 —— 19 KB 的图编码抖动占主导，属正常）
+  → 发送 → `message ← sent`，模型正常解读。
+  `diag.log`：`08:06:42.700 #30 ATTACH 280857.heic：image/heic 转成 image/jpeg（19291 → 29294 字节）`
+  → `08:07:42.964 #31 WS 配对：requestId 快路 message ← sent`。
+- [x] **BMP 不再被拒**：`test-bmp.bmp`（1,440,138 字节）→ 芯片 28.6 KiB → 发送 → `message ← sent`。
+  `diag.log`：`08:08:08.282 #67 ATTACH test-bmp.bmp：image/bmp 转成 image/jpeg（1440138 → 29294 字节）`
+  → `08:08:51.939 #71 WS 配对：requestId 快路 message ← sent`。
+- [x] **白名单内的格式一个字节没动**（#15 不回归）：`Screenshot_2026_1101_095740.png`（294,676 字节）
+  → 芯片仍 **287.8 KiB**（与 v2.2.68 实测完全一致）→ 发送 → `message ← sent`；
+  `diag.log` 里**没有任何 ATTACH 转码行**，只有
+  `08:09:57.165 #118 WS 配对：requestId 快路 message ← sent`。
+- [x] **失败行都停在修复前**：整份 diag.log（537 行）里 5 条
+  `Image type ... is not accepted` 全部是 07:39–07:44 旧包留下的
+  （`#1848` / `#1962` / `#1976` / `#2002` / `#2018`）；08:06 之后零条。
+
+### 依赖
+无。纯客户端改动，不需要新桥能力位，也不依赖内核版本变化。
+
+---
+
 ## v2.2.68 · 表格串表 / 发图通道分流 / WS 半死（2026-11-01）
 
 ### 基于什么

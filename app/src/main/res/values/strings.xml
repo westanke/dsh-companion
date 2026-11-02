@@ -637,6 +637,9 @@
     <string name="attachment_file_rejected">服务端拒绝了该文件：超过了服务器允许的附件大小。请换一个更小的文件。</string>
     <string name="attachment_upload_unsupported">服务端的 dsh-remote-bridge 插件（旧名 dsh-workspace）版本过旧，还没有提供消息附件上传接口。请在电脑上把插件升级到 2.0.4 或更高，然后重启 DSH。</string>
     <string name="attachment_read_failed">读取所选文件失败，请换一个再试。</string>
+    <!-- 内核只收 png/jpeg/webp/gif（issue #17）：其余格式在客户端转码，转不动就说清楚 -->
+    <string name="attachment_image_transcode_failed">这张图（%1$s）没能转成可发送的格式，可能文件已损坏。</string>
+    <string name="attachment_image_transcoded_too_large">这张图转成 JPG 后超过 %1$s，没法内联发送。请先裁剪。</string>
 
     <!-- 工具调用详情：点开工具卡片后显示的输入 / 输出 -->
     <string name="tool_detail_input">输入</string>

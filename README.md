@@ -545,14 +545,26 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.68`（`versionCode` 10093）
+- 当前版本：`v2.2.69`（`versionCode` 10094）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
-- 单元测试：89 个测试类 / 919 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
+- 单元测试：89 个测试类 / 926 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
 - 当前 APK：`DSH伴侣-companion-v2.2.68.apk`，**3,382,128 字节**，
   SHA-256 `722945357163d5f9b21aa989988378ca2d80484d114d767b1cc1da1858744896`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
-  **本版（v2.2.68，表格串表 + 发图通道分流 + WS 半死）**：三件事都是上一版真机跑出来的。
+  **本版（v2.2.69，HEIC/AVIF/BMP 发图必失败）**：用户发截图——发 `280857.heic` 被
+  `Image type image/heic is not accepted by this deployment.` 打回，且**失败发生在点发送之后**：
+  附件已进框、输入框已填字，然后整条消息被一句英文退回，用户看不到任何能照做的指引。
+  根因是两条独立漏口：**内核的图片白名单是死字面量**（`@deepseek-ai/dsh-attachment-local` 的
+  `imageLimits.mediaTypes` 是 `Object.freeze` 的 png/jpeg/webp/gif 四元素，同组其余上限都读
+  `config.*`，只有媒体类型没有配置入口），**而客户端对任何 `image/` 开头的类型原样透传**。
+  真机还证了透传分支才是主路径：`.bmp` 报错里的类型是 `image/x-ms-bmp`（不是映射表里的
+  `image/bmp`），所以只改映射表修不好。改法三层：白名单落地成客户端常量与裁决函数；
+  `imageMediaType` 先按别名归一再裁决、归不了如实返回（HEIC 不假装成 PNG）；新增
+  `data/ImageTranscoder.kt` 就地转码——有 alpha 编 PNG、无 alpha 编 JPEG 90，**不主动缩图**
+  （这是换格式不是降质，与 #15「取消无谓重编码」一致），超 16 M 像素才降采样防 OOM。
+  三种失败各给人话（解不开／转完超限／转出来仍不收）。前几版：
+  **v2.2.68（表格串表 + 发图通道分流 + WS 半死）**：三件事都是上一版真机跑出来的。
   ① **一条消息两张表时第二张串进第一张**（issue #13）：根因不在表格解析器，而在**渲染库给错了料**
   —— `MarkdownComponentModel.content` 是**整篇 markdown 全文**，不是当前这一段；`parseMarkdownTable`
   拿全文重新解析，就把第二张表的表头行与 `|---|---|---|` 一起收进了第一张表的数据行（被
