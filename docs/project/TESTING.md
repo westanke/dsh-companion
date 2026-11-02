@@ -328,3 +328,27 @@ apksigner verify --verbose app\build\outputs\apk\release\app-release.apk
   `logcat` 里 `Image type|unsupported|mediaType` 零命中。
   **未验**：表格的人造极端表（64dp 下限 / 240dp 上限折行）与 ≤2 列字段表只有单测覆盖，
   真机没翻到样本；#11 的 JPEG 未真机复测（相册无 JPEG 素材，由单测守着）。
+- `v2.2.69`（HEIC/AVIF/BMP 发图必失败）通过 `docsCheck`（10 文档 / ROADMAP 任务 /
+  STATUS 引用 / README 双站 780 项 / STRUCTURE 169 锚点 149 源文件 / INTERFACES 136 锚点）、
+  `:app:testDebugUnitTest`（**91 个 XML / 89 个测试类 / 926 用例 / 0 失败**）、`:app:lintDebug`（0 error）
+  与 `assembleDebug`。
+  本轮新增用例：`ChatContentPartsTest` +7 —— 白名单就是那四种（**故意与内核重复声明**：内核哪天
+  加了格式这里会红）、BMP 的厂商别名（`image/x-ms-bmp`）被收拢而不是漏出去、HEIC/AVIF 如实上报
+  且被标为需转码、白名单裁决大小写不敏感但不容忍带参数的类型（`image/jpeg; charset=utf-8` 不算过）、
+  给人看的格式名不泄露裸 MIME、转码目标只在有 alpha 时选 PNG、降采样在 16 M 像素预算内保持原分辨率
+  （4000×3000→1、4096×4096→1、6000×6000→2、20000×20000→8）。
+  **真机（vivo V2080A / Android 11 / 1080×2400 / serial 9540718532001JR，v2.2.69 产物 10094，
+  设备 base.apk 与本地 `app-debug.apk` MD5 两侧同为 `61e0d3bb2f1e1346dc90a7829d1c8ba2`）**：
+  ① `280857.heic`（19,291 字节）发送成功，`diag.log`
+  `08:06:42.700 #30 ATTACH 280857.heic：image/heic 转成 image/jpeg（19291 → 29294 字节）`
+  → `08:07:42.964 #31 … message ← sent`；
+  ② `test-bmp.bmp`（1,440,138 字节）发送成功，
+  `08:08:08.282 #67 ATTACH test-bmp.bmp：image/bmp 转成 image/jpeg（1440138 → 29294 字节）`
+  → `08:08:51.939 #71 … message ← sent`；
+  ③ **白名单内零重编码**（#15 不回归）：`Screenshot_2026_1101_095740.png`（294,676 字节）
+  芯片仍 287.8 KiB，`diag.log` 无任何 ATTACH 行，只有 `08:09:57.165 #118 … message ← sent`；
+  ④ 整份 diag.log（537 行）里 5 条 `Image type ... is not accepted` 全部是 07:39–07:44 旧包留下的，
+  08:06 之后零条。
+  **未验**：AVIF 与真 HEIC（设备上没有现成 `.heic` 素材，用 PNG 改名让 MediaStore 收成
+  `image/heic` —— 与真实 HEIC 走同一条客户端代码路径，但**没有覆盖真解码器能否解开真 HEIC**）；
+  有 alpha 的 HEIC 转 PNG 那条分支只有单测。
