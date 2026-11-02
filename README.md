@@ -294,7 +294,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.68.apk
+DSH伴侣-companion-v2.2.69.apk
 ```
 
 安装要求：
@@ -550,8 +550,8 @@ keyPassword=...
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：89 个测试类 / 926 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.68.apk`，**3,382,128 字节**，
-  SHA-256 `722945357163d5f9b21aa989988378ca2d80484d114d767b1cc1da1858744896`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
+- 当前 APK：`DSH伴侣-companion-v2.2.69.apk`，**3,383,328 字节**，
+  SHA-256 `e620b0e3c848611f64b8310b69cd78c4b199fa485826d364907f8836531fac2a`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
   **本版（v2.2.69，HEIC/AVIF/BMP 发图必失败）**：用户发截图——发 `280857.heic` 被
   `Image type image/heic is not accepted by this deployment.` 打回，且**失败发生在点发送之后**：
   附件已进框、输入框已填字，然后整条消息被一句英文退回，用户看不到任何能照做的指引。

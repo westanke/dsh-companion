@@ -303,7 +303,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.68.apk
+DSH伴侣-companion-v2.2.69.apk
 ```
 
 Requirements:
@@ -604,8 +604,8 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 - Unit tests: 89 test classes / 926 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.68.apk`, **3,382,128 bytes**, SHA-256
-  `722945357163d5f9b21aa989988378ca2d80484d114d767b1cc1da1858744896` (kept in sync in
+- Current APK: `DSH伴侣-companion-v2.2.69.apk`, **3,383,328 bytes**, SHA-256
+  `e620b0e3c848611f64b8310b69cd78c4b199fa485826d364907f8836531fac2a` (kept in sync in
   `artifacts/SHA256SUMS.txt`; real values are backfilled by release stage A).
   **This release (v2.2.69: HEIC/AVIF/BMP images always fail to send)**: a user sent a screenshot —
   attaching `280857.heic` came back with
