@@ -149,6 +149,9 @@ dsh-companion/
 在 `SessionGroups.kt`（今天/昨天/更早 + 工作区聚簇，无 Compose 依赖），
 消息项 `ChatMessageItems.kt`，交互卡片 `ChatApprovals.kt`，输入区 `ChatComposer.kt`。
 
+`ui/` 根目录放**与 Compose 无关的纯判据**：宽度档位在 `AdaptiveBreakpoints.kt`，
+抽屉灰幕的命中判据在 `DrawerScrim.kt`（画不画 / 吃不吃点击，两条独立判据）。
+
 ### 3.4 `ui/theme/`（7）· `web/`（2）· `debug/`（2）
 
 | 文件 | 职责 |
@@ -396,6 +399,7 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/SettingsCards.kt` | file | 设置页官方卡片式构件（分节 / 信息行 / 开关行 / 分段 / 药丸组） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/WavHeader.kt` | file | PCM16 → WAV 头封装（16 kHz 单声道） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/AdaptiveBreakpoints.kt` | file | 宽度档位三档纯函数（840dp 具名常量） |
+| `app/src/main/java/io/github/westanke/dshcompanion/ui/DrawerScrim.kt` | file | 抽屉灰幕的纯判据（画不画 / 吃不吃点击，两条独立判据） |
 | `app/src/main/java/io/github/westanke/dshcompanion/web/ActiveChatBridge.kt` | file | 当前存活的 ChatWebBridge（Activity 回调落点） |
 | `app/src/main/java/io/github/westanke/dshcompanion/web/ChatWebBridge.kt` | file | 注入 assets/chat.html 的 JS 桥（唯一登记的网络例外） |
 <!-- structure-check:end -->

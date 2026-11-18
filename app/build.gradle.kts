@@ -1224,6 +1224,36 @@ android {
         //     相反处置。
         //   依赖：无（三件都是纯客户端改动，不需要新桥能力位）。
         //
+        // v2.2.72（versionCode 10097）：**修右缘一条 216px 宽的「点不到」带**（2026-11-18，#21）。
+        //   基于什么：v2.2.71。用户反馈「会话页的当前任务收缩不了」，
+        //     进一步定位为「点标题能收起、点右端箭头收不了」。
+        //   干了什么：
+        //     ① 定位根因：手机端抽屉灰幕 Box（ui/App.kt）带 .clickable(enabled = drawerOpen)，
+        //        而 clickable 本身就是 pointerInput —— 带 pointerInput 的容器**永远参与命中测试**，
+        //        enabled=false 只关回调不关命中。浅色主题下灰幕 alpha=0 视觉全透明，
+        //        却一直实打实盖在右缘 288dp 上，把那条边的点击全吃了。
+        //        真机二分点击实测：x=820 能点、x=870 不能点，分界正好 864px = 288dp；
+        //        与 vivo 系统手势条（1008px）对不上，排除系统层。
+        //        旧注释「透明时它仍然不吃点击（没有 pointerInput 的容器不参与命中）」前提被推翻，
+        //        正是它把排查带偏 —— 已在 PITFALLS.md 立为第 47 个坑位。
+        //     ② 新增 ui/DrawerScrim.kt（纯逻辑、无 Compose）：把「画不画」与「吃不吃点击」
+        //        收成两条独立判据 —— visible = drawerOpen || drawerShift > 0.01f（关抽屉的
+        //        250ms 动画期间继续画，深色下才不会闪）；catchesTaps = drawerOpen（抽屉一关，
+        //        命中**立刻**整个还给内容页，不跟动画进度挂钩）。Compose 只负责画，判定只负责算。
+        //     ③ ui/App.kt 灰幕改成按 scrim.visible 渲染、按 scrim.catchesTaps 决定加不加 clickable。
+        //     ④ ui/chat/ChatAttachments.kt 的「当前任务」折叠箭头：原本展开用 KeyboardArrowUp、
+        //        收起用 ExpandMore（两枚不同族图标，方向感混乱），改成**同一枚 ExpandMore 旋转 180°**
+        //        （官方 DisclosureRow 口径），并补 contentDescription（expand / collapse 两个字符串键
+        //        本来就在，只是没人用）—— 顺带修掉「箭头查不到也点不到」里的后者。
+        //   测了什么：91 类 / 948 用例 / 0 失败（+8：DrawerScrimHitTestTest 钉死两条判据的边界，
+        //        含「关闭时无论动画进度多少都不吃点击」）；docsCheck 全绿；
+        //        STRUCTURE 已登记 ui/DrawerScrim.kt、INTERFACES 已登记新符号；
+        //        lintDebug 0 error。
+        //   仍未做：右缘 1008..1080 那 72px 仍被 vivo 系统手势条覆盖（系统层，App 内可点元素
+        //        需自行避让，不在本次范围）；平板 wide 分支本就不受影响（它的可点区在
+        //        AnimatedVisibility 内，不渲染时不吃命中）。
+        //   依赖：无（纯客户端改动）。
+        //
         // v2.2.71（versionCode 10096）：**会话列表按官方口径分组排序 + 多目录可见**（2026-11-18，#20）。
         //   基于什么：v2.2.70。用户反馈「会话列表排序对照改下，目前只显示了一个目录的」。
         //   干了什么：
@@ -1291,8 +1321,8 @@ android {
         //     版本判断两处对不上，统一改成运行时试解）。
         //   依赖：无（纯客户端改动，不需要新桥能力位）。
         //
-        versionCode = 10096
-        versionName = "2.2.71"
+        versionCode = 10097
+        versionName = "2.2.72"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。

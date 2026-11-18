@@ -322,17 +322,41 @@ private fun ConnectedApp(
                     content()
                 }
                 // 2. 灰幕：浅色下官方是全透明，深色是 0x50000000。
-                //    透明时它仍然不吃点击（没有 pointerInput 的容器不参与命中），
-                //    但为了语义清楚仍然用 enabled 控制 clickable。
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .padding(start = DshSpacing.drawerWidth)
-                        .background(
-                            dsh.drawerScrim.copy(alpha = dsh.drawerScrim.alpha * drawerShift),
-                        )
-                        .clickable(enabled = drawerOpen) { drawerOpen = false },
-                )
+                //
+                //    **关抽屉后这层不再吃点击**（2026-11-18 修，#21）。
+                //
+                //    之前的写法是「永远在，但 clickable(enabled = drawerOpen)」：
+                //    alpha=0 的 Box 在视觉上完全透明，可它带着 `.clickable`，
+                //    而 `.clickable` 本身就是一次 pointerInput —— **带 pointerInput 的容器
+                //    永远参与命中测试**，`enabled=false` 只关掉回调，不关掉命中。
+                //    于是这层透明层一直盖在右边 288dp 上，把整条右缘（真机实测 x≥864px）
+                //    的点击全吃掉：会话详情页「当前任务」面板右端的箭头、顶栏右上角的 ⋯ 菜单，
+                //    以及各页面右上角图标按钮，全都点不动。
+                //
+                //    「没有 pointerInput 的容器不参与命中」这条只对**没有** pointerInput 的
+                //    容器成立 —— 旧注释把它套在 clickable 上，是错的，已改掉。
+                //
+                //    判据收在 `drawerScrimState()`（纯函数，见 DrawerScrim.kt）：
+                //    「画不画」跟「吃不吃点击」分开 —— 关抽屉的 250ms 动画里灰幕继续画
+                //    （深色主题下不会突兀闪一下），但从用户点「关闭」那一刻起就不吃点击。
+                val scrim = drawerScrimState(drawerOpen, drawerShift)
+                if (scrim.visible) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .padding(start = DshSpacing.drawerWidth)
+                            .background(
+                                dsh.drawerScrim.copy(alpha = dsh.drawerScrim.alpha * drawerShift),
+                            )
+                            .then(
+                                if (scrim.catchesTaps) {
+                                    Modifier.clickable { drawerOpen = false }
+                                } else {
+                                    Modifier
+                                },
+                            ),
+                    )
+                }
                 // 3. 抽屉本体：从左边滑入，宽 288dp。
                 if (drawerShift > 0.01f) {
                     Box(

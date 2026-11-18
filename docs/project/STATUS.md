@@ -1,4 +1,26 @@
 - 日期：2026-11-18
+- **v2.2.72（versionCode 10097，未发）：修右缘一条 216px 宽的「点不到」带（#21）**。
+  用户反馈「会话页的当前任务收缩不了」，进一步定位为「点标题能收起、点右端箭头收不了」。
+  根因在**手机端抽屉灰幕**：`ui/App.kt` 的灰幕 Box 带 `.clickable(enabled = drawerOpen)`，
+  而 **clickable 本身就是 pointerInput** —— 带 pointerInput 的容器**永远参与命中测试**，
+  `enabled=false` 只关回调不关命中；浅色主题下灰幕 alpha=0 视觉全透明，却一直实打实
+  盖在右缘 288dp 上，把那条边的点击全吃了。真机二分点击实测分界正好 **864px = 288dp**
+  （与 vivo 手势条 1008px 不符 → 排除系统层）。原注释「透明时它仍然不吃点击」前提被推翻，
+  正是它把排查带偏 —— 已立为 PITFALLS 第 47 个坑位。
+  修法：`ui/DrawerScrim.kt` 纯函数把「画不画」（`drawerOpen || drawerShift > 0.01f`，
+  关抽屉动画期间继续画）与「吃不吃点击」（`drawerOpen`，抽屉一关命中立刻还给内容页）
+  拆成两条独立判据；`ui/App.kt` 按判据渲染与加 clickable。
+  顺带把「当前任务」折叠箭头统一成同一枚 `ExpandMore` 旋转 180°（官方 DisclosureRow 口径）
+  并补 `contentDescription`（`Icon(contentDescription = null)` 不进无障碍树，也进不了
+  uiautomator 节点树，这正是此前「箭头查不到」的原因）。
+  测了什么：**91 类 / 948 用例 / 0 失败**（+8 `DrawerScrimHitTestTest`）；
+  docsCheck 全绿；lintDebug 0 error。
+  真机已复验（V2080A / 9540718532001JR，v2.2.72 产物 versionCode 10097）：
+  「当前任务」箭头能点（收起/展开都正常）、顶栏 ⋯ 菜单能打开、会话行「会话操作」能打开、
+  刷新 / 新建会话 / 管理工作区 / 本会话的文件 全部可点；抽屉打开时点右侧仍能收起（无回归）。
+  仍未做：右缘 1008..1080 那 72px 仍被 vivo 系统手势条覆盖（系统层，App 内需自行避让）；
+  平板 wide 分支未真机验证（本机 360dp 宽）。
+  工单：[#21](https://github.com/westanke/dsh-companion/issues/21)。
 - **v2.2.71（versionCode 10096，未发）：会话列表按官方口径分组排序 + 多目录可见（#20）**。
   用户反馈「会话列表排序对照改下，目前只显示了一个目录的」—— **两件独立的事**：
   ①「只显示一个目录」的根在**服务端授权**、不在客户端排序：桥的 `listSessions`

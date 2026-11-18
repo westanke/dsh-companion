@@ -1,5 +1,74 @@
 # 开发日志
 
+## v2.2.72 · 修右缘一条 216px 宽的「点不到」带（#21）（2026-11-18）
+
+### 基于什么
+v2.2.71。用户反馈「会话页的当前任务收缩不了」——进一步追问后确认是
+「点面板标题能收起、点右端折叠箭头收不了」。
+
+### 现象与根因
+1. **手机端右缘一条窄带（约 216px）上的可点元素全都点不动**：会话详情页「当前任务」
+   面板右端的折叠箭头、顶栏右上角的 ⋯ 菜单、各页面右上角的图标按钮。
+   唯独点面板标题文字、点「已完成 0/6」那行能正常。
+2. **根因**：手机端抽屉灰幕 Box（`ui/App.kt`）这么写 ——
+   `.fillMaxSize().padding(start = 288dp).background(drawerScrim.copy(alpha = …)).clickable(enabled = drawerOpen)`。
+   浅色主题下官方灰幕就是全透明的（`drawerScrim` 浅色 `0x00000000`），但这层 Box
+   **永远在树上**，只靠 `clickable(enabled = drawerOpen)` 控制行为。
+   而 **`.clickable` 本身就是一次 pointerInput** —— 带 pointerInput 的容器**永远参与命中测试**，
+   `enabled = false` 只关掉**回调**、**不关掉命中**。于是这层「视觉上完全不存在」的透明层
+   一直实打实盖在右缘 288dp 上，把那条边的点击全吃了。
+3. **原注释把它带偏了**（原文「透明时它仍然不吃点击（没有 pointerInput 的容器不参与命中）」）：
+   这句话本身没错，但它被套在了 `clickable` 上 —— 有了 `clickable` 就有 pointerInput，
+   **前提变了规律就翻面**。这句错注释先让人怀疑手势拦截、再怀疑状态复位、还怀疑系统手势条。
+4. **怎么定案的**：真机**二分点击**（x=820 能点、x=870 不能点，分界正好 **864px = 288dp**，
+   与灰幕的 `padding(start = 288dp)` 严丝合缝）；再用 `dumpsys input` 看 vivo 系统手势条
+   右缘是 **1008px**，跟 864 对不上 → 排除系统层。**命中区在哪条线断，那条线就是元凶的尺寸。**
+
+### 干了什么
+1. **新增 `ui/DrawerScrim.kt`（纯逻辑、无 Compose）** —— 把灰幕的判据收成**两条独立**的纯函数判据：
+   - `visible = drawerOpen || drawerShift > 0.01f`：关抽屉的 250ms 动画期间灰幕继续画
+     （深色主题下否则会突兀闪一下）；
+   - `catchesTaps = drawerOpen`：抽屉一关，命中**立刻**整个还给内容页，**不跟动画进度挂钩**
+     （否则动画中途某一帧又开始吃点击）。
+   Compose 只负责画，判定只负责算 → 边界直接进单测。
+2. **`ui/App.kt`**：灰幕改成按 `scrim.visible` 渲染、按 `scrim.catchesTaps` 决定加不加 `clickable`
+   （用 `Modifier.then(...)`），并把那句错注释换成写明铁律的新注释。
+3. **`ui/chat/ChatAttachments.kt`**：「当前任务」折叠箭头原本展开用 `KeyboardArrowUp`、
+   收起用 `ExpandMore`（两枚不同族图标，方向感混乱），改成**同一枚 `ExpandMore` 旋转 180°**
+   （官方 DisclosureRow 口径），并补 `contentDescription`（`expand` / `collapse` 两个字符串键
+   本来就在，只是全仓没人引用）。顺带修掉「箭头查不到也点不到」里的后者 ——
+   `Icon(contentDescription = null)` 不进无障碍树，也进不了 uiautomator 节点树。
+
+### 测了什么
+- `DrawerScrimHitTestTest`（+8）：关闭且动画结束→不画不吃；关闭但动画在跑→**画但不吃**；
+  关闭且 shift=0.02→画但不吃；打开→画且吃；刚打开 shift=0→也吃；
+  **关闭时无论 shift 取 0 / 0.01 / 0.3 / 0.99 / 1 都不吃点击**；visible 判据 0.01→false、0.02→true；
+  两条判据互相独立。
+- **91 类 / 948 用例 / 0 失败**（+8）；`docsCheck` 全绿；`lintDebug` 0 error；
+  STRUCTURE 已登记 `ui/DrawerScrim.kt`、INTERFACES 已登记 `drawerScrimState` / `DrawerScrimState`。
+- **真机复验（V2080A / 9540718532001JR，v2.2.72 产物 versionCode 10097）**：
+  - 「当前任务」面板右端箭头**现在能点了**：点击 → 6 条待办消失，面板收成一条横条；
+    再点 → 待办全部回来。控件树里箭头第一次有了独立节点 `View ~"收起" @1008,495`
+    （此前 `Icon(contentDescription = null)` 根本不进树，「查不到」和「点不到」是同一件事）。
+  - 顶栏右上角 **⋯ 菜单现在能打开**（此前点 x≈1009 无反应）：刷新 / 取消运行 / 轨迹 /
+    会话统计 / 智能团队 / 后台任务 / 定时任务 / 模型 / 权限模式 全部弹出。
+  - 会话列表每行右端的 **「会话操作」菜单现在能打开**（重命名 / 分叉 / 归档）。
+  - 顶栏右侧 **刷新按钮**、会话页右侧 **「本会话的文件」**、会话列表右上 **「新建会话」**（⊕）
+    与 **「管理工作区」** 全部可点 —— 右缘 216px 这条带整体活了。
+  - 回归：抽屉**打开时**点右侧区域仍然收起抽屉（灰幕吃点击的行为没被改坏）；
+    推挤式抽屉、品牌行不被状态栏裁切、分组标题（今天/昨天/更早）均与 v2.2.71 一致。
+  - 截图证据：`/home/wangke/.dsh/adb-evidence/9540718532001JR/v2.2.72-scrim/`
+    （`01-todo-expanded.png` / `02-todo-collapsed.png` / `03-more-menu.png` / `04-drawer.png`）。
+
+### 仍未做
+- 右缘 **1008..1080 那 72px** 仍被 vivo 系统手势条覆盖（系统层）——修完 scrim 后那一带
+  依然点不到，App 内可点元素需要自行避让，不在本次范围。
+- 平板 wide 分支本就不受影响（它的可点区在 `AnimatedVisibility` 内，不渲染时不吃命中），
+  但**平板分支未真机验证**（本机 360dp 宽）。
+
+### 工单
+[#21](https://github.com/westanke/dsh-companion/issues/21)（本仓 issue 都在 GitHub 上，Gitee 侧为空）。
+
 ## v2.2.71 · 会话列表按官方口径分组排序 + 多目录可见（#20）（2026-11-18）
 
 ### 基于什么

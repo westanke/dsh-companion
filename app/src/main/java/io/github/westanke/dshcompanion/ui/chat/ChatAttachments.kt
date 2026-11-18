@@ -84,7 +84,6 @@ import androidx.compose.material.icons.outlined.ModelTraining
 import androidx.compose.material.icons.outlined.QuestionAnswer
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.Refresh
@@ -397,10 +396,23 @@ internal fun TodoPanel(todos: List<TodoItem>, expanded: Boolean, onToggle: () ->
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.labelMedium,
                 )
+                // 折叠箭头：**同一枚图标旋转 180°**（官方 DisclosureRow 的做法），
+                // 而不是展开/收起各用一枚不同族的图标 —— 之前是
+                // KeyboardArrowUp（展开态）/ ExpandMore（收起态），两枚形状不同族，
+                // 视觉上「换了图标」而不是「同一个东西转了半圈」，看不出当前是开是合。
+                //
+                // contentDescription 走已有的 expand/collapse 键（这两键早就存在但
+                // 全仓无人引用）：contentDescription=null 的 Icon 不进无障碍树，
+                // 也就进不了 uiautomator 的节点树 —— 此前排查时右端箭头在树里查不到，
+                // 「点不到」和「查不到」两件事混在一起，误导了排查方向。
                 Icon(
-                    if (expanded) Icons.Outlined.KeyboardArrowUp else Icons.Outlined.ExpandMore,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
+                    Icons.Outlined.ExpandMore,
+                    contentDescription = stringResource(
+                        if (expanded) R.string.collapse else R.string.expand,
+                    ),
+                    modifier = Modifier
+                        .size(20.dp)
+                        .graphicsLayer { rotationZ = if (expanded) 180f else 0f },
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

@@ -1432,3 +1432,67 @@ JsonDecodingException。修复：WS 侧直接
 连解析不了的帧也算活着），不能是「最近一次状态迁移」。
 **哨兵值不要用 `0`** —— 真机时钟是 `System.currentTimeMillis()`，单测假时钟却从 0 起步，
 两者语义会撞（第一版用例就是这么集体红的），用 `NO_INBOUND_YET = Long.MIN_VALUE`。
+
+### 透明灰幕照样吃点击：视觉上看不见不等于不参与命中
+
+2026-11-18 修 #21 时踩到并定位的坑。现象是**手机端右缘一条窄带（约 216px）
+上的所有可点元素全都点不动**：会话详情页「当前任务」面板右端的折叠箭头、
+顶栏右上角的 ⋯ 菜单、还有各页面右上角的图标按钮 —— 唯独点面板标题文字能正常收起，
+点「已完成 0/6」那行也能点。
+
+**根因**：手机端抽屉灰幕是这么写的 ——
+
+```kotlin
+Box(
+    Modifier
+        .fillMaxSize()
+        .padding(start = DshSpacing.drawerWidth)   // 288dp
+        .background(dsh.drawerScrim.copy(alpha = ...))   // 浅色下 alpha = 0
+        .clickable(enabled = drawerOpen) { drawerOpen = false },
+)
+```
+
+浅色主题下官方灰幕就是**全透明**的（`drawerScrim` 浅色 `0x00000000`），
+但这层 Box **永远在树上**，只靠 `clickable(enabled = drawerOpen)` 控制行为。
+
+**关键在 Compose 的命中规则**：带 pointerInput 的容器**永远参与命中测试**，
+而 `.clickable` **本身就是一次 pointerInput**。所以 `enabled = false`
+只关掉**回调**，**不关掉命中** —— 这层「视觉上完全不存在」的透明层，
+一直实打实地盖在右缘 288dp 上，把那条边的点击全吃了。
+
+**原注释把它带偏了**（原文）：
+
+> 透明时它仍然不吃点击（没有 pointerInput 的容器不参与命中）
+
+这句话本身是对的，但它被套在了 `clickable` 上 —— 有了 `clickable` 就有 pointerInput，
+前提不成立。**正是这句错注释把排查方向带偏了一轮**（先怀疑手势拦截、
+再怀疑状态复位、还怀疑是系统手势条）。所以：**注释里的规律要连前提一起抄**，
+前提一变，规律就翻面。
+
+**怎么定位的（二分点击）**：真机逐点试 —— x=820 能点、x=870 不能点，
+分界正好在 **864px = 288dp**，与灰幕的 `padding(start = 288dp)` 严丝合缝；
+再用 `dumpsys input` 看系统手势条右缘是 **1008px**，跟 864 对不上，
+这才排除了「系统手势条挡的」。**命中区被截断在哪条线上，那条线就是元凶的尺寸**。
+
+**怎么修**：
+
+1. **判据收成纯函数**（`ui/DrawerScrim.kt` 的 `drawerScrimState()`），
+   把「画不画」和「吃不吃点击」分成两个独立判据：
+   - `visible = drawerOpen || drawerShift > 0.01f` —— 关抽屉的 250ms 动画期间灰幕继续画
+     （深色主题下否则会突兀闪一下）；
+   - `catchesTaps = drawerOpen` —— 抽屉一关，命中**立刻**整个还给内容页，
+     不跟动画进度挂钩（否则动画某一帧又开始吃点击）。
+   Compose 只负责画，判定只负责算 → 单测直接钉边界（`DrawerScrimHitTestTest`）。
+2. **命中层加 clickable 之前先问一句**：这层现在是可见的吗？
+   不可见就别挂在树上；非要在树上（比如为了跑退出动画），就用 `Modifier.then(...)`
+   按判据决定**加不加** `clickable`，别用 `clickable(enabled = ...)` 假装控制。
+
+**通用铁律**：**「视觉上透明 / 看不见」不等于「不吃点击 / 不参与命中」**。
+凡是盖在内容上面、还带 pointerInput 的透明层，都要单独确认它的命中行为。
+反过来，「没带 pointerInput 的容器不参与命中」这条规律依然成立 ——
+两件事一起记，别只记一半。
+
+**顺带**：折叠箭头的 `Icon(contentDescription = null)` **不进无障碍树**，
+也就进不了 uiautomator 的节点树 —— 于是「点不到」和「查不到」两件事混在一起，
+把排查又带偏了一截。`contentDescription` 补上后，箭头才既能被 TalkBack 读到、
+也能被 `adb_ui` 查到（`expand` / `collapse` 这两个字符串键本来就在，只是没人用）。

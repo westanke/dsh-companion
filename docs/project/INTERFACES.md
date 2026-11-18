@@ -321,6 +321,7 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `internal fun displayEntryContentType(entry)` | `ui/chat/ChatProcessGroup.kt` | LazyColumn `contentType`（消息 / 过程组） |
 | `internal fun groupSessionsByTime(sessions, ungroupedLabel, nowMillis)` | `ui/chat/SessionGroups.kt` | 会话按本地日历天分今天/昨天/更早（空桶不产出），桶内按工作区聚簇 |
 | `internal fun buildSessionListEntries(groups, expandedEarlier)` | `ui/chat/SessionGroups.kt` | 分组摊平成条目流（分组标题 / 工作区小节标题 / 会话行），收起的组只留标题行 |
+| `internal fun drawerScrimState(drawerOpen, drawerShift)` | `ui/DrawerScrim.kt` | 抽屉灰幕的纯判据：visible（画不画） / catchesTaps（吃不吃点击），透明层不再吃掉右缘命中 |
 
 > **主题与明暗正交**：`AppTheme` 定色相基调，`InterfaceStyle` 定深浅，组合出 8 份色板。
 > 两份偏好**都进 `HarnessState`**，且都必须出现在 `withPreferences()` 里 ——
@@ -382,6 +383,8 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `internal fun clusterRows` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SessionGroups.kt` | function |
 | `internal fun visibleRowsOf` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SessionGroups.kt` | function |
 | `internal fun buildSessionListEntries` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SessionGroups.kt` | function |
+| `internal fun drawerScrimState` | `app/src/main/java/io/github/westanke/dshcompanion/ui/DrawerScrim.kt` | function |
+| `internal data class DrawerScrimState` | `app/src/main/java/io/github/westanke/dshcompanion/ui/DrawerScrim.kt` | class |
 | `internal enum class SessionGroupKey` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SessionGroups.kt` | class |
 | `internal data class SessionGroup` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SessionGroups.kt` | class |
 | `internal sealed interface SessionListEntry` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SessionGroups.kt` | class |
