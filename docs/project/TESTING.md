@@ -328,6 +328,36 @@ apksigner verify --verbose app\build\outputs\apk\release\app-release.apk
   `logcat` 里 `Image type|unsupported|mediaType` 零命中。
   **未验**：表格的人造极端表（64dp 下限 / 240dp 上限折行）与 ≤2 列字段表只有单测覆盖，
   真机没翻到样本；#11 的 JPEG 未真机复测（相册无 JPEG 素材，由单测守着）。
+- `v2.2.73`（对齐 bridge v2.12.0：工具实时事件 + 「回答写完了」判据；本轮四版合并发版）通过
+  `docsCheck`（10 文档 / 47 任务一致 / README 双站 884 项 / STRUCTURE 178 锚点 157 源文件 /
+  INTERFACES 175 锚点）、`:app:testDebugUnitTest`（**94 个 XML / 92 个测试类 / 970 用例 / 0 失败**）、
+  `:app:lintDebug`（0 error）与 `assembleRelease`（发布包 **3,361,372 字节**，SHA-256
+  `b993f42137198a8f176b37eebce506740082c2ef2f8e6a3873f131d871b81ae3`）。
+  本轮新增用例：`ChatToolStreamTest` **+22** —— 参数**增量追加**（官方 `applyDelta` 是 `args.append`，
+  覆盖会让参数只剩最后一段）、定稿后不再被增量盖掉、阶段 preparing→running→done **只前进不倒退**、
+  缺 callId 返回 null、`chat.tool.call`→running、`chat.tool.result`→done 带结果、带 `error` → 失败 +
+  记内核分类、退回 `message.source.callId`、不认的事件类型、`merge` 覆盖而非追加、`durationMs` 边界
+  （负数/缺一端都应为 null）、**`hasReplyContentOf` 缺字段返回 null 而不是 false**（老桥不能当 false，
+  否则老桥回合永远不收尾）、`toolResultCallIds` 只认 `tool/result`、摘掉明细后整行丢弃、
+  一行两次调用只摘一次、非工具行原样、展示项形状与 streaming 标记。
+  **真机（vivo V2080A / Android 11 / 1080×2400 / serial 9540718532001JR，v2.2.73 产物 10098，
+  覆盖安装后 versionCode 10098 / versionName 2.2.73 已复核）**：
+  ① **实时工具行确实出现**：新会话里发「Run this exact bash command and wait for it to finish:
+  sleep 60; echo slow-probe-done」，`adb_wait text=取消运行` 命中后，控件树里出现
+  `Text "正在调用工具 · 执行了命令"` —— 阶段前缀 + 动作短语，正是新写的展示项形状；
+  截图 `01-live-tool-row-running.png`。
+  ② **跑完只留一行、无重复**：命令结束后控件树里工具行只剩
+  `Text "执行了命令"` + `Text "· Run the requested 60s sleep probe"` —— **实时行的「正在调用工具」
+  前缀已消失、历史行接管**（历史里连 `tool/result` 都齐了才让位），随后命令块、输出与助手正文
+  齐全；截图 `02-history-tool-row-done-scaled.png`。
+  ③ **真实内核事件与实现假设吻合**：从 zstd 会话文件里解出的事件序列为
+  `assistant/message`（content=["reasoning","tool-call"]，**中途提交无正文**）→ `tool/call`
+  （callId/name/arguments）→ `tool/result`（`message.toolCallId` 与 `message.source.callId` 双写、
+  `isError=false`）→ 再一条 `assistant/message`（content 含 text，**最终正文**）——
+  正是 `hasReplyContent` 要区分的那两种提交，`ChatToolStream.kt` 的字段假设全部对上。
+  **未验**：没逐帧证明「实时行严格先于历史出现」（REST 去抖 400 ms 与历史刷新时间差很小，
+  肉眼难分先后）；内核错误分类（`ASK_CANCELLED` / `TOOL_NOT_STARTED` 等）只落在明细里，
+  没有单独的失败文案。
 - `v2.2.69`（HEIC/AVIF/BMP 发图必失败）通过 `docsCheck`（10 文档 / ROADMAP 任务 /
   STATUS 引用 / README 双站 780 项 / STRUCTURE 169 锚点 149 源文件 / INTERFACES 136 锚点）、
   `:app:testDebugUnitTest`（**91 个 XML / 89 个测试类 / 926 用例 / 0 失败**）、`:app:lintDebug`（0 error）

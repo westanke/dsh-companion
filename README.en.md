@@ -303,7 +303,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.69.apk
+DSH伴侣-companion-v2.2.73.apk
 ```
 
 Requirements:
@@ -604,10 +604,44 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 - Unit tests: 92 test classes / 970 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.69.apk`, **3,383,328 bytes**, SHA-256
-  `e620b0e3c848611f64b8310b69cd78c4b199fa485826d364907f8836531fac2a` (kept in sync in
+- Current APK: `DSH伴侣-companion-v2.2.73.apk`, **3,361,372 bytes**, SHA-256
+  `b993f42137198a8f176b37eebce506740082c2ef2f8e6a3873f131d871b81ae3` (kept in sync in
   `artifacts/SHA256SUMS.txt`; real values are backfilled by release stage A).
-  **This release (v2.2.69: HEIC/AVIF/BMP images always fail to send)**: a user sent a screenshot —
+  **This release (v2.2.73: aligned with bridge v2.12.0 — live tool events + a real "the answer is
+  finished" signal)**: four things ship together here — the interface moves to the official DSH look,
+  the session list follows the official grouping, a 216px-wide dead zone on the right edge is fixed,
+  and the app is aligned with the bridge's new contract.
+  (1) **Live tool events** (#22): since bridge v2.12.0 the kernel's `tool/call` / `tool/result` events
+  are passed through verbatim as `chat.tool.call` / `chat.tool.result`, and the app had not wired them
+  up at all (`grep chat.tool` returned nothing) — so during a run you could not see which tool was
+  executing, and the tool row only appeared once the 400 ms debounce re-pulled the history. The row
+  now appears live, with stage wording taken from the official client: "Preparing tool calls" /
+  "Calling tools". The same call shows up **exactly once** on screen (once the history has the result
+  too, the live row steps aside — no duplicated rows).
+  (2) **A real "the answer is finished" signal** (the other half of the same contract): the kernel
+  settles an assistant message containing only `tool-call` blocks **before** the tool runs, so a turn
+  with tools commits **several** assistant messages and only the last one carries the body; the bridge
+  used to send only `role`, so the client treated the first one as "the answer is finished" (clearing
+  the streaming state, collapsing the process group) — while the tool had not even started. The app
+  now follows the bridge's new `hasReplyContent` flag: **a missing field means an old bridge means
+  keep the old behaviour** (treating it as false would make turns on an old bridge never finish —
+  the compatibility would be inverted).
+  (3) **Official DSH look and feel** (#19): a flat 44 dp top bar, a **push** drawer on phones (the
+  whole page shifts right by 288 dp instead of being dimmed behind a scrim), settings rendered as
+  solid-fill cards with 14 dp corners and no borders, and the session list as plain text rows.
+  (4) **The session list is grouped the official way** (#20): today / yesterday / earlier, newest first
+  inside each bucket, clustered by workspace, with "earlier" collapsible. This also fixed "only one
+  directory shows up" — that was a **server-side authorisation** issue, not a client bug (the device
+  had only been granted one workspace root; granting all three in the bridge's device page fixes it).
+  (5) **A 216 px-wide dead zone on the right edge** (#21): the phone drawer's scrim carried
+  `.clickable(enabled = drawerOpen)`, and **clickable is itself a pointerInput** — a container with a
+  pointerInput **always takes part in hit testing**; `enabled = false` only disables the callback, not
+  the hit test. In the light theme the scrim is fully transparent (alpha 0) yet it still physically
+  covered the right 288 dp and swallowed every click there (the "current task" disclosure arrow and
+  the top-bar ⋯ could not be tapped). On-device bisecting put the boundary at exactly **864 px =
+  288 dp** (the vivo gesture bar is 1008 px, so the system layer is ruled out). "Should it be drawn"
+  and "should it eat clicks" are now two separate predicates.
+  **Previous release (v2.2.69: HEIC/AVIF/BMP images always fail to send)**: a user sent a screenshot —
   attaching `280857.heic` came back with
   `Image type image/heic is not accepted by this deployment.`, and **the failure happens after you hit
   send**: the attachment is already in the composer, the text is already typed, then the whole message
@@ -624,7 +658,8 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
   quality 90 when it is not, **without downscaling** (this is a format change, not a quality cut,
   consistent with #15's "no needless re-encoding"), sampling down only past 16 M pixels to avoid OOM.
   Each of the three failure modes gets a human sentence (undecodable / too large after conversion /
-  still rejected after conversion). Previous releases:
+  still rejected after conversion).
+  Previous releases:
   **v2.2.68 (table bleeding, image-channel split, half-dead WS)**: all three came out of
   on-device testing of the previous release.
   (1) **A second table bled into the first** (issue #13): the root cause was not the table parser but

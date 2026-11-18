@@ -1224,37 +1224,72 @@ android {
         //     相反处置。
         //   依赖：无（三件都是纯客户端改动，不需要新桥能力位）。
         //
-        // v2.2.73（versionCode 10098）：**对齐 bridge v2.12.0 的新契约：hasReplyContent + 工具实时事件**（2026-11-18，#22）。
-        //   基于什么：v2.2.72。服务端插件 dsh-remote-bridge 已发到 v2.12.0（repo / npm / 实装 / 运行中
-        //     四处一致），其中两项是**纯新增**的契约，App 侧此前完全没接：
-        //     ① chat.message.committed（assistant）新增 hasReplyContent 布尔；
-        //     ② 工具调用实时事件 chat.tool.call / chat.tool.result，以及 chat.message.delta 的
-        //        tool-call / tool-call-end 两个 kind。
+        // v2.2.69（versionCode 10094）：**HEIC/AVIF/BMP 发图必失败**（2026-11-02，补丁版，#17）。
+        //   基于什么：v2.2.68。用户发手机截图 —— 发 280857.heic 被
+        //     `Image type image/heic is not accepted by this deployment.` 打回。
         //   干了什么：
-        //     ① 新增 data/ChatToolStream.kt（纯逻辑、无 Compose）：帧解析（toolStreamEntryFromFrame）、
-        //        阶段推进（preparing → running → done，只前进不倒退）、参数**增量追加**（官方 applyDelta
-        //        是 args.append，覆盖会让参数只剩最后一段）、结果与失败分类、以及实时行与历史行的
-        //        去重判据（历史里**连 tool/result 都有**了，实时行才撤；历史行只有调用还没结果时，
-        //        它本身是残缺的，留着实时行顶着才完整）。
-        //     ② 新增根包 HarnessToolStreamViewModel.kt：HarnessState.toolStreamItems（阶段文案）、
-        //        HarnessState.chatItems（历史 + 实时工具行 + 流式正文 + 截断提示，同一次调用只出现一行）、
-        //        HarnessViewModel.applyToolStreamEntry（并入状态，只收当前会话的帧）。
-        //     ③ HarnessState 新增 toolStream 字段：单独存而不塞进 liveChat —— liveChat 是正文流式态
-        //        （一轮结束就被清），工具调用是过程，可能横跨多轮、结果在正文结束后才到；带 sessionId
-        //        便于切会话自动失效（selectSession 一并清掉）。
-        //     ④ HarnessWsPortsViewModel：chat.message.committed 分支改为按 hasReplyContent 决定是否收尾
-        //        （false = 中途提交不收流；字段缺失 = 老桥 = 保持旧行为，不当成 false）；
-        //        chat.tool.call / chat.tool.result 分支让历史跟上（实时行由状态顶着）；
-        //        delta 的 tool-call / tool-call-end 帧在 chatDelta 之外单独接（那两种帧没有 text，
-        //        老的正文解析会整帧丢掉）。
-        //     ⑤ 阶段文案沿用官方口径：「准备调用工具」/「正在调用工具」（中英各 +2 条字符串键）。
-        //   测了什么：92 类 / 970 用例 / 0 失败（+22：ChatToolStreamTest 钉死参数增量追加、阶段只前进
-        //        不倒退、hasReplyContent 缺失返回 null、去重判据、以及展示项形状）；
-        //        docsCheck 全绿；STRUCTURE 已登记 2 个新文件、INTERFACES 已登记 13 个新符号；
-        //        lintDebug 0 error。
-        //   仍未做：内核错误分类（ASK_CANCELLED 等）只落在明细里，没有单独的失败文案；
-        //        老桥上工具行仍是「等历史刷新才出现」的老行为（桥侧升级后才有实时行）。
-        //   依赖：bridge ≥ 2.12.0 才有实时工具行与 hasReplyContent；老桥行为不变（字段缺失即旧行为）。
+        //     ① 白名单落地成客户端常量：ChatContentParts.SUPPORTED_IMAGE_MEDIA_TYPES（png/jpeg/
+        //        webp/gif 四种）+ isSupportedImageMediaType() + needsTranscode()。内核那份是
+        //        Object.freeze 的死字面量、无配置入口，客户端只能自己对一遍。
+        //     ② imageMediaType 不再「image/ 开头就原样透传」：先按别名归一（image/x-ms-bmp 与
+        //        image/bmp 都是 BMP）、归不了就如实返回（HEIC 不假装成 PNG），最终由白名单裁决。
+        //        else 兜底也从「假装是 PNG」改成交回调用方 —— 猜错类型会让报错指向无关原因。
+        //     ③ 新增 data/ImageTranscoder.kt：有 alpha 编 PNG、无 alpha 编 JPEG 90，**不主动缩图**
+        //        （与 #15「取消无谓重编码」一致：这是换格式不是降质），超 16 M 像素才降采样防 OOM。
+        //        attachImage 里未通过白名单就走转码，放 Dispatchers.IO。
+        //     ④ 三种失败各给人话：解不开 / 转完超限 / 转出来仍不收（我们常量脱钩）。中英各 +3 条字符串。
+        //   测了什么：89 类 / 926 用例 / 0 失败（+7）；docsCheck 全绿；STRUCTURE 已登记新文件。
+        //   真机验了什么：V2080A（1080x2400，3px/dp）—— 见 CHANGELOG-DEV.md 的「真机验证」一节。
+        //   仍未做：不改内核白名单（那是它的部署决策）、不在桥侧转码（手机上有现成解码器）、
+        //     不推翻 #15 的「不预压缩」（白名单内的图一个字节没动）、不按 SDK_INT 猜能否解 HEIC
+        //     （Android 8.0 有 HEIF 软解码但 ImageDecoder 是 API 28、强制项到 Android 11 的 CDD 才写，
+        //     版本判断两处对不上，统一改成运行时试解）。
+        //   依赖：无（纯客户端改动，不需要新桥能力位）。
+        //
+        // v2.2.70（versionCode 10095）：**外壳 / 设置页 / 会话列表改用 DSH 官方观感**（2026-11-18）。
+        //   基于什么：v2.2.69。用户要求把界面改成 dsh-Chat（Flutter 端）的模式；随后两次收敛边界：
+        //     「聊天页继续用我们的」→ 会话详情页完全不动；「会话列表也应用 dsh-chat的」→ 加进改造面。
+        //   干了什么：
+        //     ① 新增 DSH 官方 token 层（ui/theme/DshTokens.kt / DshColors.kt / DshTypography.kt）：
+        //        官方 neutral-bluish 色阶、品牌蓝 #3964FE/#5686FE、无衬线字号阶梯、间距与动效常量，
+        //        全部照 dsh-Chat 的 lib/design/tokens.dart 逐值搬过来，作为单一来源。
+        //     ② 新增 ui/theme/DshTheme.kt：DshTheme = 官方接线（外壳/设置页/会话列表）；
+        //        LegacyChatTheme = 把 PAPER/WARM/MIST/INK 色板与衬线标题装回去，供会话详情页用。
+        //     ③ ui/App.kt 重写外壳：44dp 扁平顶栏（自绘 ShellTopBar）、**推挤式** 288dp 抽屉
+        //        （整页右移 + 左缘 20dp 拖拽热区 + 深色才有的灰幕）、官方观感的 NavigationPanel
+        //        （纯文字分区行 + 7dp 连接圆点）。
+        //     ④ ui/chat/ChatSessionPane.kt 改官方版式：会话行去掉气泡图标底座与分隔线，
+        //        标题行改 h3 + caption，新建入口改 add_circle_outline。
+        //     ⑤ ui/SettingsScreen.kt 改官方卡片式：每节一张纯填充色 + 14dp 圆角卡片，
+        //        构件抽到新建的 ui/SettingsCards.kt。
+        //     ⑥ ui/ChatScreen.kt 把详情页包进 LegacyChatTheme —— 聊天正文像素级不动。
+        //   测了什么：89 类 / 926 用例 / 0 失败（未新增用例：本次只改表现层，无新纯函数）；
+        //        docsCheck 全绿；STRUCTURE 已登记 5 个新文件、INTERFACES 已登记 15 个新符号。
+        //   仍未做：会话详情页未换观感（用户明确要求不动）；连接页仍用老色板（不在本次范围）；
+        //        官方色板尚未做 WCAG 逐对校验（与 PAPER 的处理方式一致：先落地、后补测）。
+        //   依赖：无（纯客户端改动，不需要新桥能力位）。
+        //
+        // v2.2.71（versionCode 10096）：**会话列表按官方口径分组排序 + 多目录可见**（2026-11-18，#20）。
+        //   基于什么：v2.2.70。用户反馈「会话列表排序对照改下，目前只显示了一个目录的」。
+        //   干了什么：
+        //     ① 定位「只显示一个目录」的真因在**服务端授权**、不在客户端排序：桥的
+        //        listSessions 按设备授权根过滤（chat-adapter.ts authorizedRoots + matchRoot），
+        //        本机手机设备配对时只授权了「手机会话」一个根 → 只能看到 .dsh-mobile 下的会话。
+        //        已用 PATCH /manage/devices/{id} 补齐三个根，列表从 8 条变 44 条。
+        //     ② 新增 ui/chat/SessionGroups.kt（纯逻辑、无 Compose）：按本地日历天分今天/昨天/更早
+        //        （空桶不产出），桶内按工作区聚簇（同工作区相邻、小节首行带标题），时间相同按工作区名升序；
+        //        「更早」组 collapsible，默认收起。
+        //     ③ ui/chat/ChatSessionPane.kt 改分组渲染：分组标题行（今天/昨天右侧 tune 图标、更早右侧
+        //        「N 条 · 展开/收起」整行可点）+ 工作区小节标题 + 会话行；同时删掉逐行重复的工作区名
+        //        （官方会话行里也没有工作区名，小节标题已承担它）。
+        //     ④ ui/theme/DshTokens.kt 补 drawerGroupGap（官方值 0）；中英各加 6 条字符串。
+        //   测了什么：90 类 / 940 用例 / 0 失败（+14：SessionGroupsTest 对齐官方
+        //        dsh-Chat 的 session_groups_test.dart 全部断言）；docsCheck 全绿；
+        //        STRUCTURE 已登记新文件、INTERFACES 已登记新符号。
+        //   仍未做：官方抽屉还有搜索框与底部账号栏（companion 是独立整页，本次按用户诉求只做分组排序）；
+        //        「未分组」工作区的会话与真实工作区混在一节里（官方同款）。
+        //   依赖：无（纯客户端改动；多目录可见依赖桥侧已存在的 PATCH /manage/devices 授权管理面，
+        //     App 端不需要新桥能力位）。
         //
         // v2.2.72（versionCode 10097）：**修右缘一条 216px 宽的「点不到」带**（2026-11-18，#21）。
         //   基于什么：v2.2.71。用户反馈「会话页的当前任务收缩不了」，
@@ -1286,72 +1321,37 @@ android {
         //        AnimatedVisibility 内，不渲染时不吃命中）。
         //   依赖：无（纯客户端改动）。
         //
-        // v2.2.71（versionCode 10096）：**会话列表按官方口径分组排序 + 多目录可见**（2026-11-18，#20）。
-        //   基于什么：v2.2.70。用户反馈「会话列表排序对照改下，目前只显示了一个目录的」。
+        // v2.2.73（versionCode 10098）：**对齐 bridge v2.12.0 的新契约：hasReplyContent + 工具实时事件**（2026-11-18，#22）。
+        //   基于什么：v2.2.72。服务端插件 dsh-remote-bridge 已发到 v2.12.0（repo / npm / 实装 / 运行中
+        //     四处一致），其中两项是**纯新增**的契约，App 侧此前完全没接：
+        //     ① chat.message.committed（assistant）新增 hasReplyContent 布尔；
+        //     ② 工具调用实时事件 chat.tool.call / chat.tool.result，以及 chat.message.delta 的
+        //        tool-call / tool-call-end 两个 kind。
         //   干了什么：
-        //     ① 定位「只显示一个目录」的真因在**服务端授权**、不在客户端排序：桥的
-        //        listSessions 按设备授权根过滤（chat-adapter.ts authorizedRoots + matchRoot），
-        //        本机手机设备配对时只授权了「手机会话」一个根 → 只能看到 .dsh-mobile 下的会话。
-        //        已用 PATCH /manage/devices/{id} 补齐三个根，列表从 8 条变 44 条。
-        //     ② 新增 ui/chat/SessionGroups.kt（纯逻辑、无 Compose）：按本地日历天分今天/昨天/更早
-        //        （空桶不产出），桶内按工作区聚簇（同工作区相邻、小节首行带标题），时间相同按工作区名升序；
-        //        「更早」组 collapsible，默认收起。
-        //     ③ ui/chat/ChatSessionPane.kt 改分组渲染：分组标题行（今天/昨天右侧 tune 图标、更早右侧
-        //        「N 条 · 展开/收起」整行可点）+ 工作区小节标题 + 会话行；同时删掉逐行重复的工作区名
-        //        （官方会话行里也没有工作区名，小节标题已承担它）。
-        //     ④ ui/theme/DshTokens.kt 补 drawerGroupGap（官方值 0）；中英各加 6 条字符串。
-        //   测了什么：90 类 / 940 用例 / 0 失败（+14：SessionGroupsTest 对齐官方
-        //        dsh-Chat 的 session_groups_test.dart 全部断言）；docsCheck 全绿；
-        //        STRUCTURE 已登记新文件、INTERFACES 已登记新符号。
-        //   仍未做：官方抽屉还有搜索框与底部账号栏（companion 是独立整页，本次按用户诉求只做分组排序）；
-        //        「未分组」工作区的会话与真实工作区混在一节里（官方同款）。
-        //   依赖：无（纯客户端改动；多目录可见依赖桥侧已存在的 PATCH /manage/devices 授权管理面，
-        //     App 端不需要新桥能力位）。
-        //
-        // v2.2.70（versionCode 10095）：**外壳 / 设置页 / 会话列表改用 DSH 官方观感**（2026-11-18）。
-        //   基于什么：v2.2.69。用户要求把界面改成 dsh-Chat（Flutter 端）的模式；随后两次收敛边界：
-        //     「聊天页继续用我们的」→ 会话详情页完全不动；「会话列表也应用 dsh-chat的」→ 加进改造面。
-        //   干了什么：
-        //     ① 新增 DSH 官方 token 层（ui/theme/DshTokens.kt / DshColors.kt / DshTypography.kt）：
-        //        官方 neutral-bluish 色阶、品牌蓝 #3964FE/#5686FE、无衬线字号阶梯、间距与动效常量，
-        //        全部照 dsh-Chat 的 lib/design/tokens.dart 逐值搬过来，作为单一来源。
-        //     ② 新增 ui/theme/DshTheme.kt：DshTheme = 官方接线（外壳/设置页/会话列表）；
-        //        LegacyChatTheme = 把 PAPER/WARM/MIST/INK 色板与衬线标题装回去，供会话详情页用。
-        //     ③ ui/App.kt 重写外壳：44dp 扁平顶栏（自绘 ShellTopBar）、**推挤式** 288dp 抽屉
-        //        （整页右移 + 左缘 20dp 拖拽热区 + 深色才有的灰幕）、官方观感的 NavigationPanel
-        //        （纯文字分区行 + 7dp 连接圆点）。
-        //     ④ ui/chat/ChatSessionPane.kt 改官方版式：会话行去掉气泡图标底座与分隔线，
-        //        标题行改 h3 + caption，新建入口改 add_circle_outline。
-        //     ⑤ ui/SettingsScreen.kt 改官方卡片式：每节一张纯填充色 + 14dp 圆角卡片，
-        //        构件抽到新建的 ui/SettingsCards.kt。
-        //     ⑥ ui/ChatScreen.kt 把详情页包进 LegacyChatTheme —— 聊天正文像素级不动。
-        //   测了什么：89 类 / 926 用例 / 0 失败（未新增用例：本次只改表现层，无新纯函数）；
-        //        docsCheck 全绿；STRUCTURE 已登记 5 个新文件、INTERFACES 已登记 15 个新符号。
-        //   仍未做：会话详情页未换观感（用户明确要求不动）；连接页仍用老色板（不在本次范围）；
-        //        官方色板尚未做 WCAG 逐对校验（与 PAPER 的处理方式一致：先落地、后补测）。
-        //   依赖：无（纯客户端改动，不需要新桥能力位）。
-        //
-        // v2.2.69（versionCode 10094）：**HEIC/AVIF/BMP 发图必失败**（2026-11-02，补丁版，#17）。
-        //   基于什么：v2.2.68。用户发手机截图 —— 发 280857.heic 被
-        //     `Image type image/heic is not accepted by this deployment.` 打回。
-        //   干了什么：
-        //     ① 白名单落地成客户端常量：ChatContentParts.SUPPORTED_IMAGE_MEDIA_TYPES（png/jpeg/
-        //        webp/gif 四种）+ isSupportedImageMediaType() + needsTranscode()。内核那份是
-        //        Object.freeze 的死字面量、无配置入口，客户端只能自己对一遍。
-        //     ② imageMediaType 不再「image/ 开头就原样透传」：先按别名归一（image/x-ms-bmp 与
-        //        image/bmp 都是 BMP）、归不了就如实返回（HEIC 不假装成 PNG），最终由白名单裁决。
-        //        else 兜底也从「假装是 PNG」改成交回调用方 —— 猜错类型会让报错指向无关原因。
-        //     ③ 新增 data/ImageTranscoder.kt：有 alpha 编 PNG、无 alpha 编 JPEG 90，**不主动缩图**
-        //        （与 #15「取消无谓重编码」一致：这是换格式不是降质），超 16 M 像素才降采样防 OOM。
-        //        attachImage 里未通过白名单就走转码，放 Dispatchers.IO。
-        //     ④ 三种失败各给人话：解不开 / 转完超限 / 转出来仍不收（我们常量脱钩）。中英各 +3 条字符串。
-        //   测了什么：89 类 / 926 用例 / 0 失败（+7）；docsCheck 全绿；STRUCTURE 已登记新文件。
-        //   真机验了什么：V2080A（1080x2400，3px/dp）—— 见 CHANGELOG-DEV.md 的「真机验证」一节。
-        //   仍未做：不改内核白名单（那是它的部署决策）、不在桥侧转码（手机上有现成解码器）、
-        //     不推翻 #15 的「不预压缩」（白名单内的图一个字节没动）、不按 SDK_INT 猜能否解 HEIC
-        //     （Android 8.0 有 HEIF 软解码但 ImageDecoder 是 API 28、强制项到 Android 11 的 CDD 才写，
-        //     版本判断两处对不上，统一改成运行时试解）。
-        //   依赖：无（纯客户端改动，不需要新桥能力位）。
+        //     ① 新增 data/ChatToolStream.kt（纯逻辑、无 Compose）：帧解析（toolStreamEntryFromFrame）、
+        //        阶段推进（preparing → running → done，只前进不倒退）、参数**增量追加**（官方 applyDelta
+        //        是 args.append，覆盖会让参数只剩最后一段）、结果与失败分类、以及实时行与历史行的
+        //        去重判据（历史里**连 tool/result 都有**了，实时行才撤；历史行只有调用还没结果时，
+        //        它本身是残缺的，留着实时行顶着才完整）。
+        //     ② 新增根包 HarnessToolStreamViewModel.kt：HarnessState.toolStreamItems（阶段文案）、
+        //        HarnessState.chatItems（历史 + 实时工具行 + 流式正文 + 截断提示，同一次调用只出现一行）、
+        //        HarnessViewModel.applyToolStreamEntry（并入状态，只收当前会话的帧）。
+        //     ③ HarnessState 新增 toolStream 字段：单独存而不塞进 liveChat —— liveChat 是正文流式态
+        //        （一轮结束就被清），工具调用是过程，可能横跨多轮、结果在正文结束后才到；带 sessionId
+        //        便于切会话自动失效（selectSession 一并清掉）。
+        //     ④ HarnessWsPortsViewModel：chat.message.committed 分支改为按 hasReplyContent 决定是否收尾
+        //        （false = 中途提交不收流；字段缺失 = 老桥 = 保持旧行为，不当成 false）；
+        //        chat.tool.call / chat.tool.result 分支让历史跟上（实时行由状态顶着）；
+        //        delta 的 tool-call / tool-call-end 帧在 chatDelta 之外单独接（那两种帧没有 text，
+        //        老的正文解析会整帧丢掉）。
+        //     ⑤ 阶段文案沿用官方口径：「准备调用工具」/「正在调用工具」（中英各 +2 条字符串键）。
+        //   测了什么：92 类 / 970 用例 / 0 失败（+22：ChatToolStreamTest 钉死参数增量追加、阶段只前进
+        //        不倒退、hasReplyContent 缺失返回 null、去重判据、以及展示项形状）；
+        //        docsCheck 全绿；STRUCTURE 已登记 2 个新文件、INTERFACES 已登记 13 个新符号；
+        //        lintDebug 0 error。
+        //   仍未做：内核错误分类（ASK_CANCELLED 等）只落在明细里，没有单独的失败文案；
+        //        老桥上工具行仍是「等历史刷新才出现」的老行为（桥侧升级后才有实时行）。
+        //   依赖：bridge ≥ 2.12.0 才有实时工具行与 hasReplyContent；老桥行为不变（字段缺失即旧行为）。
         //
         versionCode = 10098
         versionName = "2.2.73"

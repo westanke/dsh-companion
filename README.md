@@ -294,7 +294,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.69.apk
+DSH伴侣-companion-v2.2.73.apk
 ```
 
 安装要求：
@@ -550,9 +550,32 @@ keyPassword=...
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：92 个测试类 / 970 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.69.apk`，**3,383,328 字节**，
-  SHA-256 `e620b0e3c848611f64b8310b69cd78c4b199fa485826d364907f8836531fac2a`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
-  **本版（v2.2.69，HEIC/AVIF/BMP 发图必失败）**：用户发截图——发 `280857.heic` 被
+- 当前 APK：`DSH伴侣-companion-v2.2.73.apk`，**3,361,372 字节**，
+  SHA-256 `b993f42137198a8f176b37eebce506740082c2ef2f8e6a3873f131d871b81ae3`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
+  **本版（v2.2.73，对齐 bridge v2.12.0：工具实时事件 + 「回答写完了」判据）**：这版合了四件事 ——
+  界面改成 DSH 官方观感、会话列表按官方口径分组、修掉右缘一条点不到的带、以及对齐桥的新契约。
+  ① **工具实时事件**（#22）：桥 v2.12.0 起把内核的 `tool/call` / `tool/result` **原样透传**成
+  `chat.tool.call` / `chat.tool.result`，App 侧此前完全没接（`grep chat.tool` 零命中）——
+  表现是「运行期看不见正在跑哪个工具」，只能等 400ms 防抖把历史重拉回来才看到工具行。
+  现在工具行**实时出现**，阶段文案沿用官方口径：「准备调用工具」/「正在调用工具」；
+  同一次调用在屏幕上**只出现一行**（历史里连结果都齐了，实时行自动让位，不留两行重复）。
+  ② **「回答写完了」的判据**（同一契约的另一半）：内核在工具执行**之前**就 settle 一条只含
+  `tool-call` 块的 assistant 消息，于是带工具的回合会提交**多条** assistant 消息，只有最后那条
+  含正文；桥此前只送 `role`，客户端收到第一条就当「回答结束」（清流式态、收起过程组）——
+  而工具还没开始跑。现在按桥新增的 `hasReplyContent` 判定：**字段缺失 = 老桥 = 保持旧行为**
+  （不当成 false，否则老桥的回合永远不收尾，把兼容做反了）。
+  ③ **界面改用 DSH 官方观感**（#19）：顶栏 44dp 扁平、手机端抽屉改**推挤式**（整页右移 288dp，
+  不压暗遮罩）、设置页改成纯填充色 + 14dp 圆角卡片（无边框）、会话列表改纯文字行。
+  ④ **会话列表按官方口径分组**（#20）：今天 / 昨天 / 更早，桶内时间倒序、按工作区聚簇，
+  「更早」可折叠展开；同时修好了「只显示一个目录」——**那是服务端授权问题**，不是客户端 bug
+  （设备当初只授权了一个工作区根，在桥的设备管理里补齐三个根即可）。
+  ⑤ **右缘一条 216px 宽的「点不到」带**（#21）：手机端抽屉灰幕带 `.clickable(enabled = drawerOpen)`，
+  而 **clickable 本身就是 pointerInput** —— 带 pointerInput 的容器**永远参与命中测试**，
+  `enabled=false` 只关回调不关命中；浅色主题下灰幕 alpha=0 视觉全透明，却一直实打实盖在右缘
+  288dp 上，把那条边的点击全吃了（「当前任务」的折叠箭头、顶栏 ⋯ 都点不动）。真机二分点击实测
+  分界正好 **864px = 288dp**（与 vivo 手势条 1008px 不符 → 排除系统层）。现已把「画不画」与
+  「吃不吃点击」拆成两条独立判据。
+  **上一版（v2.2.69，HEIC/AVIF/BMP 发图必失败）**：用户发截图——发 `280857.heic` 被
   `Image type image/heic is not accepted by this deployment.` 打回，且**失败发生在点发送之后**：
   附件已进框、输入框已填字，然后整条消息被一句英文退回，用户看不到任何能照做的指引。
   根因是两条独立漏口：**内核的图片白名单是死字面量**（`@deepseek-ai/dsh-attachment-local` 的
@@ -563,7 +586,8 @@ keyPassword=...
   `imageMediaType` 先按别名归一再裁决、归不了如实返回（HEIC 不假装成 PNG）；新增
   `data/ImageTranscoder.kt` 就地转码——有 alpha 编 PNG、无 alpha 编 JPEG 90，**不主动缩图**
   （这是换格式不是降质，与 #15「取消无谓重编码」一致），超 16 M 像素才降采样防 OOM。
-  三种失败各给人话（解不开／转完超限／转出来仍不收）。前几版：
+  三种失败各给人话（解不开／转完超限／转出来仍不收）。
+  前几版：
   **v2.2.68（表格串表 + 发图通道分流 + WS 半死）**：三件事都是上一版真机跑出来的。
   ① **一条消息两张表时第二张串进第一张**（issue #13）：根因不在表格解析器，而在**渲染库给错了料**
   —— `MarkdownComponentModel.content` 是**整篇 markdown 全文**，不是当前这一段；`parseMarkdownTable`
