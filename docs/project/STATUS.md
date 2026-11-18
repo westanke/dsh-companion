@@ -27,6 +27,19 @@
   Gitee Release id **1323660**（APK + SHA256SUMS.txt 已挂），AtomGit Release 已建（正文含 Gitee 下载链接），
   两站 tag `v2.2.73` 已就位（tag 对象 `48213bc`，指向 `fad1377`）；GitHub 从站由 mirror-sync 自动对齐。
   回读校验：下载回来的包 SHA-256 与本地一致（没有传错包）。
+  **发版后补正（2026-11-18）**：Gitee/AtomGit 两站的 Release 正文原先是脚本模板占位
+  （241 字节），模板末句「完整发布说明见 Gitee Release 正文（由 RELEASE_NOTES 维护）」是**自指** ——
+  脚本从来不挂 RELEASE_NOTES 资产，而本版合并四笔改动尤其需要一份真正的说明。
+  已按 v2.2.41–v2.2.44 体例手写 `artifacts/RELEASE_NOTES_v2.2.73.md`（四节分别讲清
+  官方观感 / 会话列表分组 / 右缘点不到带 / 工具实时事件，含安装与门禁段），
+  Gitee Release 正文 PATCH 为该全文并把 notes 挂成第三个资产，AtomGit 正文同步并追加 Gitee 下载链接。
+  **顺带修了发布脚本两个真 bug**（见 PITFALLS 第 48 个坑位）：
+  ① AtomGit 探测用 `releases?per_page=1` 取首项当「最新」，而该接口**不按时间倒序**
+  （实测首项恒为最早的 v2.2.45）→ 永远探不到刚发的 tag → 每次重复 POST 撞 409；
+  改为「按 tag 直查 + 已有则 PATCH 回填正文」（更新端点是 `releases/<tag>`，
+  打 `releases/tags/<tag>` 一律 405）。② 正文模板不再自称「见 RELEASE_NOTES」——
+  脚本现在**优先读 `artifacts/RELEASE_NOTES_${TAG}.md` 作正文并把它一并挂成资产**，
+  没有该文件才退回纯模板。
 - **v2.2.72（versionCode 10097，已发）：修右缘一条 216px 宽的「点不到」带（#21）**。
   用户反馈「会话页的当前任务收缩不了」，进一步定位为「点标题能收起、点右端箭头收不了」。
   根因在**手机端抽屉灰幕**：`ui/App.kt` 的灰幕 Box 带 `.clickable(enabled = drawerOpen)`，

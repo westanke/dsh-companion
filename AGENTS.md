@@ -294,6 +294,7 @@ web/           ← WebView 容器（chat.html 兜底路径）
 - `Kotlin 注释里写 image 通配符会吞掉后面整个文件`
 - `WS 半死：socket 断了但状态还写着「已连接」，帧写进去等满超时且不回落 REST`
 - `透明灰幕照样吃点击：视觉上看不见不等于不参与命中`
+- `发布脚本把「列表首项」当「最新」：接口不倒序，探测永远探不到刚发的 tag`
 
 > 新坑位：名字加进上面清单 + 原文写进 `PITFALLS.md` 并补 `### 同名` 锚点。
 
@@ -308,7 +309,7 @@ web/           ← WebView 容器（chat.html 兜底路径）
 | 补丁四要素 | `@patch` for/why/until/test，脚本生成登记表 | 保留四要素；**2026-10-17 起由 `ArchitectureGuardTest` 机检**（五字段齐全 + `test` 指向的测试真实存在），随 `testDebugUnitTest` 进 CI；尚未并入 `docsCheck` |
 | 债务台账只许收紧 | `architecture.test.ts` 强制（环/行数/模块状态） | 改 `TECH-DEBT.md` + 行数预算 800；**2026-10-17 起由 `ArchitectureGuardTest` 扫行数兑现**（超预算须在台账登记）—— 原以为「Kotlin 侧无等价解析器」，实测**文本匹配就够** |
 | 文档路由表 | 13 条场景路由 | 收敛为第 0 节一张表 |
-| 坑位索引 | 47 条 | 11 条起步，按需增长 |
+| 坑位索引 | 48 条 | 11 条起步，按需增长 |
 
 **2026-10-21 新增**：`docs/project/STRUCTURE.md`（代码地图）与 `INTERFACES.md`（契约与签名），
 连同 `docsCheck` 的**双向锚点校验**一起落地 —— 与姊妹仓同制度、同格式、不同阈值。

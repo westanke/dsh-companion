@@ -51,6 +51,23 @@
 - bridge **≥ 2.12.0** 才有实时工具行与 `hasReplyContent`；老桥行为不变（字段缺失即旧行为）。
 - GitHub issue **#22**（[契约] 对齐 bridge v2.12.0）。
 
+### 发版后补正（2026-11-18，同日）
+发布完成后回读发现两站 Release 的正文是**脚本模板占位**（241 字节），而模板末句
+「完整发布说明见 Gitee Release 正文（由 RELEASE_NOTES 维护）」是**自指** —— 脚本从来不挂
+RELEASE_NOTES 资产，用户在下载页看到的就是一段占位说明；本版合并了四笔改动，
+尤其需要一份真正的说明。已处理：
+- 新增 `artifacts/RELEASE_NOTES_v2.2.73.md`：手写完整正文（官方观感 / 会话列表分组 /
+  右缘点不到带 / 工具实时事件 四节 + 安装 + 门禁 + 未做），按 v2.2.41–v2.2.44 体例。
+- Gitee Release 1323660 正文 PATCH 为该全文，并把 notes 挂成第三个资产；
+  AtomGit v2.2.73 正文同步（末尾追加 Gitee 下载链接，因其 API 不支持附件）。
+- **顺带修了发布脚本两个真 bug**（立为 PITFALLS 第 48 个坑位）：
+  ① AtomGit 探测用 `releases?per_page=1` 取首项当「最新」，而该接口**不按时间倒序**
+  （实测首项恒为最早的 v2.2.45）→ 永远探不到刚发的 tag → 每次重复 POST 撞 409
+  「Release already exists」；改为**按 tag 直查** + 已有则 PATCH 回填正文
+  （更新端点是 `releases/<tag>`，打 `releases/tags/<tag>` 一律 405 METHOD_NOT_ALLOWED）。
+  ② 正文模板不再自称「见 RELEASE_NOTES」：脚本现在**优先读 `artifacts/RELEASE_NOTES_${TAG}.md`
+  作正文并把它一并挂成资产**，没有该文件才退回纯模板。
+
 ## v2.2.72 · 修右缘一条 216px 宽的「点不到」带（#21）（2026-11-18）
 
 ### 基于什么

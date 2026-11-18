@@ -183,25 +183,38 @@ fi
 say ""
 
 say "3) 两站 Release + APK 附件"
+# 正文优先用人工写的 artifacts/RELEASE_NOTES_${TAG}.md；没有才退回模板。
+# 早年的 v2.2.33–v2.2.44 就是手写正文 + 额外挂一份 RELEASE_NOTES 资产，
+# 模板正文那句「完整发布说明见 Gitee Release 正文（由 RELEASE_NOTES 维护）」
+# 是**自指**——本版若不挂 RELEASE_NOTES，下载页就只剩这段占位说明。
+NOTES="artifacts/RELEASE_NOTES_${TAG}.md"
+
 gitee_release() {
   [ -z "$GT" ] && { warn "无 Gitee token，跳过"; return 0; }
   local id
   id=$(curl -s "https://gitee.com/api/v5/repos/$REPO_GITEE/releases/tags/$TAG?access_token=$GT" \
        | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).id||'')}catch{console.log('')}})" 2>/dev/null || true)
-  if [ -z "$id" ]; then
-    say "  创建 Gitee Release $TAG…"
-    [ "$DRY_RUN" = "1" ] && return 0
-    local payload
+  local payload
+  if [ -f "$NOTES" ]; then
+    payload=$(TAG="$TAG" VER="$VER" APK_NAME="$APK_NAME" SIZE="$SIZE" SHA="$SHA" NOTES="$NOTES" node -e '
+      const fs = require("fs");
+      const body = fs.readFileSync(process.env.NOTES, "utf8").replace(/\n+$/, "");
+      process.stdout.write(JSON.stringify({tag_name:process.env.TAG,name:process.env.VER,body,target_commitish:"main"}));
+    ')
+  else
     payload=$(VER="$VER" TAG="$TAG" APK_NAME="$APK_NAME" SIZE="$SIZE" SHA="$SHA" node -e '
       const body = [
         `## ${process.env.TAG}`,` `,
         `- 产物：\`${process.env.APK_NAME}\`，**${Number(process.env.SIZE).toLocaleString("en-US")} 字节**`,
         `- SHA-256：\`${process.env.SHA}\``,` `,
-        `变更详情见仓库 docs/project/CHANGELOG-DEV.md 的 ${process.env.TAG} 一节。`,
-        `完整发布说明见 Gitee Release 正文（由 RELEASE_NOTES 维护）。`
+        `变更详情见仓库 docs/project/CHANGELOG-DEV.md 的 ${process.env.TAG} 一节。`
       ].join("\n");
       process.stdout.write(JSON.stringify({tag_name:process.env.TAG,name:process.env.VER,body,target_commitish:"main"}));
     ')
+  fi
+  if [ -z "$id" ]; then
+    say "  创建 Gitee Release $TAG…"
+    [ "$DRY_RUN" = "1" ] && return 0
     # `access_token` 必须随请求走：Gitee 创建接口不接受把它塞进 JSON body，
     # 而下面 `-d "$payload"` 就是 JSON 正文，所以只能挂在 query 上。
     # 2026-10-21 漏了这一步，v2.2.47 首跑报「登录失效，无权限访问该资源」（40001）——
@@ -211,12 +224,15 @@ gitee_release() {
          | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).id||'')}catch{console.log('')}})")
     [ -n "$id" ] && ok "Gitee Release 已建（id $id）" || { bad "Gitee Release 建失败"; return 1; }
   else
-    ok "Gitee Release 已存在（id $id），跳过创建"
+    ok "Gitee Release 已存在（id $id），回填正文"
+    # 已存在的 Release 也要同步正文：发版脚本可能在建完之后又补写了发布说明。
+    [ "$DRY_RUN" = "1" ] || curl -s -X PATCH "https://gitee.com/api/v5/repos/$REPO_GITEE/releases/$id?access_token=$GT" \
+      -H 'Content-Type: application/json' -d "$payload" >/dev/null
   fi
   local have
   have=$(curl -s "https://gitee.com/api/v5/repos/$REPO_GITEE/releases/$id?access_token=$GT" \
         | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log((JSON.parse(s).assets||[]).map(a=>a.name).join(' '))}catch{console.log('')}})")
-  for f in "$APK" artifacts/SHA256SUMS.txt; do
+  for f in "$APK" artifacts/SHA256SUMS.txt "$NOTES"; do
     [ -f "$f" ] || continue
     local base; base=$(basename "$f")
     if echo " $have " | grep -qF " $base "; then
@@ -232,15 +248,16 @@ gitee_release() {
 
 atomgit_release() {
   [ -z "$AT" ] && { warn "无 AtomGit token，跳过"; return 0; }
-  local cur
-  cur=$(curl -s -H "Authorization: Bearer $AT" \
-        "https://atomgit.com/api/v5/repos/$REPO_ATOMGIT/releases?per_page=1" \
-        | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const d=JSON.parse(s);console.log((d[0]||{}).tag_name||'')}catch{console.log('')}})" 2>/dev/null || true)
-  if [ "$cur" = "$TAG" ]; then
-    ok "AtomGit Release 已存在（$TAG），跳过"
+  local payload
+  if [ -f "$NOTES" ]; then
+    payload=$(TAG="$TAG" VER="$VER" APK_NAME="$APK_NAME" NOTES="$NOTES" node -e '
+      const fs = require("fs");
+      let body = fs.readFileSync(process.env.NOTES, "utf8").replace(/\n+$/, "");
+      body += "\n\n---\n\n下载：https://gitee.com/westanke/dsh-companion/releases/download/" +
+        process.env.TAG + "/" + encodeURIComponent(process.env.APK_NAME);
+      process.stdout.write(JSON.stringify({tag_name:process.env.TAG,name:process.env.VER,body,target_commitish:"main"}));
+    ')
   else
-    [ "$DRY_RUN" = "1" ] && { say "  [dry] 创建 AtomGit Release $TAG"; return 0; }
-    local payload
     payload=$(VER="$VER" TAG="$TAG" APK_NAME="$APK_NAME" SIZE="$SIZE" SHA="$SHA" node -e '
       const body = [
         `## ${process.env.TAG}`,` `,
@@ -250,6 +267,23 @@ atomgit_release() {
       ].join("\n");
       process.stdout.write(JSON.stringify({tag_name:process.env.TAG,name:process.env.VER,body,target_commitish:"main"}));
     ')
+  fi
+  # 探测用「按 tag 直查」，不要用 `releases?per_page=1` 取首项 ——
+  # AtomGit 的列表接口**不按时间倒序**（实测首项恒为最早的 v2.2.45），
+  # 拿首项当「最新」永远探不到刚发的 tag，于是每次都要重复 POST，
+  # 而 POST 同名 tag 会返回 409 Release already exists。
+  local exists
+  exists=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $AT" \
+        "https://atomgit.com/api/v5/repos/$REPO_ATOMGIT/releases/tags/$TAG")
+  if [ "$exists" = "200" ]; then
+    ok "AtomGit Release 已存在（$TAG），回填正文"
+    # 更新正文的端点是 `/releases/<tag>`，**不是** `/releases/tags/<tag>`：
+    # 后者的 PATCH / PUT / DELETE 一律 405 METHOD_NOT_ALLOWED。
+    [ "$DRY_RUN" = "1" ] || curl -s -X PATCH "https://atomgit.com/api/v5/repos/$REPO_ATOMGIT/releases/$TAG" \
+      -H "Authorization: Bearer $AT" -H 'Content-Type: application/json' -d "$payload" >/dev/null
+  else
+    say "  创建 AtomGit Release $TAG…"
+    [ "$DRY_RUN" = "1" ] && return 0
     curl -s -X POST "https://atomgit.com/api/v5/repos/$REPO_ATOMGIT/releases" \
       -H "Authorization: Bearer $AT" -H 'Content-Type: application/json' -d "$payload" >/dev/null
     ok "AtomGit Release 已建（正文含 Gitee 下载链接）"

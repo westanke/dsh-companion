@@ -1496,3 +1496,38 @@ Box(
 也就进不了 uiautomator 的节点树 —— 于是「点不到」和「查不到」两件事混在一起，
 把排查又带偏了一截。`contentDescription` 补上后，箭头才既能被 TalkBack 读到、
 也能被 `adb_ui` 查到（`expand` / `collapse` 这两个字符串键本来就在，只是没人用）。
+
+### 发布脚本把「列表首项」当「最新」：接口不倒序，探测永远探不到刚发的 tag
+
+2026-11-18 发 v2.2.73 时踩到。症状是脚本每次跑都重复 POST 已存在的 Release，
+而 POST 同名 tag 会返回 `409 Release already exists` —— 一度以为发布没成功。
+
+**根因**：AtomGit 的 Release 列表接口 `GET /api/v5/repos/{repo}/releases?per_page=1`
+**不按时间倒序**。实测本仓的返回首项恒为**最早**的一条（`v2.2.45`），
+而不是刚发的 `v2.2.73`。脚本原来拿 `[0].tag_name` 当「当前最新 tag」，
+于是永远返回 `v2.2.45 ≠ v2.2.73` → 判定为「不存在」→ 每次都走创建分支。
+
+**同一次踩坑里还有第二个坑**：AtomGit **更新**已有 Release 正文的端点是
+`PATCH /api/v5/repos/{repo}/releases/{tag}`，而**按 tag 直查**用的是
+`GET  .../releases/tags/{tag}`。两个路径长得像，但更新只能打前者 ——
+对 `.../releases/tags/v2.2.73` 发 PATCH / PUT / DELETE 一律返回
+`405 METHOD_NOT_ALLOWED`，DELETE 也不给（所以「删了重建」这条路也走不通）。
+
+**修法**（`scripts/release.sh` 的 `atomgit_release()`）：
+
+1. 探测改成**按 tag 直查**：`GET .../releases/tags/$TAG` 看返回码是不是 200。
+   **不要用列表接口的首项代表「最新」** —— 除非先确认过该接口按时间倒序。
+2. 已有则 `PATCH .../releases/$TAG`（不带 `tags/`）回填正文。
+3. 正文与 Gitee 共用一份 `artifacts/RELEASE_NOTES_v2.2.73.md`（手写完整说明），
+   AtomGit 版本在末尾追加 Gitee 下载链接（AtomGit API **没有附件上传能力**，
+   APK 只能以 Gitee 为准）。
+
+**顺带修的另一个自指 bug**：旧模板正文最后一句是「完整发布说明见 Gitee Release 正文
+（由 RELEASE_NOTES 维护）」，但脚本**从来不挂 RELEASE_NOTES 资产** —— 这句话指向的东西
+根本不存在，用户在下载页看到的就是一段占位说明。现在脚本会优先读
+`artifacts/RELEASE_NOTES_${TAG}.md` 作正文（有就用手写的，没有才退回模板），
+并把该文件一并挂成 Release 资产。**凡是正文里承诺「详见某文件」，就得真的把那个文件传上去。**
+
+**通用铁律**：**「列表接口的第一条」不等于「最新的那条」**，除非文档或实测确认了排序。
+发布类脚本宁可多打一次「按 tag 直查」，也别用「首项」当哨兵值 ——
+它会在「已发布」的状态下反复尝试创建，并把 409 当成失败。

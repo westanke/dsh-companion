@@ -101,6 +101,12 @@ sha256sum "artifacts/<APK 文件名>"        # 摘要
 - 主备推送：`bash scripts/push-all.sh`（推 Gitee + AtomGit 的 main），`PUSH_TAGS=1 bash scripts/push-all.sh` 推标签；
   远端命名先跑 `bash scripts/setup-remotes.sh` 整理。**默认不推 GitHub**（`INCLUDE_GITHUB=1` 才顺带试，本机 github.com:443 通常不通）。
 - Release 只在 **Gitee** 手工发（正文 + APK / SHA256SUMS.txt / RELEASE_NOTES；tag 名的 zip/tar.gz Gitee 自动生成）。
+  **正文要有真内容**：把完整发布说明写进 `artifacts/RELEASE_NOTES_${TAG}.md`，
+  `scripts/release.sh` 会优先拿它当 Release 正文、并把它一并挂成第三个资产；
+  没有该文件才退回「产物 / 字节 / SHA / 详见 CHANGELOG」的短模板。
+  **别在正文里承诺「详见某文件」却不传那个文件** —— 模板那句「完整发布说明见
+  Gitee Release 正文（由 RELEASE_NOTES 维护）」是自指，已随本次修掉。
+  AtomGit 备站同样自动带正文（末尾追加 Gitee 下载链接），但**它的 API 不支持附件**，APK 以 Gitee 为准。
 - **GitHub 全自动**：`.github/workflows/mirror-sync.yml` 每 3 小时（也可 Actions 页手动 dispatch）
   `git push --mirror` 对齐 refs，再由 `scripts/ci/sync-releases.py` 幂等回填 Release 与三类资产。
   发版后想立刻见效，去 GitHub Actions 手动触发一次；否则等下个整点后 17 分。
