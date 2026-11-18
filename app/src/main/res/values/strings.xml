@@ -323,6 +323,15 @@
     <string name="confirm_allow_once">确认允许一次</string>
     <string name="unsaved_text">编辑内容</string>
     <string name="session_count">%1$d 个会话</string>
+    <!-- 会话列表的时间分组（对齐 dsh-Chat 官方抽屉：今天 / 昨天 / 更早）。 -->
+    <string name="session_group_today">今天</string>
+    <string name="session_group_yesterday">昨天</string>
+    <string name="session_group_earlier">更早</string>
+    <!-- 没有工作区名的会话归到这一小节（官方叫「未分组」）。 -->
+    <string name="session_group_ungrouped">未分组</string>
+    <!-- 「更早」分组标题右侧的展开/收起提示（官方写法：N 条 · 展开）。 -->
+    <string name="session_group_expand">%1$d 条 · 展开</string>
+    <string name="session_group_collapse">%1$d 条 · 收起</string>
     <!-- 平板（wide）未选会话时的右侧概览面板：主机状态 + 最近会话 + 新建入口。手机端不渲染。 -->
     <string name="session_overview">会话概览</string>
     <string name="recent_sessions">最近会话</string>

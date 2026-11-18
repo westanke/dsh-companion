@@ -319,6 +319,8 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `internal fun isWideLayout(width: Dp): Boolean` | `ui/AdaptiveBreakpoints.kt` | 等价于改造前的 `maxWidth >= 840.dp` |
 | `val ConnectionOnlineColor` / `ConnectionOfflineColor` | `ui/Components.kt` | `@Composable` 取色入口（语义色随主题走） |
 | `internal fun displayEntryContentType(entry)` | `ui/chat/ChatProcessGroup.kt` | LazyColumn `contentType`（消息 / 过程组） |
+| `internal fun groupSessionsByTime(sessions, ungroupedLabel, nowMillis)` | `ui/chat/SessionGroups.kt` | 会话按本地日历天分今天/昨天/更早（空桶不产出），桶内按工作区聚簇 |
+| `internal fun buildSessionListEntries(groups, expandedEarlier)` | `ui/chat/SessionGroups.kt` | 分组摊平成条目流（分组标题 / 工作区小节标题 / 会话行），收起的组只留标题行 |
 
 > **主题与明暗正交**：`AppTheme` 定色相基调，`InterfaceStyle` 定深浅，组合出 8 份色板。
 > 两份偏好**都进 `HarnessState`**，且都必须出现在 `withPreferences()` 里 ——
@@ -329,6 +331,10 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 > 两者都由 `AppTheme` + `InterfaceStyle` 决定深浅与色相，因此用户在设置里换主题时，
 > **两边同时变**，不会出现「外壳是官方蓝、聊天页还是旧配色」的割裂感。
 > `AppTheme` 枚举与 PAPER 色板本身一字未动（`AppThemeTest` 钉住逐字段相同）。
+
+> **会话列表分组（v2.2.71 起）**：`ui/chat/SessionGroups.kt` 是**纯逻辑、无 Compose 依赖**的一层，
+> 规则与官方 dsh-Chat 的 `app/lib/ui/session_groups.dart` 一一对应（时间分桶 + 工作区聚簇 + 空桶不产出 +
+> 「更早」默认收起）。`SessionPane` 只负责把摊平的条目流画成行；规则改动只动这一个文件。
 
 ---
 
@@ -371,6 +377,14 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `internal fun SettingsSegmentedRow` | `app/src/main/java/io/github/westanke/dshcompanion/ui/SettingsCards.kt` | function |
 | `internal fun SettingsChipGroup` | `app/src/main/java/io/github/westanke/dshcompanion/ui/SettingsCards.kt` | function |
 | `internal fun SettingsWarningBanner` | `app/src/main/java/io/github/westanke/dshcompanion/ui/SettingsCards.kt` | function |
+| `internal fun groupSessionsByTime` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SessionGroups.kt` | function |
+| `internal fun dayBucketOf` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SessionGroups.kt` | function |
+| `internal fun clusterRows` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SessionGroups.kt` | function |
+| `internal fun visibleRowsOf` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SessionGroups.kt` | function |
+| `internal fun buildSessionListEntries` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SessionGroups.kt` | function |
+| `internal enum class SessionGroupKey` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SessionGroups.kt` | class |
+| `internal data class SessionGroup` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SessionGroups.kt` | class |
+| `internal sealed interface SessionListEntry` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SessionGroups.kt` | class |
 | `class DshClient` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClient.kt` | class |
 | `fun health` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClient.kt` | function |
 | `fun pair` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClient.kt` | function |

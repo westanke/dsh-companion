@@ -139,14 +139,15 @@ dsh-companion/
 | 流程与闸门 | `EventDebouncer.kt` / `RequestGate.kt` / `ComposerSendPolicy.kt` | 副作用去抖、请求代际、queue/steer 策略 |
 | 更新 | `UpdateChecker.kt` | 按界面语言分流（中文 Gitee / 英文 GitHub）、下载、SHA-256 校验、调起安装器 |
 
-### 3.3 `ui/`（20 个文件）与 `ui/chat/`（37 个文件）
+### 3.3 `ui/`（20 个文件）与 `ui/chat/`（41 个文件）
 
 `ui/` 是页面级容器与跨页面组件；`ui/chat/` 是会话详情页的全部拆分部件。
 拆分理由是行数预算（800/文件），**不是**新架构 —— 语义与行为在拆之前就等价。
 
 `ui/chat/` 的组织方式：`ChatDetail.kt` 是骨架（什么挂在哪儿、按什么顺序），
-真正的部件都在兄弟文件里；列表层 `ChatSessionPane.kt`，消息项 `ChatMessageItems.kt`，
-交互卡片 `ChatApprovals.kt`，输入区 `ChatComposer.kt`。
+真正的部件都在兄弟文件里；列表层 `ChatSessionPane.kt`，列表的**分组排序纯逻辑**
+在 `SessionGroups.kt`（今天/昨天/更早 + 工作区聚簇，无 Compose 依赖），
+消息项 `ChatMessageItems.kt`，交互卡片 `ChatApprovals.kt`，输入区 `ChatComposer.kt`。
 
 ### 3.4 `ui/theme/`（7）· `web/`（2）· `debug/`（2）
 
@@ -372,6 +373,7 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatSessionFiles.kt` | file | 「本会话的文件」面板 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ScheduleSheet.kt` | file | 定时任务底部面板：列表、新建表单与人话 cron 预览 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatSessionPane.kt` | file | 会话列表层（窄屏整页 / 宽屏左栏 / 未选时概览） |
+| `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SessionGroups.kt` | file | 会话列表的分组排序纯逻辑（时间分桶 + 工作区聚簇 + 条目流摊平） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ChatSheets.kt` | file | 三个底部弹层：模型与智能体、工作区管理、新建会话 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/ModelSheetGroups.kt` | file | 模型弹窗的按供应商折叠：展开态、折叠头与模型行 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SpeechInput.kt` | file | 麦克风按钮、录音状态条、运行时权限与转写结果插入 |

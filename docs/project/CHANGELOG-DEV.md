@@ -1,5 +1,70 @@
 # 开发日志
 
+## v2.2.71 · 会话列表按官方口径分组排序 + 多目录可见（#20）（2026-11-18）
+
+### 基于什么
+v2.2.70。用户反馈「会话列表排序对照改下，目前只显示了一个目录的」——
+两件事：排序要照官方 dsh-Chat 的口径改；而且现在只看得到一个目录下的会话。
+
+### 现象与根因（两件独立的事）
+1. **只看得到一个目录 —— 根在服务端授权，不在客户端排序**。桥的 `listSessions`
+   （`dsh-remote-bridge/src/host/chat-adapter.ts`）按**设备授权的根**过滤：
+   `authorizedRoots(principal)` → `matchRoot(roots, absoluteCwd)`，命中不到就跳过该会话。
+   本机手机设备（V2080A / `ee5e1cd1-…`）当初配对时只授权了「手机会话」一个根，
+   所以只能看到 `.dsh-mobile` 下的 8 条会话；其他设备（99e96e56 / 66008caf / 47b3ecc9）
+   本来就授权了全部三个根。**改授权即改可见范围**（`PATCH /manage/devices/{id}` 改库，
+   下次请求就生效，不必重配对）。补齐三个根后真机列表从 **8 条变 44 条**，
+   行内工作区标签同时出现「workspace」与「手机会话」两种。
+2. **排序是平铺的，没有分组**。官方 dsh-Chat 的会话列表按「今天 / 昨天 / 更早」分桶，
+   桶内再按工作区聚簇；companion 之前是一张平铺列表按时间倒序，用户看到的是「一坨」。
+
+### 干了什么
+1. **新增 `ui/chat/SessionGroups.kt`（纯逻辑、无 Compose 依赖）** —— 规则逐条对齐官方
+   `dsh-Chat/app/lib/ui/session_groups.dart`：
+   - `dayBucketOf(updatedAt, nowMillis)`：按**本地日历天**分桶（0 今天 / 1 昨天 / 2 更早），
+     `updatedAt <= 0` 归「更早」（时间未知不能顶到最前）。
+   - `groupSessionsByTime(...)`：三个桶，**空桶不产出**（今天没会话就不该有一个空标题），
+     桶内时间倒序、同一时刻按工作区名升序。
+   - `clusterRows(...)`：桶内按工作区聚簇 —— 同工作区的会话相邻，
+     小节首行带工作区标题、其余行为 `null`。
+   - `visibleRowsOf(group, expandedEarlier)`：「更早」组 `collapsible = true`，默认收起。
+   - `buildSessionListEntries(...)`：把分组摊平成条目流（分组标题 / 工作区小节标题 / 会话行），
+     **收起的组仍出标题行**（官方 `_sectionWidgets` 同款），只是不出行。
+2. **`ui/chat/ChatSessionPane.kt` 改分组渲染** —— `LazyColumn` 从 `items(listedSessions)`
+   改成 `items(entries, key = { it.key })`，按 `when (entry)` 分三支渲染：
+   - 分组标题行：今天/昨天右侧是 `Icons.Outlined.Tune`（16dp，官方同款），「更早」右侧是
+     「N 条 · 展开/收起」，**整行可点**切换。
+   - 工作区小节标题：`DshTypography.caption` + `dsh.drawerGroupLabel`。
+   - 会话行：沿用改造后的纯文字行。
+   同时**删掉逐行重复的工作区名** —— 官方会话行里也没有工作区名，小节标题已经承担了它。
+3. **`ui/theme/DshTokens.kt` 补 `DshSpacing.drawerGroupGap`**（官方值 0），
+   与已有的 `drawerGroupPadH/PadV`、`drawerSectionPadTop/Bottom` 一起构成官方分组排版。
+4. **中英各加 6 条字符串**：`session_group_today` / `session_group_yesterday` /
+   `session_group_earlier` / `session_group_ungrouped` / `session_group_expand`（`%1$d 条 · 展开`）/
+   `session_group_collapse`（`%1$d 条 · 收起`）。
+
+### 测了什么
+90 类 / 940 用例 / 0 失败（**+14**：新增 `SessionGroupsTest`，断言逐条对齐官方
+`dsh-Chat/app/test/session_groups_test.dart` 的 14 组用例 —— 分桶边界、空桶不产出、桶内倒序、
+同刻按工作区名升序、聚簇后小节标题序列 `['ws-a', null, null, 'ws-b']`、无工作区落「未分组」、
+「更早」可折叠且收起时 0 行、条目流形状与 key 唯一）；docsCheck 全绿；
+STRUCTURE 已登记新文件、INTERFACES 已登记 8 个新符号。
+
+### 真机复验（V2080A / 9540718532001JR，产物 versionCode 10096）
+授权补齐后列表从「8 个会话」变「44 个会话」，分组标题（今天 / 昨天 / 更早）与工作区小节标题
+按官方口径出现，「更早」默认收起、可点标题展开。
+
+### 仍未做
+官方抽屉还有**顶部搜索框**与**底部账号栏**（companion 的会话列表是独立整页，不是抽屉，
+本次按用户诉求只做分组与排序）；搜索时小节标题需要重算（官方 `_sectionWidgets` 有这逻辑）。
+
+### 依赖
+无（纯客户端改动，不需要新桥能力位）。多目录可见依赖桥侧**已有**的
+`PATCH /manage/devices/{id}` 授权管理面，App 端零改动。
+
+### 工单
+[#20](https://github.com/westanke/dsh-companion/issues/20)（本次先开单后动手）。
+
 ## v2.2.70 · 外壳 / 设置页 / 会话列表改用 DSH 官方观感（#19）（2026-11-18）
 
 ### 基于什么

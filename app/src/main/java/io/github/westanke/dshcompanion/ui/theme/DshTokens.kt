@@ -102,6 +102,8 @@ object DshSpacing {
     val drawerSearchInset: Dp = 11.dp
     val drawerGroupPadH: Dp = 21.dp
     val drawerGroupPadV: Dp = 15.dp
+    /** 官方 `DsSpacing.drawerGroupGap`：分组标题行与下一段之间的额外间隙（官方值 0）。 */
+    val drawerGroupGap: Dp = 0.dp
     val drawerSectionPadTop: Dp = 8.dp
     val drawerSectionPadBottom: Dp = 2.dp
     val drawerItemPadH: Dp = 20.dp

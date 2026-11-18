@@ -316,6 +316,15 @@
     <string name="confirm_allow_once">Confirm allow once</string>
     <string name="unsaved_text">Editor content</string>
     <string name="session_count">%1$d sessions</string>
+    <!-- Session list time buckets (aligned with the official dsh-Chat drawer: Today / Yesterday / Earlier). -->
+    <string name="session_group_today">Today</string>
+    <string name="session_group_yesterday">Yesterday</string>
+    <string name="session_group_earlier">Earlier</string>
+    <!-- Sessions without a workspace name land in this section (the official label is "Ungrouped"). -->
+    <string name="session_group_ungrouped">Ungrouped</string>
+    <!-- Expand/collapse hint on the right of the "Earlier" group header (official wording: N items · Expand). -->
+    <string name="session_group_expand">%1$d items · Expand</string>
+    <string name="session_group_collapse">%1$d items · Collapse</string>
     <!-- Tablet (wide) overview pane shown when no session is selected. Not rendered on phones. -->
     <string name="session_overview">Session overview</string>
     <string name="recent_sessions">Recent sessions</string>

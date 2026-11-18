@@ -87,6 +87,7 @@ import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.ModelTraining
 import androidx.compose.material.icons.outlined.QuestionAnswer
 import androidx.compose.material.icons.outlined.TaskAlt
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Lock
@@ -260,11 +261,24 @@ internal fun SessionPane(
     val canListArchived = supportsArchiveListing(state.bridgeCapabilities)
     val listedSessions = if (showArchived) state.archivedSessions else state.sessions
     val dsh = LocalDshColors.current
-    Column(modifier.padding(horizontal = DshSpacing.drawerItemPadH)) {
+    // 分组口径与官方抽屉一致（见 SessionGroups.kt）：今天 / 昨天 / 更早，桶内按工作区聚簇。
+    // 「未分组」是要翻译的，文案从资源里取，不能写死在逻辑层。
+    val ungroupedLabel = stringResource(R.string.session_group_ungrouped)
+    val groups = remember(listedSessions, ungroupedLabel) {
+        groupSessionsByTime(listedSessions, ungroupedLabel = ungroupedLabel)
+    }
+    // 「更早」默认收起，点标题行展开（官方 `_olderExpanded`）。
+    var earlierExpanded by remember { mutableStateOf(false) }
+    val entries = remember(groups, earlierExpanded) {
+        buildSessionListEntries(groups, earlierExpanded)
+    }
+    Column(modifier) {
         // 官方口径：列表区不再堆大标题 + 副标题两层大字号，改成「小标题 + 计数」一行，
         // 右侧动作贴官方顶栏的 add_circle_outline 口径（24dp 图标、品牌蓝）。
         Row(
             Modifier.fillMaxWidth().padding(
+                start = DshSpacing.drawerItemPadH,
+                end = DshSpacing.drawerItemPadH,
                 top = DshSpacing.drawerSectionPadTop,
                 bottom = DshSpacing.drawerSectionPadBottom + 8.dp,
             ),
@@ -320,7 +334,11 @@ internal fun SessionPane(
             // 找不到就以为是我们漏做了（内核是否提供 unarchive 从本仓不可证）。
             Text(
                 stringResource(R.string.archived_sessions_hint),
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(
+                    start = DshSpacing.drawerItemPadH,
+                    end = DshSpacing.drawerItemPadH,
+                    bottom = 8.dp,
+                ),
                 color = dsh.labelTertiary,
                 style = DshTypography.caption,
             )
@@ -336,30 +354,121 @@ internal fun SessionPane(
                 Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = DshSpacing.blockGap),
             ) {
-                items(listedSessions, key = { it.id }) { session ->
-                    if (showArchived) {
-                        ArchivedSessionRow(
-                            session = session,
-                            selected = state.selectedSessionId == session.id,
-                            enabled = !state.busy,
-                            onClick = { viewModel.selectSession(session.id) },
+                items(entries, key = { it.key }) { entry ->
+                    when (entry) {
+                        is SessionListEntry.GroupHeader -> SessionGroupHeader(
+                            group = entry.group,
+                            expanded = entry.expanded,
+                            onToggle = { earlierExpanded = !earlierExpanded },
                         )
-                    } else {
-                    SessionRow(
-                        session = session,
-                        selected = state.selectedSessionId == session.id,
-                        enabled = !state.busy,
-                        onClick = { viewModel.selectSession(session.id) },
-                        onRename = { viewModel.renameSession(session.id, it) },
-                        onFork = { viewModel.forkSession(session.id) },
-                        onArchive = { viewModel.archiveSession(session.id) },
-                        wide = wide,
-                    )
+                        is SessionListEntry.SectionLabel -> SessionSectionLabel(
+                            label = entry.label,
+                        )
+                        is SessionListEntry.SessionEntry -> {
+                            val session = entry.session
+                            if (showArchived) {
+                                ArchivedSessionRow(
+                                    session = session,
+                                    selected = state.selectedSessionId == session.id,
+                                    enabled = !state.busy,
+                                    onClick = { viewModel.selectSession(session.id) },
+                                )
+                            } else {
+                                SessionRow(
+                                    session = session,
+                                    selected = state.selectedSessionId == session.id,
+                                    enabled = !state.busy,
+                                    onClick = { viewModel.selectSession(session.id) },
+                                    onRename = { viewModel.renameSession(session.id, it) },
+                                    onFork = { viewModel.forkSession(session.id) },
+                                    onArchive = { viewModel.archiveSession(session.id) },
+                                    wide = wide,
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
     }
+}
+
+/**
+ * 时间分组标题行（「今天」「昨天」「更早」）。
+ *
+ * 官方 `_groupHeader`：普通分组右侧是 tune 图标；可折叠分组（「更早」）右侧是
+ * 「N 条 · 展开/收起」，**整行可点**切换展开状态。
+ */
+@Composable
+private fun SessionGroupHeader(
+    group: SessionGroup,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    val dsh = LocalDshColors.current
+    val label = stringResource(
+        when (group.key) {
+            SessionGroupKey.TODAY -> R.string.session_group_today
+            SessionGroupKey.YESTERDAY -> R.string.session_group_yesterday
+            SessionGroupKey.EARLIER -> R.string.session_group_earlier
+        },
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (group.collapsible) Modifier.clickable(onClick = onToggle) else Modifier)
+            .padding(
+                horizontal = DshSpacing.drawerGroupPadH,
+                vertical = DshSpacing.drawerGroupPadV,
+            )
+            .padding(bottom = DshSpacing.drawerGroupGap),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            modifier = Modifier.weight(1f),
+            style = DshTypography.small,
+            color = dsh.drawerGroupLabel,
+        )
+        if (group.collapsible) {
+            Text(
+                stringResource(
+                    if (expanded) R.string.session_group_collapse else R.string.session_group_expand,
+                    group.count,
+                ),
+                style = DshTypography.caption,
+                color = dsh.labelTertiary,
+            )
+        } else {
+            Icon(
+                Icons.Outlined.Tune,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = dsh.drawerGroupLabel,
+            )
+        }
+    }
+}
+
+/**
+ * 工作区小节标题（「手机会话」「workspace」…）。
+ *
+ * 官方口径：caption 字号 + drawerGroupLabel 颜色，缩进对齐会话行（drawerItemPadH）。
+ */
+@Composable
+private fun SessionSectionLabel(label: String) {
+    val dsh = LocalDshColors.current
+    Text(
+        label,
+        modifier = Modifier.fillMaxWidth().padding(
+            start = DshSpacing.drawerItemPadH,
+            end = DshSpacing.drawerItemPadH,
+            top = DshSpacing.drawerSectionPadTop,
+            bottom = DshSpacing.drawerSectionPadBottom,
+        ),
+        style = DshTypography.caption,
+        color = dsh.drawerGroupLabel,
+    )
 }
 
 /**
@@ -541,15 +650,8 @@ internal fun SessionRow(
                     if (session.running) stringResource(R.string.session_running) else stringResource(R.string.session_idle),
                     session.running,
                 )
-                session.workspaceTitle?.takeIf { it != displayTitle }?.let {
-                    Text(
-                        it,
-                        color = dsh.labelTertiary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = DshTypography.caption,
-                    )
-                }
+                // 工作区名**不再逐行重复**：列表已按工作区聚簇，小节标题承担了它
+                // （官方抽屉的会话行里也没有工作区名）。
             }
         }
         Box {
