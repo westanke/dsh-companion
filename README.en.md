@@ -598,7 +598,7 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.69` (`versionCode` 10094)
+- Version: `v2.2.70` (`versionCode` 10095)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
 - Unit tests: 89 test classes / 926 cases at the last run (0 failures). The counts move with the code, so

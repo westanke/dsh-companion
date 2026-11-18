@@ -545,7 +545,7 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.69`（`versionCode` 10094）
+- 当前版本：`v2.2.70`（`versionCode` 10095）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：89 个测试类 / 926 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次

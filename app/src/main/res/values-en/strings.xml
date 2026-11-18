@@ -92,7 +92,6 @@
     <string name="select_file">Select a regular file</string>
     <string name="connection">Connection</string>
     <string name="endpoint">API endpoint</string>
-    <string name="device">Current device</string>
     <string name="permissions">Permissions</string>
     <!-- Device scope pill labels: follow the UI language; unknown scopes show as-is. -->
     <string name="scope_chat_read">Read chats</string>
@@ -103,6 +102,8 @@
     <string name="scope_settings_read">View settings</string>
     <string name="scope_settings_write">Change settings</string>
     <string name="language">Language</string>
+    <!-- 「语言」这一节里的行标题：不能再写一遍「Language」，否则卡片内外两个同名标题叠着。 -->
+    <string name="language_picker">Interface language</string>
     <string name="chinese">中文</string>
     <string name="english">English</string>
     <string name="language_follow_system">System</string>

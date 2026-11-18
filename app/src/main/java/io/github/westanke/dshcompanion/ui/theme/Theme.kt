@@ -44,7 +44,14 @@ val LocalSemanticColors = staticCompositionLocalOf {
 }
 
 private val Baseline = Typography()
-private val AppTypography = Typography(
+
+/**
+ * 暖调老主题的字号阶梯（衬线标题 + 15/22 正文）。
+ *
+ * 暴露成 `internal` 是给 [LegacyChatTheme] 用的 —— 官方色板包在外壳上时，
+ * 聊天详情页要靠这份阶梯把字号原样还原，见 DshTheme.kt 的注释。
+ */
+internal val AppTypography = Typography(
     displaySmall = Baseline.displaySmall.copy(
         fontFamily = FontFamily.Serif,
         fontSize = 29.sp,
@@ -78,6 +85,20 @@ private val AppTypography = Typography(
 )
 
 /**
+ * 暖调老主题的圆角（4–8dp，见 `design-system/deepseek-harness-android/MASTER.md`）。
+ *
+ * 同样只给 [LegacyChatTheme] 用：官方那套 14/22/26dp 的圆角是「官方模式」的标志，
+ * 但聊天详情页要保持原样，两套圆角不能混。
+ */
+internal val AppShapes = Shapes(
+    extraSmall = RoundedCornerShape(4.dp),
+    small = RoundedCornerShape(6.dp),
+    medium = RoundedCornerShape(8.dp),
+    large = RoundedCornerShape(8.dp),
+    extraLarge = RoundedCornerShape(8.dp),
+)
+
+/**
  * 应用主题。
  *
  * - [darkTheme] 由调用方决定，而不是在这里直接读 `isSystemInDarkTheme()`：
@@ -101,13 +122,7 @@ fun DeepSeekHarnessTheme(
             MaterialTheme(
                 colorScheme = palette.colorScheme(darkTheme),
                 typography = AppTypography,
-                shapes = Shapes(
-                    extraSmall = RoundedCornerShape(4.dp),
-                    small = RoundedCornerShape(6.dp),
-                    medium = RoundedCornerShape(8.dp),
-                    large = RoundedCornerShape(8.dp),
-                    extraLarge = RoundedCornerShape(8.dp),
-                ),
+                shapes = AppShapes,
                 content = content,
             )
         }

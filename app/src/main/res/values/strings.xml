@@ -92,7 +92,6 @@
     <string name="select_file">选择一个普通文件</string>
     <string name="connection">连接</string>
     <string name="endpoint">接口地址</string>
-    <string name="device">当前设备</string>
     <string name="permissions">权限</string>
     <!-- 设备授权 scope 的药丸标签：跟着界面语言走，认不出的新 scope 显示原文。 -->
     <string name="scope_chat_read">读取聊天</string>
@@ -103,6 +102,8 @@
     <string name="scope_settings_read">查看设置</string>
     <string name="scope_settings_write">修改设置</string>
     <string name="language">语言</string>
+    <!-- 「语言」这一节里的行标题：不能再写一遍「语言」，否则卡片内外两个同名标题叠着。 -->
+    <string name="language_picker">界面语言</string>
     <string name="chinese">中文</string>
     <string name="english">English</string>
     <string name="language_follow_system">跟随系统</string>

@@ -308,6 +308,12 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `val LocalSemanticColors` | `ui/theme/Theme.kt` | 连接通/断语义色下发（CompositionLocal） |
 | `internal fun paletteOf(theme: AppTheme): ThemePalette` | `ui/theme/ThemePalettes.kt` | 主题 → 明暗两份色板 + 两套语义色 |
 | `data class ThemePalette` / `data class SemanticColors` | `ui/theme/ThemePalettes.kt` | 一套主题的完整外观 |
+| `fun DshTheme(darkTheme, content)` | `ui/theme/DshTheme.kt` | **DSH 官方主题**（外壳/设置页/会话列表用）：官方色板 + 无衬线字号 + 22/26dp 圆角 |
+| `fun LegacyChatTheme(darkTheme, appTheme, content)` | `ui/theme/DshTheme.kt` | 聊天详情页隔离层：还原改造前的 PAPER/WARM/MIST/INK 色板与衬线字号 |
+| `val LocalDshColors` | `ui/theme/DshColors.kt` | DSH 官方语义色下发（39 个具名字段，浅/深两套） |
+| `internal fun dshColorScheme(dark)` | `ui/theme/DshColors.kt` | DSH 官方色板 → Material3 ColorScheme 映射 |
+| `object DshPalette` / `object DshSpacing` / `object DshMotion` | `ui/theme/DshTokens.kt` | DSH 官方设计 token（色阶 / 间距 / 动效），单一来源 |
+| `object DshTypography` / `val DshShapes` | `ui/theme/DshTypography.kt` | DSH 官方字号阶梯 → Material3 Typography + 圆角阶梯 |
 | `internal enum class PaneMode` | `ui/AdaptiveBreakpoints.kt` | 宽度四档（Compact/Medium/Expanded/Large） |
 | `internal fun paneModeFor(width: Dp): PaneMode` | `ui/AdaptiveBreakpoints.kt` | 纯函数，阈值 600/840/1200 |
 | `internal fun isWideLayout(width: Dp): Boolean` | `ui/AdaptiveBreakpoints.kt` | 等价于改造前的 `maxWidth >= 840.dp` |
@@ -317,6 +323,12 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 > **主题与明暗正交**：`AppTheme` 定色相基调，`InterfaceStyle` 定深浅，组合出 8 份色板。
 > 两份偏好**都进 `HarnessState`**，且都必须出现在 `withPreferences()` 里 ——
 > 漏一处，用户切一次连接就被打回默认（选择器会「自己跳回去」）。
+
+> **两套主题并存（v2.2.70 起）**：外壳、设置页、会话列表走 `DshTheme`（DSH 官方色系）；
+> 会话详情页（`ui/chat/`）走 `LegacyChatTheme`，拿回改造前的 PAPER/WARM/MIST/INK 色板与衬线标题。
+> 两者都由 `AppTheme` + `InterfaceStyle` 决定深浅与色相，因此用户在设置里换主题时，
+> **两边同时变**，不会出现「外壳是官方蓝、聊天页还是旧配色」的割裂感。
+> `AppTheme` 枚举与 PAPER 色板本身一字未动（`AppThemeTest` 钉住逐字段相同）。
 
 ---
 
@@ -343,6 +355,22 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 <!-- interfaces-check:begin -->
 | 符号 | 位置 | 类型 |
 | --- | --- | --- |
+| `fun DshTheme` | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/DshTheme.kt` | function |
+| `fun LegacyChatTheme` | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/DshTheme.kt` | function |
+| `val LocalDshColors` | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/DshColors.kt` | val |
+| `data class DshColors` | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/DshColors.kt` | class |
+| `internal fun dshColorScheme` | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/DshColors.kt` | function |
+| `object DshPalette` | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/DshTokens.kt` | object |
+| `object DshSpacing` | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/DshTokens.kt` | object |
+| `object DshMotion` | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/DshTokens.kt` | object |
+| `object DshTypography` | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/DshTypography.kt` | object |
+| `val DshShapes` | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/DshTypography.kt` | val |
+| `internal fun SettingsSection` | `app/src/main/java/io/github/westanke/dshcompanion/ui/SettingsCards.kt` | function |
+| `internal fun SettingsInfoRow` | `app/src/main/java/io/github/westanke/dshcompanion/ui/SettingsCards.kt` | function |
+| `internal fun SettingsSwitchRow` | `app/src/main/java/io/github/westanke/dshcompanion/ui/SettingsCards.kt` | function |
+| `internal fun SettingsSegmentedRow` | `app/src/main/java/io/github/westanke/dshcompanion/ui/SettingsCards.kt` | function |
+| `internal fun SettingsChipGroup` | `app/src/main/java/io/github/westanke/dshcompanion/ui/SettingsCards.kt` | function |
+| `internal fun SettingsWarningBanner` | `app/src/main/java/io/github/westanke/dshcompanion/ui/SettingsCards.kt` | function |
 | `class DshClient` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClient.kt` | class |
 | `fun health` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClient.kt` | function |
 | `fun pair` | `app/src/main/java/io/github/westanke/dshcompanion/data/DshClient.kt` | function |

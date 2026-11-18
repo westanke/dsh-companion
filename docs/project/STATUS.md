@@ -1,4 +1,37 @@
-- 日期：2026-11-02
+- 日期：2026-11-18
+- **v2.2.70（versionCode 10095，未发）：外壳 / 设置页 / 会话列表改用 DSH 官方观感（#19）**。
+  用户要求把界面改成 dsh-Chat 的模式，两次收敛边界后最终改造三块：
+  **① 应用外壳（44dp 扁平顶栏 + 288dp 推挤式抽屉 + 官方导航面板）② 会话列表页（纯文字会话行，
+  去掉气泡图标底座与分隔线）③ 设置页（每节一张 14dp 圆角填充卡片）**；
+  **会话详情页（`ui/chat/`）完全不动**（用户原话「聊天页继续用我们的」）。
+  实现口径是**两套主题并存**而非全局换色：新增 `ui/theme/DshTokens.kt` / `DshColors.kt` /
+  `DshTypography.kt`（官方 neutral-bluish 色阶 + 品牌蓝 #3964FE/#5686FE + 无衬线字号阶梯，逐值搬自
+  dsh-Chat 的 `lib/design/tokens.dart`）+ `ui/theme/DshTheme.kt`（`DshTheme` 官方接线 /
+  `LegacyChatTheme` 还原老观感）；`ui/ChatScreen.kt` 把详情页包进 `LegacyChatTheme`，
+  于是聊天正文像素级不变，而外壳已是官方观感。`AppTheme` 枚举与 PAPER 色板一字未动
+  （`AppThemeTest` 逐字段钉住）。单测 89 类 / 926 用例全绿，docsCheck 全绿，
+  STRUCTURE 已登记 5 个新文件、INTERFACES 已登记 15 个新符号。
+  **未发版**：需真机（V2080A）确认推挤式抽屉的手感与设置页卡片在 360/412dp 下不溢出。
+  **真机已复验（V2080A / 9540718532001JR，v2.2.70 产物 versionCode 10095）**：经 dsh-remote-bridge
+  配对（`http://192.168.1.126:3090`）连上后逐屏核对 —— ①会话列表页是 44dp 顶栏 + 「会话 / 8 个会话」
+  两行 + 纯文字会话行 + 品牌蓝 `add_circle_outline`，与官方一致；②抽屉是推挤式（整页右移一抽屉宽、
+  浅色无灰幕），**首版抽屉顶部品牌行被状态栏裁切**，已修：`NavigationPanel` 根 Column 加
+  `windowInsetsPadding(statusBars) + windowInsetsPadding(navigationBars)`（抽屉覆盖窗口、需自消费
+  inset，官方抽屉是 SafeArea），复验后品牌行完整、页脚端点也不再压 Home 指示条；
+  ③设置页每节一张 14dp 圆角填充卡片、无边框，浅色/深色两套都对（深色走 appDarkSurface + 深蓝选中态）；
+  ④会话详情页仍是改造前的 PAPER 暖调（衬线标题、薄荷气泡、代码块配色），像素级未动。
+  ⑤截图取证时发现并修掉一处观感冗余：设置页「语言」节的卡片内行标题原本也叫「语言」，与节标题
+  上下叠着；官方 `_SegmentedRow` 恒有行标题，所以新增 strings 键 `language_picker`（中「界面语言」/
+  英「Interface language」）改行标题，节标题仍是「语言」。修完重装机复验通过。
+  ⑥**同机跑官方 dsh-Chat（v1.0.18）逐屏比对**，又抓出四处不一致并按官方修掉：
+  警告条改成官方卡片内 `_WarningBanner` 形态（新建 `SettingsWarningBanner`：settingsWarnBg 底 +
+  settingsWarnFg 字 + 6dp 圆角 + 12/10dp 内距、**无图标**；旧 `Components.kt` 的 `WarningBanner` 被
+  九处复用故不动）、警告条搬进「连接」卡内、**删掉卡片内 8 条分隔线**（官方 `settings_*.dart` 无
+  Divider）、设备信息并进「连接」卡（独立「当前设备」节与 `R.string.device` 一并移除）、
+  深色 `settingsWarnFg` 由 `0xFFC24B00` 修正为官方 `0xFFFFC24B`。新增 token
+  `DshSpacing.inlineCodeRadius` / `settingsWarnPadH/V`；`SettingsWarningBanner` 已登记进 INTERFACES。
+  单测 89 类 / 926 用例全绿，docsCheck 全绿，lintDebug 0 error。
+  工单：[#19](https://github.com/westanke/dsh-companion/issues/19)（补登记）。
 - **v2.2.69（versionCode 10094，已发）：HEIC/AVIF/BMP 发图必失败收口（#17）**。
   用户发截图：发 `280857.heic` 被 `Image type image/heic is not accepted by this deployment.` 打回，
   且失败发生在**点发送之后**（附件已进框、输入框已填），用户看不到能照做的指引。

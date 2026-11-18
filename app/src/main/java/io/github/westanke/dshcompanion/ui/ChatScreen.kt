@@ -24,6 +24,7 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -220,6 +221,7 @@ import io.github.westanke.dshcompanion.ui.chat.SessionOverviewPane
 import io.github.westanke.dshcompanion.ui.chat.NewSessionSheet
 import io.github.westanke.dshcompanion.ui.chat.WorkspaceManagementSheet
 import io.github.westanke.dshcompanion.selectSession
+import io.github.westanke.dshcompanion.ui.theme.LegacyChatTheme
 
 internal fun sessionDisplayTitle(session: ChatSession): String =
     session.title ?: session.workspaceTitle ?: session.cwd.ifBlank { session.id.take(12) }
@@ -240,6 +242,8 @@ fun ChatScreen(state: HarnessState, viewModel: HarnessViewModel, wide: Boolean) 
     var createSheet by remember { mutableStateOf(false) }
     var workspaceSheet by remember { mutableStateOf(false) }
     val selected = state.selectedSessionId
+    // 详情页沿用改造前的明暗口径：界面风格只管外壳，聊天正文保持原样。
+    val legacyDark = state.interfaceStyle.isDark(isSystemInDarkTheme())
 
     // 会话**列表**两条路共用（它是原生资产，换掉没有收益）；只有详情页有两个实现。
     // WebView 版尚未过真机验证，所以由 AppPreferences.useWebChat 决定，默认走原生。
@@ -269,10 +273,19 @@ fun ChatScreen(state: HarnessState, viewModel: HarnessViewModel, wide: Boolean) 
         )
     }
     val detail: @Composable (() -> Unit, Boolean) -> Unit = { onBack, wideFlag ->
-        if (state.useWebChat) {
-            ChatWebScreen(state, viewModel, onBack, Modifier.fillMaxSize())
-        } else {
-            ChatDetail(state, viewModel, onBack, Modifier.fillMaxSize(), wideFlag)
+        // 会话详情页保持改造前的观感：外层壳已经换成 DSH 官方色系，但详情页
+        // （ChatDetail / ChatWebScreen）仍在自己的 `LegacyChatTheme` 里，
+        // 拿到的是原来那套 PAPER/WARM/MIST/INK 色板与衬线标题字号。
+        //
+        // 这是用户明确要求的边界（会话正文「完全不动」）：若不包这一层，
+        // 全局 MaterialTheme 换色后详情页的字色/底色会跟着变，
+        // 代码块、表格、审批卡片这些精心调过的对比度会一起塌。
+        LegacyChatTheme(darkTheme = legacyDark, appTheme = state.appTheme) {
+            if (state.useWebChat) {
+                ChatWebScreen(state, viewModel, onBack, Modifier.fillMaxSize())
+            } else {
+                ChatDetail(state, viewModel, onBack, Modifier.fillMaxSize(), wideFlag)
+            }
         }
     }
 

@@ -1,5 +1,79 @@
 # 开发日志
 
+## v2.2.70 · 外壳 / 设置页 / 会话列表改用 DSH 官方观感（#19）（2026-11-18）
+
+### 基于什么
+v2.2.69。用户要求把界面改成 dsh-Chat（Flutter 端）的模式，随后两次收敛边界：
+「聊天页继续用我们的」→ 会话详情页**完全不动**；「会话列表也应用 dsh-chat的」→ 加进改造面。
+最终改造三块：应用外壳（顶栏 + 抽屉 + 导航面板）、会话列表页、设置页。
+
+### 干了什么
+1. **DSH 官方 token 层**（`ui/theme/DshTokens.kt` / `DshColors.kt` / `DshTypography.kt`）——
+   官方 neutral-bluish 色阶、品牌蓝 `#3964FE`/`#5686FE`、无衬线字号阶梯、间距与动效常量，
+   逐值搬自 dsh-Chat 的 `lib/design/tokens.dart`，作为本工程的单一来源。
+2. **`ui/theme/DshTheme.kt`** —— `DshTheme`（官方接线，外壳/设置页/会话列表用）与
+   `LegacyChatTheme`（把 PAPER/WARM/MIST/INK 色板与衬线标题装回去，供会话详情页用）。
+3. **`ui/App.kt` 重写外壳** —— 44dp 扁平顶栏（自绘 `ShellTopBar`）、**推挤式** 288dp 抽屉
+   （整页右移一抽屉宽 + 左缘 20dp 拖拽热区 + 只有深色才有的灰幕）、官方观感的导航面板
+   （纯文字分区行 + 7dp 连接圆点 + 设备名与端点页脚）。
+4. **`ui/chat/ChatSessionPane.kt` 改官方版式** —— 会话行去掉气泡图标底座与行间分隔线，
+   标题行改 h3 + caption 计数，新建入口改 `add_circle_outline`。
+5. **`ui/SettingsScreen.kt` 改官方卡片式** —— 每节一张「纯填充色 + 14dp 圆角」卡片，
+   构件抽到新建的 `ui/SettingsCards.kt`（分节 / 信息行 / 开关行 / 分段控件 / 药丸组）。
+6. **`ui/ChatScreen.kt` 接线** —— 详情页包进 `LegacyChatTheme`，聊天正文像素级不动。
+7. **设置页向官方再对齐一轮**（同机跑官方 dsh-Chat 逐屏比对后）——
+   - 新建 `SettingsWarningBanner`（`ui/SettingsCards.kt`），照官方 `_WarningBanner`：
+     settingsWarnBg 底 + settingsWarnFg 字 + `DsSpacing.inlineCodeRadius` 6dp 圆角 +
+     12/10dp 内距、**无图标**。**不用** `Components.kt` 那个旧 `WarningBanner`：
+     它带 `WarningAmber` 图标、走语义色 `warnContainer`，且被 PluginsScreen / ConnectScreen /
+     ModelsScreen 等九处复用，改它会波及设置页之外的观感。
+   - 警告条从**卡片外**搬进「连接」卡**内**（官方顺序：InfoRow → WarningBanner → InfoRow → scope chips）。
+   - **删掉卡片内的 8 条分隔线**（`SettingsDivider` 连函数一起删）：官方设置页
+     `grep -rn "Divider" app/lib/ui/settings_*.dart` 无命中，卡片内只有分隔行、没有横线。
+   - 「当前设备」并进「连接」卡（官方把设备信息与 scope 药丸放在同一张卡里），
+     独立的「当前设备」节删除，`R.string.device` 随之在中英两侧一并移除。
+   - 深色 `settingsWarnFg` 由 `0xFFC24B00` 修正为官方 `0xFFFFC24B`（原来那 6 位是错的）。
+
+### 为什么不是「全局换主题」
+会话详情页（`ui/chat/`）是全局 MaterialTheme 的一部分。若直接改全局色板，
+代码块、表格、审批卡片这些调过对比度的部件会跟着变 —— 那是用户明确划出的禁区。
+做法是**两套主题并存**：`AppTheme` + `InterfaceStyle` 决定色相与深浅，
+两边同时生效，用户在设置里换主题时不会出现「外壳是官方蓝、聊天页还是旧配色」的割裂。
+`AppTheme` 枚举与 PAPER 色板本身一字未动（`AppThemeTest` 逐字段钉住）。
+
+### 测了什么
+89 类 / 926 用例 / 0 失败（本次只改表现层，无新纯函数，未新增用例）；docsCheck 全绿；
+STRUCTURE 已登记 5 个新文件、INTERFACES 已登记 15 个新符号。
+**真机复验（V2080A / 9540718532001JR，产物 versionCode 10095）**：经 dsh-remote-bridge 配对连上后
+逐屏核对 —— 会话列表页顶栏 44dp、标题「会话 / 8 个会话」、纯文字会话行、品牌蓝新建按钮，
+与 dsh-Chat 官方版式一致；抽屉为推挤式（整页右移、浅色无灰幕）；设置页每节一张无边框 14dp 圆角
+填充卡片，浅色/深色两套都正确；会话详情页仍是改造前的 PAPER 暖调（衬线标题 + 薄荷气泡），像素级未动。
+**真机抓到一个首版没看出来的缺陷**：抽屉是覆盖在窗口上的，不吃系统栏 inset，导致顶部品牌行
+（BrandMark +「DSH伴侣」）被状态栏裁切。修法是给 `NavigationPanel` 根 Column 加
+`windowInsetsPadding(statusBars) + windowInsetsPadding(navigationBars)`（官方抽屉是 SafeArea，
+语义一致）；顺带把页脚的端点行从 Home 指示条上挪开了。修完复验通过。
+**截图取证时又发现一处观感冗余**：设置页「语言」节的卡片内行标签也写着「语言」，卡片外的节标题
+也是「语言」，两个同名标题上下叠着。官方 `_SegmentedRow` 恒有行标题（不随节标题变），所以改的是
+行标题而不是删行：新增 strings 键 `language_picker`（中「界面语言」/ 英「Interface language」），
+`SettingsScreen.kt` 的语言分段行改用它；节标题仍是「语言」。原 `language` 键保留（连接页语言图标
+的 content-desc 在用）。
+**再同机跑官方 dsh-Chat 做逐屏对照**（官方 v1.0.18 已装在同一台 vivo V2080A 上），又抓出四处
+与官方不一致，已按官方修掉：警告条形态与位置、卡片内分隔线、设备信息归属、深色警告字色。
+本轮新增 token：`DshSpacing.inlineCodeRadius`（6dp）与 `settingsWarnPadH/V`（12/10dp），
+新构件 `SettingsWarningBanner` 已登记进 `docs/project/INTERFACES.md`。
+
+### 仍未做
+会话详情页未换观感（用户明确要求不动）；连接页仍用老色板（不在本次范围）；
+官方色板尚未逐对做 WCAG 校验（与 PAPER 的处理方式一致：先落地、后补测）。
+
+### 依赖
+无（纯客户端改动，不需要新桥能力位）。
+
+### 工单
+[#19](https://github.com/westanke/dsh-companion/issues/19)（补登记：实现先于开单，
+当时误判本机无可用 API 凭据；实际 `~/.config/dsh-git/tokens.conf` 里的 GitHub token 可用，
+且本仓 issue 都在 GitHub 上 —— Gitee 侧 issue 列表为空）。
+
 ## v2.2.69 · HEIC/AVIF/BMP 发图必失败：客户端转码 + 白名单收敛（#17）（2026-11-02）
 
 ### 基于什么

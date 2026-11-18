@@ -1224,6 +1224,29 @@ android {
         //     相反处置。
         //   依赖：无（三件都是纯客户端改动，不需要新桥能力位）。
         //
+        // v2.2.70（versionCode 10095）：**外壳 / 设置页 / 会话列表改用 DSH 官方观感**（2026-11-18）。
+        //   基于什么：v2.2.69。用户要求把界面改成 dsh-Chat（Flutter 端）的模式；随后两次收敛边界：
+        //     「聊天页继续用我们的」→ 会话详情页完全不动；「会话列表也应用 dsh-chat的」→ 加进改造面。
+        //   干了什么：
+        //     ① 新增 DSH 官方 token 层（ui/theme/DshTokens.kt / DshColors.kt / DshTypography.kt）：
+        //        官方 neutral-bluish 色阶、品牌蓝 #3964FE/#5686FE、无衬线字号阶梯、间距与动效常量，
+        //        全部照 dsh-Chat 的 lib/design/tokens.dart 逐值搬过来，作为单一来源。
+        //     ② 新增 ui/theme/DshTheme.kt：DshTheme = 官方接线（外壳/设置页/会话列表）；
+        //        LegacyChatTheme = 把 PAPER/WARM/MIST/INK 色板与衬线标题装回去，供会话详情页用。
+        //     ③ ui/App.kt 重写外壳：44dp 扁平顶栏（自绘 ShellTopBar）、**推挤式** 288dp 抽屉
+        //        （整页右移 + 左缘 20dp 拖拽热区 + 深色才有的灰幕）、官方观感的 NavigationPanel
+        //        （纯文字分区行 + 7dp 连接圆点）。
+        //     ④ ui/chat/ChatSessionPane.kt 改官方版式：会话行去掉气泡图标底座与分隔线，
+        //        标题行改 h3 + caption，新建入口改 add_circle_outline。
+        //     ⑤ ui/SettingsScreen.kt 改官方卡片式：每节一张纯填充色 + 14dp 圆角卡片，
+        //        构件抽到新建的 ui/SettingsCards.kt。
+        //     ⑥ ui/ChatScreen.kt 把详情页包进 LegacyChatTheme —— 聊天正文像素级不动。
+        //   测了什么：89 类 / 926 用例 / 0 失败（未新增用例：本次只改表现层，无新纯函数）；
+        //        docsCheck 全绿；STRUCTURE 已登记 5 个新文件、INTERFACES 已登记 15 个新符号。
+        //   仍未做：会话详情页未换观感（用户明确要求不动）；连接页仍用老色板（不在本次范围）；
+        //        官方色板尚未做 WCAG 逐对校验（与 PAPER 的处理方式一致：先落地、后补测）。
+        //   依赖：无（纯客户端改动，不需要新桥能力位）。
+        //
         // v2.2.69（versionCode 10094）：**HEIC/AVIF/BMP 发图必失败**（2026-11-02，补丁版，#17）。
         //   基于什么：v2.2.68。用户发手机截图 —— 发 280857.heic 被
         //     `Image type image/heic is not accepted by this deployment.` 打回。
@@ -1246,8 +1269,8 @@ android {
         //     版本判断两处对不上，统一改成运行时试解）。
         //   依赖：无（纯客户端改动，不需要新桥能力位）。
         //
-        versionCode = 10094
-        versionName = "2.2.69"
+        versionCode = 10095
+        versionName = "2.2.70"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。

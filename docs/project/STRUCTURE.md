@@ -139,7 +139,7 @@ dsh-companion/
 | 流程与闸门 | `EventDebouncer.kt` / `RequestGate.kt` / `ComposerSendPolicy.kt` | 副作用去抖、请求代际、queue/steer 策略 |
 | 更新 | `UpdateChecker.kt` | 按界面语言分流（中文 Gitee / 英文 GitHub）、下载、SHA-256 校验、调起安装器 |
 
-### 3.3 `ui/`（19 个文件）与 `ui/chat/`（37 个文件）
+### 3.3 `ui/`（20 个文件）与 `ui/chat/`（37 个文件）
 
 `ui/` 是页面级容器与跨页面组件；`ui/chat/` 是会话详情页的全部拆分部件。
 拆分理由是行数预算（800/文件），**不是**新架构 —— 语义与行为在拆之前就等价。
@@ -148,13 +148,17 @@ dsh-companion/
 真正的部件都在兄弟文件里；列表层 `ChatSessionPane.kt`，消息项 `ChatMessageItems.kt`，
 交互卡片 `ChatApprovals.kt`，输入区 `ChatComposer.kt`。
 
-### 3.4 `ui/theme/`（3）· `web/`（2）· `debug/`（2）
+### 3.4 `ui/theme/`（7）· `web/`（2）· `debug/`（2）
 
 | 文件 | 职责 |
 | --- | --- |
 | `ui/theme/Theme.kt` | 应用主题装配（明暗三档 + 配色主题四套 → 选色板、下发语义色） |
 | `ui/theme/ThemePalettes.kt` | 四套配色色板（PAPER/WARM/MIST/INK × light/dark）+ 连接语义色 |
 | `ui/theme/AppFontScale.kt` | 应用内字号缩放（替换 `LocalDensity`） |
+| `ui/theme/DshTokens.kt` | DSH 官方设计 token（色阶 / 品牌色 / 间距 / 动效常量） |
+| `ui/theme/DshColors.kt` | DSH 官方色板（浅/深两套语义色 + 对接 Material3 ColorScheme） |
+| `ui/theme/DshTypography.kt` | DSH 官方字号阶梯与无衬线字体映射到 Material3 Typography |
+| `ui/theme/DshTheme.kt` | 官方主题装配（外壳用）+ LegacyChatTheme（聊天详情页隔离老观感） |
 | `web/ChatWebBridge.kt` | 注入 `assets/chat.html` 的 JS 桥（**已登记的网络例外**） |
 | `web/ActiveChatBridge.kt` | 当前存活的桥实例（Activity 回调落点） |
 | `debug/DiagLog.kt` | 诊断日志单一出口（关了就什么都不做） |
@@ -336,6 +340,7 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/ModelsScreen.kt` | file | 模型与提供商设置页 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/PluginsScreen.kt` | file | 插件清单与启停页 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/SettingsScreen.kt` | file | 设置页（外观/诊断/关于/检查更新） |
+| `app/src/main/java/io/github/westanke/dshcompanion/ui/SettingsCards.kt` | file | 设置页官方卡片式构件 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/SettingsNamespacesScreen.kt` | file | 通用设置表单：命名空间列表 → 按 schema 自动渲染的详情 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/UnsavedChangesDialog.kt` | file | 未保存改动的三个出口：留下、丢弃、保存 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/UpdateCheckSection.kt` | file | 检查更新的一次性流程状态与 UI |
@@ -382,6 +387,11 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/AppFontScale.kt` | file | 应用内字号缩放（替换 LocalDensity） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/Theme.kt` | file | 应用主题装配（明暗三档 + 配色主题） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/ThemePalettes.kt` | file | 四套配色色板与连接语义色 |
+| `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/DshTokens.kt` | file | DSH 官方设计 token（色阶 / 品牌色 / 间距 / 动效） |
+| `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/DshColors.kt` | file | DSH 官方色板（浅深两套）与 Material3 ColorScheme 映射 |
+| `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/DshTypography.kt` | file | DSH 官方字号阶梯与 Material3 Typography 映射 |
+| `app/src/main/java/io/github/westanke/dshcompanion/ui/theme/DshTheme.kt` | file | 官方主题装配与聊天详情页 LegacyChatTheme 隔离层 |
+| `app/src/main/java/io/github/westanke/dshcompanion/ui/SettingsCards.kt` | file | 设置页官方卡片式构件（分节 / 信息行 / 开关行 / 分段 / 药丸组） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/WavHeader.kt` | file | PCM16 → WAV 头封装（16 kHz 单声道） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/AdaptiveBreakpoints.kt` | file | 宽度档位三档纯函数（840dp 具名常量） |
 | `app/src/main/java/io/github/westanke/dshcompanion/web/ActiveChatBridge.kt` | file | 当前存活的 ChatWebBridge（Activity 回调落点） |

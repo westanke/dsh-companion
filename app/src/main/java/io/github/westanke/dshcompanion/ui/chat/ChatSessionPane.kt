@@ -7,6 +7,9 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.widget.Toast
+import io.github.westanke.dshcompanion.ui.theme.DshSpacing
+import io.github.westanke.dshcompanion.ui.theme.DshTypography
+import io.github.westanke.dshcompanion.ui.theme.LocalDshColors
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -60,6 +63,7 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AddCircleOutline
 import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Build
 import androidx.compose.material.icons.outlined.Cancel
@@ -255,22 +259,28 @@ internal fun SessionPane(
     var showArchived by remember { mutableStateOf(false) }
     val canListArchived = supportsArchiveListing(state.bridgeCapabilities)
     val listedSessions = if (showArchived) state.archivedSessions else state.sessions
-    Column(modifier.padding(horizontal = 14.dp)) {
-        // 标题行顶部内距 6dp（issue #8）：此前 16dp 把「会话」大字从应用栏底推远
-        // （真机 dump：TopAppBar 底 → 大字行框顶 = 53px）。鸿蒙版同位置实测收敛到 17px；
-        // Text 节点行框无上空（真机复验：4dp 落地 12px），6dp = 18px，与目标差 1px（3x 屏
-        // 不可感）。列表首屏因此多露约一行。右侧按钮（管理工作区/新建）仍是 48dp 热区。
+    val dsh = LocalDshColors.current
+    Column(modifier.padding(horizontal = DshSpacing.drawerItemPadH)) {
+        // 官方口径：列表区不再堆大标题 + 副标题两层大字号，改成「小标题 + 计数」一行，
+        // 右侧动作贴官方顶栏的 add_circle_outline 口径（24dp 图标、品牌蓝）。
         Row(
-            Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 10.dp),
-            verticalAlignment = Alignment.Bottom,
+            Modifier.fillMaxWidth().padding(
+                top = DshSpacing.drawerSectionPadTop,
+                bottom = DshSpacing.drawerSectionPadBottom + 8.dp,
+            ),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.chat), style = MaterialTheme.typography.headlineMedium)
+                Text(
+                    stringResource(R.string.chat),
+                    style = DshTypography.h3,
+                    color = dsh.labelPrimary,
+                )
                 Text(
                     stringResource(R.string.session_count, state.sessions.size),
-                    modifier = Modifier.padding(top = 3.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(top = 2.dp),
+                    color = dsh.labelTertiary,
+                    style = DshTypography.caption,
                 )
             }
             if (canListArchived) {
@@ -280,21 +290,28 @@ internal fun SessionPane(
                     showArchived = !showArchived
                     if (showArchived) viewModel.loadArchivedSessions()
                 }) {
-                    Text(stringResource(if (showArchived) R.string.show_active_sessions else R.string.show_archived_sessions))
+                    Text(
+                        stringResource(if (showArchived) R.string.show_active_sessions else R.string.show_archived_sessions),
+                        style = DshTypography.small,
+                        color = dsh.labelSecondary,
+                    )
                 }
             }
             if ("chat.write" in state.device?.scopes.orEmpty()) {
                 IconButton(onClick = onManageWorkspaces, enabled = !state.busy) {
-                    Icon(Icons.Outlined.FolderOpen, stringResource(R.string.manage_workspaces))
+                    Icon(
+                        Icons.Outlined.FolderOpen,
+                        stringResource(R.string.manage_workspaces),
+                        tint = dsh.labelSecondary,
+                    )
                 }
-                Surface(
-                    onClick = onCreate,
-                    modifier = Modifier.size(48.dp),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ) {
-                    Icon(Icons.Outlined.Add, stringResource(R.string.new_session), Modifier.padding(12.dp))
+                IconButton(onClick = onCreate, enabled = !state.busy) {
+                    Icon(
+                        Icons.Outlined.AddCircleOutline,
+                        stringResource(R.string.new_session),
+                        tint = dsh.brand,
+                        modifier = Modifier.size(24.dp),
+                    )
                 }
             }
         }
@@ -304,8 +321,8 @@ internal fun SessionPane(
             Text(
                 stringResource(R.string.archived_sessions_hint),
                 modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                style = MaterialTheme.typography.bodySmall,
+                color = dsh.labelTertiary,
+                style = DshTypography.caption,
             )
         }
         if (listedSessions.isEmpty()) {
@@ -317,7 +334,7 @@ internal fun SessionPane(
         } else {
             LazyColumn(
                 Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 24.dp),
+                contentPadding = PaddingValues(bottom = DshSpacing.blockGap),
             ) {
                 items(listedSessions, key = { it.id }) { session ->
                     if (showArchived) {
@@ -339,7 +356,6 @@ internal fun SessionPane(
                         wide = wide,
                     )
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f))
                 }
             }
         }
@@ -369,12 +385,22 @@ internal fun SessionOverviewPane(
         state.sessions.sortedByDescending { it.updatedAt }.take(5)
     }
     val canWrite = "chat.write" in state.device?.scopes.orEmpty()
-    Column(modifier.padding(horizontal = 24.dp, vertical = 28.dp)) {
-        Text(stringResource(R.string.session_overview), style = MaterialTheme.typography.headlineMedium)
+    val dsh = LocalDshColors.current
+    Column(
+        modifier.padding(
+            horizontal = DshSpacing.screenPad,
+            vertical = DshSpacing.settingsPadV,
+        ),
+    ) {
+        Text(
+            stringResource(R.string.session_overview),
+            style = DshTypography.h3,
+            color = dsh.labelPrimary,
+        )
         Row(
-            Modifier.padding(top = 8.dp),
+            Modifier.padding(top = DshSpacing.drawerSearchIconGap),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(DshSpacing.drawerSearchIconGap),
         ) {
             StatusLabel(
                 if (state.eventsConnected) stringResource(R.string.online) else stringResource(R.string.offline),
@@ -388,18 +414,18 @@ internal fun SessionOverviewPane(
                     it,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodySmall,
+                    color = dsh.labelTertiary,
+                    style = DshTypography.caption,
                 )
             }
         }
-        Spacer(Modifier.size(16.dp))
+        Spacer(Modifier.size(DshSpacing.blockGap))
         Text(
             stringResource(R.string.recent_sessions),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodySmall,
+            color = dsh.drawerGroupLabel,
+            style = DshTypography.smallStrong,
         )
-        Spacer(Modifier.size(8.dp))
+        Spacer(Modifier.size(DshSpacing.drawerSearchIconGap))
         if (recent.isEmpty()) {
             EmptyState(
                 Icons.Outlined.ChatBubbleOutline,
@@ -411,11 +437,14 @@ internal fun SessionOverviewPane(
                 Surface(
                     onClick = { viewModel.selectSession(session.id) },
                     shape = MaterialTheme.shapes.medium,
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    color = dsh.settingsSurface,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Row(
-                        Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        Modifier.padding(
+                            horizontal = DshSpacing.settingsCardPadH,
+                            vertical = DshSpacing.settingsCardPadV + 4.dp,
+                        ),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(Modifier.weight(1f)) {
@@ -423,15 +452,16 @@ internal fun SessionOverviewPane(
                                 sessionDisplayTitle(session),
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.titleSmall,
+                                style = DshTypography.baseStrong,
+                                color = dsh.labelPrimary,
                             )
                             session.workspaceTitle?.takeIf { it.isNotBlank() }?.let {
                                 Text(
                                     it,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    style = MaterialTheme.typography.labelSmall,
+                                    color = dsh.labelTertiary,
+                                    style = DshTypography.caption,
                                 )
                             }
                         }
@@ -444,16 +474,16 @@ internal fun SessionOverviewPane(
                         Icon(
                             Icons.AutoMirrored.Outlined.KeyboardArrowRight,
                             contentDescription = null,
-                            modifier = Modifier.padding(start = 8.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = DshSpacing.drawerSearchIconGap),
+                            tint = dsh.labelTertiary,
                         )
                     }
                 }
-                Spacer(Modifier.size(6.dp))
+                Spacer(Modifier.size(DshSpacing.drawerSearchIconGap))
             }
         }
         if (canWrite) {
-            Spacer(Modifier.size(12.dp))
+            Spacer(Modifier.size(DshSpacing.blockGap))
             OutlinedButton(onClick = onCreate) {
                 Icon(
                     Icons.Outlined.Add,
@@ -482,39 +512,28 @@ internal fun SessionRow(
     var renameOpen by remember { mutableStateOf(false) }
     var archiveOpen by remember { mutableStateOf(false) }
     var titleDraft by remember(session.id, displayTitle) { mutableStateOf(displayTitle) }
+    val dsh = LocalDshColors.current
+    // 官方口径（对齐 dsh-Chat 的 SessionsDrawerItem）：纯文字行，**不带气泡图标底座**；
+    // 选中态用品牌蓝字色（浅色官方是 chipSelectedFg #426EFE），不铺色块。
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
+            .clip(MaterialTheme.shapes.small)
             .clickable(onClick = onClick)
-            .background(if (selected) MaterialTheme.colorScheme.surfaceContainer else Color.Transparent)
-            .padding(horizontal = 6.dp, vertical = 7.dp),
+            .padding(horizontal = DshSpacing.drawerItemPadH, vertical = DshSpacing.drawerItemPadV),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Surface(
-            modifier = Modifier.size(36.dp),
-            shape = CircleShape,
-            color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
-        ) {
-            Icon(
-                Icons.Outlined.ChatBubbleOutline,
-                null,
-                modifier = Modifier.padding(9.dp),
-                tint = if (selected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
-            // 平板（wide）下会话列表栏更宽，长标题允许占满两行 ——
-            // 旧的 304.dp 栏里一行必然腰斩（截图里全是 ……），手机端保持单行不动。
+        Column(Modifier.weight(1f)) {
             Text(
                 displayTitle,
                 maxLines = if (wide) 2 else 1,
                 overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.titleMedium,
+                style = DshTypography.base,
+                color = if (selected) dsh.chipSelectedFg else dsh.labelPrimary,
             )
             Row(
                 Modifier.padding(top = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(DshSpacing.drawerSearchIconGap),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (session.pendingInteraction == "approval") ApprovalStatusLabel()
@@ -525,17 +544,17 @@ internal fun SessionRow(
                 session.workspaceTitle?.takeIf { it != displayTitle }?.let {
                     Text(
                         it,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = dsh.labelTertiary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodySmall,
+                        style = DshTypography.caption,
                     )
                 }
             }
         }
         Box {
             IconButton(onClick = { menuExpanded = true }, enabled = enabled) {
-                Icon(Icons.Outlined.MoreVert, stringResource(R.string.session_actions))
+                Icon(Icons.Outlined.MoreVert, stringResource(R.string.session_actions), tint = dsh.labelSecondary)
             }
             DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                 DropdownMenuItem(
@@ -588,29 +607,22 @@ private fun ArchivedSessionRow(
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    Surface(
-        onClick = onClick,
-        enabled = enabled,
-        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
-        modifier = Modifier.fillMaxWidth(),
+    val dsh = LocalDshColors.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.small)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = DshSpacing.drawerItemPadH, vertical = DshSpacing.drawerItemPadV),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 11.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                Icons.Outlined.ChatBubbleOutline,
-                null,
-                modifier = Modifier.size(17.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                sessionDisplayTitle(session),
-                modifier = Modifier.padding(start = 9.dp).weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
+        Text(
+            sessionDisplayTitle(session),
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = DshTypography.base,
+            color = if (selected) dsh.chipSelectedFg else dsh.labelPrimary,
+        )
     }
 }
