@@ -131,6 +131,9 @@ internal fun HarnessViewModel.selectSession(id: String?) {
             selectedSessionId = id,
             history = null,
             liveChat = null,
+            // 实时工具行同理：它属于**某一个会话**（工具调用跨会话共享一条 callId 是没有意义的），
+            // 不清掉的话，切过去会看到上个会话的「正在调用工具」。
+            toolStream = null,
             sessionModels = null,
             commands = emptyList(),
             approvalState = if (id == null) ApprovalUiState.None else ApprovalUiState.Loading,

@@ -24,6 +24,7 @@ import io.github.westanke.dshcompanion.data.DshConnectionException
 import io.github.westanke.dshcompanion.data.FileEntry
 import io.github.westanke.dshcompanion.data.handoffPathOf
 import io.github.westanke.dshcompanion.data.LiveChatState
+import io.github.westanke.dshcompanion.data.ToolStreamState
 import io.github.westanke.dshcompanion.data.RootView
 import io.github.westanke.dshcompanion.data.AgentPreset
 import io.github.westanke.dshcompanion.data.ModelSelection
@@ -361,6 +362,17 @@ data class HarnessState(
     val selectedSessionId: String? = null,
     val history: ChatHistory? = null,
     val liveChat: LiveChatState? = null,
+
+    /**
+     * 实时工具调用（bridge v2.12.0 起）。
+     *
+     * 为什么单独存而不塞进 [liveChat]：两者生命周期不同 ——
+     * `liveChat` 是**正文**的流式态（一次回答的增量文本），一轮结束就被清；
+     * 工具调用是**过程**，可能横跨多轮、并且在正文结束之后才拿到结果。
+     *
+     * 带上 sessionId 是为了切会话时自动失效（见 `HarnessSessionsViewModel.selectSession`）。
+     */
+    val toolStream: ToolStreamState? = null,
 
     /**
      * 「回答被截断」提示**所属的会话**（null = 当前没有这条提示）。

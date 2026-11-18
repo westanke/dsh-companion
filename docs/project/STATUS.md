@@ -1,4 +1,26 @@
 - 日期：2026-11-18
+- **v2.2.73（versionCode 10098，未发）：对齐 bridge v2.12.0 的新契约 —— hasReplyContent + 工具实时事件（#22）**。
+  用户说「桥有更新，对照更新APP」—— 桥**已是最新**（repo / npm / 实装目录 / 运行中的
+  `/api/v1/healthz` 四处都是 2.12.0，无更新可拉），要更新的是 App：2.12.0 有两项**纯新增**契约，
+  App 侧此前完全没接（`grep hasReplyContent` / `grep chat.tool` 均零命中）。
+  ① **hasReplyContent**：`chat.message.committed`（assistant）新增布尔字段。内核在工具执行**之前**
+  就 settle 一条只含 `tool-call` 块的 assistant 消息，于是带工具的回合会提交**多条** assistant
+  消息，只有最后那条含正文；桥此前只送 `role`，客户端收到第一条就当「回答结束」（清流式态、
+  收起过程组、停工具行实时刷新）—— 而工具还没开始跑。App 改为按该字段决定是否收尾：
+  false = 中途提交不收流；**字段缺失 = 老桥 = 保持旧行为**（不当成 false，否则老桥回合永不收尾）。
+  ② **工具实时事件**：`chat.tool.call` / `chat.tool.result`（内核事件原样透传，`error.code` 是内核分类），
+  以及 `chat.message.delta` 的 `tool-call` / `tool-call-end` 两个 kind（**都没有 text**，老解析整帧丢弃）。
+  实现：新增 `data/ChatToolStream.kt`（纯逻辑：帧解析、阶段 preparing→running→done 只前进不倒退、
+  参数**增量追加**（官方 `args.append`，覆盖会让参数只剩最后一段）、去重判据）+
+  根包 `HarnessToolStreamViewModel.kt`（`toolStreamItems` 阶段文案 / `chatItems` 拼装 /
+  `applyToolStreamEntry` 并入状态）；`HarnessState` 新增 `toolStream` 字段（与 `liveChat` 分开 ——
+  工具是过程，可能横跨多轮、结果在正文结束后才到；带 sessionId，切会话自动失效）。
+  阶段文案沿用官方口径「准备调用工具」/「正在调用工具」（中英各 +2 键）。
+  测了什么：**92 类 / 970 用例 / 0 失败**（+22 `ChatToolStreamTest`）；docsCheck 全绿；
+  STRUCTURE 登记 2 个新文件、INTERFACES 登记 13 个新符号；lintDebug 0 error。
+  仍未做：内核错误分类（ASK_CANCELLED 等）只落在明细里，没有单独失败文案；
+  老桥上工具行仍是「等历史刷新才出现」的老行为。
+  工单：[#22](https://github.com/westanke/dsh-companion/issues/22)。
 - **v2.2.72（versionCode 10097，未发）：修右缘一条 216px 宽的「点不到」带（#21）**。
   用户反馈「会话页的当前任务收缩不了」，进一步定位为「点标题能收起、点右端箭头收不了」。
   根因在**手机端抽屉灰幕**：`ui/App.kt` 的灰幕 Box 带 `.clickable(enabled = drawerOpen)`，

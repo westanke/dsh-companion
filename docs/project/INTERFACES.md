@@ -147,6 +147,15 @@ internal fun eventsUrl(): HttpUrl        // <endpoint>/events
   `turn/end` / `step/end` 不作为聊天卡片渲染。
 - 断档判定在 `ChatSeqMonitor`：`incoming > last + 1` 才算断档；重复与倒退交给去重。
 - `seq` 只表示**会话持久事件序号**；流式 delta 不带它（bridge ADR-0008）。
+- **bridge v2.12.0 新增两类帧**（App 侧消费点在 `data/ChatToolStream.kt`）：
+  - `chat.tool.call` —— 工具开始执行，载荷 `{callId, name, arguments, turn, step}`（内核 `tool/call` 原样透传）；
+  - `chat.tool.result` —— 工具结果，载荷 `{turn, step, message, error?}`，`error.code` 是**内核分类**
+    （`ASK_CANCELLED` / `TOOL_NOT_STARTED` 等），不是桥的枚举。
+  - `chat.message.delta` 另加两个 kind：`tool-call`（参数还在流式生成）与 `tool-call-end`（参数定稿），
+    **两者都没有 `text`** —— 老客户端按未知 kind 忽略即可。
+  - `chat.message.committed` 的 assistant 帧多一个 `hasReplyContent` 布尔：false = 这条只是中途提交
+    （内核在工具执行前就 settle 了只含 tool-call 块的 assistant 消息），客户端**不要**在这里收尾。
+    字段缺失 = 老桥 = 保持旧行为。
 
 ### 3.3 能力位与必需项
 
@@ -264,6 +273,7 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `class HarnessViewModel(application: Application) : AndroidViewModel(application)` | `HarnessViewModel.kt` | 唯一 ViewModel，持有 state 与跨域基础设施 |
 | 各域扩展函数（`fun HarnessViewModel.xxx()`） | `HarnessConnectionViewModel.kt` / `HarnessSessionsViewModel.kt` / `HarnessFilesViewModel.kt` / `HarnessInteractionsViewModel.kt` / `HarnessAttachmentsViewModel.kt` / `HarnessJobsViewModel.kt` / `HarnessPluginsViewModel.kt` / `HarnessDiagViewModel.kt` / `HarnessTruncationViewModel.kt` | 按域拆分的动作集；调用方写法与成员函数一致 |
 | `HarnessEventRules` 纯函数 | `HarnessEventRules.kt` | 事件帧与输入行的判定（可单测） |
+| `fun HarnessState.toolStreamItems(...)` / `fun HarnessState.chatItems(...)` / `fun HarnessViewModel.applyToolStreamEntry(...)` | `HarnessToolStreamViewModel.kt` | 实时工具调用（bridge v2.12.0）→ 会话详情页的那几行 |
 | `HarnessOperations` 扩展 | `HarnessOperations.kt` | 拿活跃连接跑请求；无连接时明确提示 |
 
 ### 4.3 协议映射与展示（`data/Chat*`）
@@ -281,6 +291,9 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `data class ChatDelta(...)` | `data/ChatModels.kt` | 流式增量帧 |
 | `data class LiveChatState(...)` | `data/ChatModels.kt` | 流式快照状态 |
 | `data class ChatTurnFailure(...)` | `data/ChatModels.kt` | 终局失败（限流/配额/密钥） |
+| `enum class ToolStreamPhase` / `data class ToolStreamEntry(...)` / `data class ToolStreamState(...)` | `data/ChatToolStream.kt` | 实时工具流的阶段与状态（preparing / running / done） |
+| `fun toolStreamEntryFromFrame(type, data, time): ToolStreamEntry?` | `data/ChatToolStream.kt` | 事件帧 → 一次实时工具调用（`chat.tool.call` / `chat.tool.result` / delta 的 tool-call） |
+| `fun hasReplyContentOf(data): Boolean?` | `data/ChatToolStream.kt` | 这条 assistant 消息是不是**最终回答**（null = 桥没说，保持旧行为） |
 
 ### 4.4 WebView 桥（`web/`）
 
@@ -384,6 +397,19 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `internal fun visibleRowsOf` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SessionGroups.kt` | function |
 | `internal fun buildSessionListEntries` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SessionGroups.kt` | function |
 | `internal fun drawerScrimState` | `app/src/main/java/io/github/westanke/dshcompanion/ui/DrawerScrim.kt` | function |
+| `enum class ToolStreamPhase` | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatToolStream.kt` | class |
+| `data class ToolStreamEntry` | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatToolStream.kt` | class |
+| `data class ToolStreamState` | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatToolStream.kt` | class |
+| `internal fun toolStreamEntryFromFrame` | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatToolStream.kt` | function |
+| `internal fun toolStreamDisplayItem` | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatToolStream.kt` | function |
+| `internal fun hasReplyContentOf` | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatToolStream.kt` | function |
+| `internal fun toolCallIds` | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatToolStream.kt` | function |
+| `internal fun toolResultCallIds` | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatToolStream.kt` | function |
+| `internal fun withoutToolCalls` | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatToolStream.kt` | function |
+| `internal fun toolStreamItems` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessToolStreamViewModel.kt` | function |
+| `internal fun chatItems` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessToolStreamViewModel.kt` | function |
+| `internal fun toolStreamLabel` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessToolStreamViewModel.kt` | function |
+| `internal fun applyToolStreamEntry` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessToolStreamViewModel.kt` | function |
 | `internal data class DrawerScrimState` | `app/src/main/java/io/github/westanke/dshcompanion/ui/DrawerScrim.kt` | class |
 | `internal enum class SessionGroupKey` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SessionGroups.kt` | class |
 | `internal data class SessionGroup` | `app/src/main/java/io/github/westanke/dshcompanion/ui/chat/SessionGroups.kt` | class |

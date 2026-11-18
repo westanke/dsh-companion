@@ -120,6 +120,7 @@ dsh-companion/
 | `HarnessNamespacesViewModel.kt` | 通用设置命名空间：加载与按路径提交（老桥 404/403 静默降级） |
 | `HarnessDiagViewModel.kt` | 把偏好开关同步给 `DiagLog` |
 | `HarnessTruncationViewModel.kt` | 一轮边界事件：落「回答被截断」提示或清上一轮的 |
+| `HarnessToolStreamViewModel.kt` | 实时工具调用：把 bridge 的工具帧变成会话详情页里的那几行 |
 
 ### 3.2 `data/`（54 个文件）
 
@@ -132,7 +133,7 @@ dsh-companion/
 | 协议辅助 | `ChunkPlan.kt` / `CronHint.kt` / `WavHeader.kt` | 分块计划与切块、cron 表达式人话解析、PCM16 → WAV 封装 |
 | 能力策略 | `SchedulePolicy.kt` | 定时任务开关走哪个动词（内核无暂停 → 停用=删除）、409/404 语义分类、列表展示顺序 |
 | 数据模型 | `Models.kt` / `ChatModels.kt` / `ConnectionModels.kt` / `JobViews.kt` / `SessionFileRefs.kt` / `SessionStats.kt` | 响应/请求模型、展示项、连接地基契约、任务与文件引用 |
-| 协议映射 | `ChatPresentation.kt` / `ChatHistoryMapping.kt` / `ChatDisplayGroups.kt` / `ChatVisibleItems.kt` / `ChatContentParts.kt` / `ChatToolBlocks.kt` / `ChatToolPresentation.kt` / `ChatJson.kt` / `ChatLinkTarget.kt` / `ChatPathLinks.kt` / `ChatForkPoint.kt` / `ChatRetry.kt` / `ChatSeqMonitor.kt` / `ChatTimeLabel.kt` / `ChatHandoff.kt` / `ChatDeliverableCards.kt` | 历史事件 → 展示项、工具块、链接、分叉、重试、断档、时间、交接、交付物 |
+| 协议映射 | `ChatPresentation.kt` / `ChatHistoryMapping.kt` / `ChatDisplayGroups.kt` / `ChatVisibleItems.kt` / `ChatContentParts.kt` / `ChatToolBlocks.kt` / `ChatToolPresentation.kt` / `ChatToolStream.kt` / `ChatJson.kt` / `ChatLinkTarget.kt` / `ChatPathLinks.kt` / `ChatForkPoint.kt` / `ChatRetry.kt` / `ChatSeqMonitor.kt` / `ChatTimeLabel.kt` / `ChatHandoff.kt` / `ChatDeliverableCards.kt` | 历史事件 → 展示项、工具块、链接、分叉、重试、断档、时间、交接、交付物 |
 | 连接 | `ConnectionCoordinator.kt` / `ConnectionLiveness.kt` / `ConnectionShare.kt` / `BridgeCapabilities.kt` | 多地址探活选路、此刻通不通、配置导入编解码、能力位解析 |
 | 存储 | `SecureConnectionStore.kt` / `AndroidConnectionStorage.kt` / `HostStore.kt` / `AppPreferences.kt` | 凭据与主机（密文）、偏好（明文）、键值抽象 |
 | 展示支撑 | `HtmlPreview.kt` / `PreviewKind.kt` / `GenUiBlocks.kt` / `MentionQuery.kt` / `ErrorMessages.kt` / `Trajectory.kt` | HTML 结构抽取、预览路径、dsh-ui 卡片、@ 提及、错误文案、轨迹 |
@@ -264,6 +265,7 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessSessionsViewModel.kt` | file | 会话域：会话增删改查、工作区、发消息、会话文件与模型选择 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessSpeechViewModel.kt` | file | 语音输入域：目录、转写、取消与重试 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessTruncationViewModel.kt` | file | 一轮边界事件：落「回答被截断」提示或清掉上一轮的 |
+| `app/src/main/java/io/github/westanke/dshcompanion/HarnessToolStreamViewModel.kt` | file | 实时工具调用 → 会话详情页展示项（阶段文案、实时行与历史行去重） |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessViewModel.kt` | file | 唯一 ViewModel：持有 HarnessState 与跨域共用基础设施 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessWsPortsViewModel.kt` | file | WS 装配层：transport 生命周期、三端口的自适应选路（WS 优先/REST 兜底）、事件通道收敛与 listener 主体 |
 | `app/src/main/java/io/github/westanke/dshcompanion/MainActivity.kt` | file | 应用入口 Activity（Compose 宿主、生命周期、Intent 处理） |
@@ -288,6 +290,7 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatTimeLabel.kt` | file | 消息时间戳展示文案（今天/今年/更早三档） |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatToolBlocks.kt` | file | 工具调用专用渲染视图模型与分发 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatToolPresentation.kt` | file | 工具调用展示口径：动作短语、合并、详情与耗时 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/ChatToolStream.kt` | file | 实时工具流（bridge v2.12.0）：帧解析、阶段推进、增量参数与去重判据 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ChatVisibleItems.kt` | file | 历史里该显示的那部分：滤思考、按开关决定是否显示上下文注入 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ComposerSendPolicy.kt` | file | 智能体运行中提交消息走 queue 还是 steer |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ConnectionCoordinator.kt` | file | 多地址探活选路与全失败时的逐条原因 |

@@ -39,6 +39,9 @@
     <string name="no_readable_messages">No readable message content</string>
     <string name="context_injection">Context injection</string>
     <string name="tool_call">Tool call</string>
+    <!-- 实时工具行的阶段文案（bridge v2.12.0 的 chat.tool.call / chat.tool.result） -->
+    <string name="tool_preparing">Preparing tool calls</string>
+    <string name="tool_running">Calling tools</string>
     <string name="send">Send</string>
     <string name="steer">Steer</string>
     <string name="steer_requires_input">Type in the composer first, then send it into the running turn from here</string>

@@ -1,6 +1,7 @@
 # DSH WebUI 功能对等矩阵
 
-- 最后更新：**2026-10-29**（对应 v2.2.57 未发版的 BFF 三项：分块上传 / 定时任务 / 官方语音输入；已按桥侧定稿收紧能力位单值与停用语义。
+- 最后更新：**2026-11-18**（对应 v2.2.73 未发版：对齐 bridge v2.12.0 的新契约 —— `hasReplyContent` + 工具调用实时事件 `chat.tool.call` / `chat.tool.result` 与 delta 的 `tool-call` / `tool-call-end`）。
+  更早一版：**2026-10-29**（对应 v2.2.57 未发版的 BFF 三项：分块上传 / 定时任务 / 官方语音输入；已按桥侧定稿收紧能力位单值与停用语义。
   桥侧 REST BFF 契约见姊妹仓 `dsh-remote-bridge/docs/project/BFF-REST-CONTRACT.md`；
   本轮三条都按「老桥 404 → 入口隐藏、不整页报错」实现，并用 `DshClientBffTest` 钉住退化行为）。
   Android 列按本轮代码复核；插件 API 列本轮**已复核**（姊妹仓 `dsh-remote-bridge` 同期完成 C 批，见其 `CHANGELOG-DEV.md`）。
@@ -11,7 +12,7 @@
 | 设备身份、scope 与根授权 | 已有 | Android 15 已读取真实设备、7 scope 与授权根 | in-progress |
 | 会话列表与创建 | 已有，含 DSH 工作区发现/创建 | 可选择已有工作区，或从授权根浏览工作目录、登记新 DSH 工作区并创建会话 | done |
 | 历史、发送、steer、取消 | 已有 | 历史投影与 Markdown 已完成，真实消息发送/回复已通过；steer 与取消仍待真实运行验收（v2.2.17 起 steer 入口在顶栏 `⋯` 菜单，仍为固定插话） | in-progress |
-| 聊天实时事件 | 已有稳定文本/思考 delta；**`seq` 语义单一化**（只表示持久事件序号，流式 delta 不再输出它，ADR-0008）；**订阅基线** `chat.session.snapshot`（带 `cursor`） | 真实 Oracle listener 已验证按 token 连续增长并在完成后用 REST 历史收口；**断档检测**：跳号或本地落后于基线时自动重取历史（`ChatSeqMonitor`）；网络切换待验收 | in-progress |
+| 聊天实时事件 | 已有稳定文本/思考 delta；**`seq` 语义单一化**（只表示持久事件序号，流式 delta 不再输出它，ADR-0008）；**订阅基线** `chat.session.snapshot`（带 `cursor`）；**bridge v2.12.0 起**：工具调用实时事件 `chat.tool.call` / `chat.tool.result` 原样透传（`error.code` 是内核分类），`chat.message.delta` 增 `tool-call` / `tool-call-end` 两个 kind，`chat.message.committed` 增 `hasReplyContent`（区分「中途提交」与「最终回答」） | 真实 Oracle listener 已验证按 token 连续增长并在完成后用 REST 历史收口；**断档检测**：跳号或本地落后于基线时自动重取历史（`ChatSeqMonitor`）；网络切换待验收。**v2.2.73 起接入 2.12.0 新契约**：工具行在运行期可见（「准备调用工具」/「正在调用工具」阶段文案），过程组不再在工具开跑前就收起（按 `hasReplyContent` 收尾，字段缺失=老桥=旧行为）；网络切换待验收 | in-progress |
 | 文件列表、读写和 ETag | 已有 | 已实现行号文本编辑、Markdown 源码/预览与 ETag 保存；冲突仍待端到端验收 | in-progress |
 | 新建、移动、上传、下载、软删除、恢复 | 已有 | 已实现并有 MockWebServer/服务端回归，移动 UI 动作待验收。**v2.2.44 真机验收报的「新建文件静默失败」已现场结案：不是 App 缺陷，是验收时点击落空** —— 输入文件名后软键盘弹起让对话框上移 426px，用弹起前的坐标点「创建」落在对话框外，触发 dismiss，于是一个请求都没发（详见 `PITFALLS.md` §键盘弹起让对话框上移）。**加固已落地**：早退点不再静默 `return` 而是抛错走全局 snackbar（真机复验：同名冲突会显示「同名文件已经存在了」）；`createEntry` 与「请求失败 / 连接缺失 / 代际丢弃」四处补了诊断日志 | done |
 | 会话搜索、重命名与分叉 | 重命名与分叉已有（`POST …/fork` 支持 `atSeq`）；搜索未进入 v1 | 会话子项菜单可重命名并分叉；**另可从某条用户消息分叉**（`atSeq`，入口在时间戳行，刻意不占长按 —— 长按归选词） | in-progress |

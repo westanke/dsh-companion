@@ -39,6 +39,9 @@
     <string name="no_readable_messages">暂无可显示的正文</string>
     <string name="context_injection">上下文注入</string>
     <string name="tool_call">工具调用</string>
+    <!-- 实时工具行的阶段文案（bridge v2.12.0 的 chat.tool.call / chat.tool.result） -->
+    <string name="tool_preparing">准备调用工具</string>
+    <string name="tool_running">正在调用工具</string>
     <string name="send">发送</string>
     <string name="steer">追加引导</string>
     <string name="steer_requires_input">先在输入框写好内容，再从这里送进正在运行的那一轮</string>

@@ -160,12 +160,9 @@ import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.mikepenz.markdown.m3.Markdown
 import com.mikepenz.markdown.m3.markdownTypography
@@ -182,7 +179,7 @@ import io.github.westanke.dshcompanion.data.ChatContentParts
 import io.github.westanke.dshcompanion.data.ChatAttachment
 import io.github.westanke.dshcompanion.data.ChatTurnFailure
 import io.github.westanke.dshcompanion.data.localizedErrorRes
-import io.github.westanke.dshcompanion.truncationItems
+import io.github.westanke.dshcompanion.chatItems
 import io.github.westanke.dshcompanion.data.ChatDisplayItem
 import io.github.westanke.dshcompanion.data.ChatItemKind
 import io.github.westanke.dshcompanion.data.ToolCallDetail
@@ -387,7 +384,7 @@ internal fun ChatDetail(
     val knownFilePaths = remember(state.history) {
         sessionFileList(state.history).map { it.path }
     }
-    val displayItems = (historyItems + liveItems + state.truncationItems(selected.id)).map { item ->
+    val displayItems = state.chatItems(viewModel, selected.id, historyItems, liveItems).map { item ->
         if (item.kind == ChatItemKind.USER || item.kind == ChatItemKind.ASSISTANT) {
             val linked = linkifyKnownFiles(item.body, knownFilePaths)
             if (linked == item.body) item else item.copy(body = linked)

@@ -6,13 +6,16 @@ import io.github.westanke.dshcompanion.data.ChatSession
 import io.github.westanke.dshcompanion.data.DshApiException
 import io.github.westanke.dshcompanion.data.LiveChatState
 import io.github.westanke.dshcompanion.data.SeqVerdict
+import io.github.westanke.dshcompanion.data.ToolStreamState
 import io.github.westanke.dshcompanion.data.WorkspaceEvent
 import io.github.westanke.dshcompanion.data.baselineBehind
 import io.github.westanke.dshcompanion.data.chatDelta
 import io.github.westanke.dshcompanion.data.chatTurnFailure
+import io.github.westanke.dshcompanion.data.hasReplyContentOf
 import io.github.westanke.dshcompanion.data.localizedErrorRes
 import io.github.westanke.dshcompanion.data.parseBridgeCapabilities
 import io.github.westanke.dshcompanion.data.seqVerdict
+import io.github.westanke.dshcompanion.data.toolStreamEntryFromFrame
 import io.github.westanke.dshcompanion.debug.DiagLog
 import io.github.westanke.dshcompanion.data.ChatContentParts
 import io.github.westanke.dshcompanion.data.DshClient
@@ -73,6 +76,16 @@ import kotlinx.serialization.json.contentOrNull
  * 搬家只是为了腾出 VM 的行数预算、并让两条通道共用同一套语义。
  */
 internal fun HarnessViewModel.handleWorkspaceEvent(event: WorkspaceEvent) {
+                // 工具调用的实时帧（bridge v2.12.0 起）：`chat.tool.call` / `chat.tool.result`，
+                // 以及 `chat.message.delta` 里 kind 为 `tool-call` / `tool-call-end` 的那种。
+                //
+                // 最后一种**没有 `text`**（正文在 `argumentsDelta` / `arguments` 里），
+                // 老的 `chatDelta()` 因为「text 必填」会把它们整帧丢掉 —— 这里单独接，
+                // 不去动老的正文路径（`tool-call` / `tool-call-end` 两个 kind 老路径直接忽略，
+                // 这也正是 bridge 文档要求的「老客户端必须忽略未知 kind，不得当文本渲染」）。
+                toolStreamEntryFromFrame(event.type, event.data as? JsonObject, event.time)?.let { entry ->
+                    applyToolStreamEntry(event.dataString("sessionId"), entry)
+                }
                 val delta = event.chatDelta()
                 if (delta != null) {
                     if (mutableState.value.selectedSessionId == delta.sessionId) {
@@ -148,7 +161,21 @@ internal fun HarnessViewModel.handleWorkspaceEvent(event: WorkspaceEvent) {
                                 if (event.dataString("role") == "assistant") {
                                     val turn = event.dataInt("turn")
                                     val step = event.dataInt("step")
-                                    if (turn != null && step != null) liveFinalizeTarget = LiveKey(sessionId, turn, step)
+                                    // `hasReplyContent` 判这一条 assistant 消息是不是**最终回答**
+                                    // （bridge v2.12.0 起才有这个字段）。
+                                    //
+                                    // 为什么需要它：内核在**工具执行之前**就把只含 tool-call 块的
+                                    // assistant 消息 settle 落库 —— 一次带工具的回合会提交**多条**
+                                    // assistant 消息，只有最后那条含正文。此前 App 收到第一条就
+                                    // 当「回答结束」（清流式态、收起过程组、停工具行实时刷新），
+                                    // 而那时工具**还没开始跑**。
+                                    //
+                                    // false = 中途提交 ⇒ 不收尾；null = 老桥没说 ⇒ 保持旧行为
+                                    // （当成 false 会让老桥上的回合永远不收尾，把兼容做反了）。
+                                    val hasReplyContent = hasReplyContentOf(event.data as? JsonObject)
+                                    if (hasReplyContent != false && turn != null && step != null) {
+                                        liveFinalizeTarget = LiveKey(sessionId, turn, step)
+                                    }
                                 }
                                 scheduleChatRefresh()
                             }
@@ -224,6 +251,15 @@ internal fun HarnessViewModel.handleWorkspaceEvent(event: WorkspaceEvent) {
                             chatSessionRefreshPending = true
                             scheduleChatRefresh()
                             if (sessionId == mutableState.value.selectedSessionId) refreshPendingApprovals()
+                        }
+                        // 工具调用的实时帧（bridge v2.12.0 起）：这里只负责让**历史**跟上 ——
+                        // 实时那一行由上面的 `applyToolStreamEntry` 顶着。
+                        //
+                        // 历史里补上之后，同一次调用就有两行（实时行 + 历史行），
+                        // 去重在展示层做（`HarnessToolStreamViewModel.chatItems`）：
+                        // 历史里连结果都齐了，实时行自己撤掉。
+                        "chat.tool.call", "chat.tool.result" -> {
+                            scheduleChatRefresh()
                         }
                         else -> if (sessionId == mutableState.value.selectedSessionId) scheduleChatRefresh()
                     }

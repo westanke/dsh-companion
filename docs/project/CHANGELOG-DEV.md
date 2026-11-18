@@ -1,5 +1,56 @@
 # 开发日志
 
+## v2.2.73 · 对齐 bridge v2.12.0 的新契约：hasReplyContent + 工具实时事件（#22）（2026-11-18）
+
+### 基于什么
+服务端插件 `dsh-remote-bridge` 已发到 **v2.12.0**（仓库 / npm / 实装目录 / 运行中的 `/api/v1/healthz`
+四处一致，无更新可拉）。用户说「桥有更新，对照更新APP」—— 桥已是最新，要更新的是 App：
+2.12.0 有两项**纯新增**契约，App 侧此前完全没接（`grep hasReplyContent` / `grep chat.tool` 均零命中）。
+
+### 现象与根因
+1. **一次带工具的回合，过程组在工具还没开始跑的时候就收起了**：内核 `dsh-agent-loop` 在工具执行
+   **之前**就 settle 一条只含 `tool-call` 块的 assistant 消息，于是一次回合会提交**多条**
+   assistant 消息，只有最后那条含正文。桥此前只送 `role`，客户端收到第一条就当「回答结束」
+   （清流式态、收起过程组、停掉工具行实时刷新）—— 而工具还没开始跑。
+2. **运行期看不见「正在跑哪个工具」**：内核的 `tool/call` / `tool/result` 在桥里落进兜底分支，
+   `event.data` 整段被丢，客户端只能靠 400ms 防抖重拉历史才看得到工具行。
+3. **`tool-call-delta` 帧被整帧丢弃**：内核在 assistant/chunk 里发参数流式增量（官方 preparing 态的
+   数据源），而旧的 delta 解析只认 text / reasoning 两种 kind。
+
+### 干了什么
+- **新增 `data/ChatToolStream.kt`（纯逻辑、无 Compose）**：帧解析、阶段推进
+  （`preparing → running → done`，**只前进不倒退**）、参数**增量追加**（官方 `applyDelta` 是
+  `args.append`；覆盖会让参数只剩最后一段）、结果与失败分类（`error.code` 是内核分类）、
+  以及实时行与历史行的去重判据。
+- **新增根包 `HarnessToolStreamViewModel.kt`**：`HarnessState.toolStreamItems`（阶段文案）、
+  `HarnessState.chatItems`（历史 + 实时工具行 + 流式正文 + 截断提示，**同一次调用只出现一行**）、
+  `HarnessViewModel.applyToolStreamEntry`（并入状态，只收当前会话的帧）。
+- **`HarnessState` 新增 `toolStream` 字段**：单独存而不塞进 `liveChat` —— `liveChat` 是正文流式态
+  （一轮结束就被清），工具调用是过程，可能横跨多轮、结果在正文结束后才到；带 `sessionId`
+  便于切会话自动失效（`selectSession` 一并清掉）。
+- **`HarnessWsPortsViewModel`**：`chat.message.committed` 分支改为按 `hasReplyContent` 决定是否收尾
+  （false = 中途提交不收流；**字段缺失 = 老桥 = 保持旧行为**，不当成 false —— 那会让老桥的回合
+  永远不收尾，把兼容做反了）；新增 `chat.tool.call` / `chat.tool.result` 分支让历史跟上；
+  delta 的 `tool-call` / `tool-call-end` 帧在 `chatDelta()` 之外单独接（那两种帧**没有 text**，
+  老的正文解析会整帧丢掉）。
+- **阶段文案沿用官方口径**：「准备调用工具」/「正在调用工具」（中英各 +2 条字符串键，
+  对应官方 `message.stepProcess.prepare.tools` / `message.stepProcess.tools`）。
+
+### 测了什么
+- **92 类 / 970 用例 / 0 失败**（+22）：新增 `app/src/test/.../data/ChatToolStreamTest.kt`，
+  钉死参数增量追加、定稿后不再被增量盖掉、阶段只前进不倒退、`hasReplyContent` 缺失返回
+  **null**（不是 false）、去重判据（历史里连结果都有才算让位）、展示项形状。
+- `docsCheck` 全绿；`STRUCTURE.md` 登记 2 个新文件、`INTERFACES.md` 登记 13 个新符号；
+  `lintDebug` 0 error。
+
+### 仍未做
+- 内核错误分类（`ASK_CANCELLED` / `TOOL_NOT_STARTED` 等）只落在明细里，没有单独的失败文案。
+- 老桥上工具行仍是「等历史刷新才出现」的老行为（桥侧升级到 2.12.0 后才有实时行）。
+
+### 依赖
+- bridge **≥ 2.12.0** 才有实时工具行与 `hasReplyContent`；老桥行为不变（字段缺失即旧行为）。
+- GitHub issue **#22**（[契约] 对齐 bridge v2.12.0）。
+
 ## v2.2.72 · 修右缘一条 216px 宽的「点不到」带（#21）（2026-11-18）
 
 ### 基于什么

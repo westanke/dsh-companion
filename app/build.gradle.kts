@@ -1224,6 +1224,38 @@ android {
         //     相反处置。
         //   依赖：无（三件都是纯客户端改动，不需要新桥能力位）。
         //
+        // v2.2.73（versionCode 10098）：**对齐 bridge v2.12.0 的新契约：hasReplyContent + 工具实时事件**（2026-11-18，#22）。
+        //   基于什么：v2.2.72。服务端插件 dsh-remote-bridge 已发到 v2.12.0（repo / npm / 实装 / 运行中
+        //     四处一致），其中两项是**纯新增**的契约，App 侧此前完全没接：
+        //     ① chat.message.committed（assistant）新增 hasReplyContent 布尔；
+        //     ② 工具调用实时事件 chat.tool.call / chat.tool.result，以及 chat.message.delta 的
+        //        tool-call / tool-call-end 两个 kind。
+        //   干了什么：
+        //     ① 新增 data/ChatToolStream.kt（纯逻辑、无 Compose）：帧解析（toolStreamEntryFromFrame）、
+        //        阶段推进（preparing → running → done，只前进不倒退）、参数**增量追加**（官方 applyDelta
+        //        是 args.append，覆盖会让参数只剩最后一段）、结果与失败分类、以及实时行与历史行的
+        //        去重判据（历史里**连 tool/result 都有**了，实时行才撤；历史行只有调用还没结果时，
+        //        它本身是残缺的，留着实时行顶着才完整）。
+        //     ② 新增根包 HarnessToolStreamViewModel.kt：HarnessState.toolStreamItems（阶段文案）、
+        //        HarnessState.chatItems（历史 + 实时工具行 + 流式正文 + 截断提示，同一次调用只出现一行）、
+        //        HarnessViewModel.applyToolStreamEntry（并入状态，只收当前会话的帧）。
+        //     ③ HarnessState 新增 toolStream 字段：单独存而不塞进 liveChat —— liveChat 是正文流式态
+        //        （一轮结束就被清），工具调用是过程，可能横跨多轮、结果在正文结束后才到；带 sessionId
+        //        便于切会话自动失效（selectSession 一并清掉）。
+        //     ④ HarnessWsPortsViewModel：chat.message.committed 分支改为按 hasReplyContent 决定是否收尾
+        //        （false = 中途提交不收流；字段缺失 = 老桥 = 保持旧行为，不当成 false）；
+        //        chat.tool.call / chat.tool.result 分支让历史跟上（实时行由状态顶着）；
+        //        delta 的 tool-call / tool-call-end 帧在 chatDelta 之外单独接（那两种帧没有 text，
+        //        老的正文解析会整帧丢掉）。
+        //     ⑤ 阶段文案沿用官方口径：「准备调用工具」/「正在调用工具」（中英各 +2 条字符串键）。
+        //   测了什么：92 类 / 970 用例 / 0 失败（+22：ChatToolStreamTest 钉死参数增量追加、阶段只前进
+        //        不倒退、hasReplyContent 缺失返回 null、去重判据、以及展示项形状）；
+        //        docsCheck 全绿；STRUCTURE 已登记 2 个新文件、INTERFACES 已登记 13 个新符号；
+        //        lintDebug 0 error。
+        //   仍未做：内核错误分类（ASK_CANCELLED 等）只落在明细里，没有单独的失败文案；
+        //        老桥上工具行仍是「等历史刷新才出现」的老行为（桥侧升级后才有实时行）。
+        //   依赖：bridge ≥ 2.12.0 才有实时工具行与 hasReplyContent；老桥行为不变（字段缺失即旧行为）。
+        //
         // v2.2.72（versionCode 10097）：**修右缘一条 216px 宽的「点不到」带**（2026-11-18，#21）。
         //   基于什么：v2.2.71。用户反馈「会话页的当前任务收缩不了」，
         //     进一步定位为「点标题能收起、点右端箭头收不了」。
@@ -1321,8 +1353,8 @@ android {
         //     版本判断两处对不上，统一改成运行时试解）。
         //   依赖：无（纯客户端改动，不需要新桥能力位）。
         //
-        versionCode = 10097
-        versionName = "2.2.72"
+        versionCode = 10098
+        versionName = "2.2.73"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。

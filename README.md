@@ -545,10 +545,10 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.72`（`versionCode` 10097）
+- 当前版本：`v2.2.73`（`versionCode` 10098）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
-- 单元测试：91 个测试类 / 948 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
+- 单元测试：92 个测试类 / 970 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
 - 当前 APK：`DSH伴侣-companion-v2.2.69.apk`，**3,383,328 字节**，
   SHA-256 `e620b0e3c848611f64b8310b69cd78c4b199fa485826d364907f8836531fac2a`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
@@ -652,5 +652,5 @@ keyPassword=...
   `v2.2.40` 及更早仍需先卸载）
 - 作者：上游 [Hakunm](https://github.com/Hakunm)，本 fork 维护 [westanke](https://github.com/westanke)
 - 许可证：[GNU Affero General Public License v3.0](./LICENSE)
-- 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.7**（「加载更早消息」需要 2.3.1+；「插件」页清单与启停需要 2.3.2+ / 2.3.3+；**审批 / 问答卡片需要 2.3.7+**；**断档重同步 / 订阅基线 / 交付物实时卡片需要 2.3.8+**；「回答被截断」提示需 bridge **≥ 2.4.1**；后台任务面板需 bridge **≥ 2.4.3**；模型页目录添加 / 恢复默认模型需 bridge **≥ 2.5.0**；**设备名显示为「平台 · 机型」需 bridge ≥ 2.6.1**（低于此版本时 App 照样能用，只是设备表里仍是占位名）；**模型上下文容量显示需 bridge ≥ 2.7.0**（低于此版本时模型行不显示容量）；**「新会话复用空白会话」需 bridge ≥ 2.7.0**（低于此版本时每次新建都会多一个空会话）；**分块上传 / 定时任务 / 官方语音需 bridge ≥ 2.8.0**（低于此版本时对应入口不出现）；**WS 双通道（会话/消息/事件/审批/命令/模型/目标写操作）需 bridge ≥ 2.8.1**（低于此版本时自动回落 REST，功能不减）；**团队成员（子会话）查看需 bridge ≥ 2.9.0**（低于此版本时点子会话只显示「桥版本太旧」提示））
+- 服务端插件：dsh-remote-bridge（[GitHub](https://github.com/westanke/dsh-remote-bridge) · [Gitee](https://gitee.com/westanke/dsh-remote-bridge)）**≥ 2.3.7**（「加载更早消息」需要 2.3.1+；「插件」页清单与启停需要 2.3.2+ / 2.3.3+；**审批 / 问答卡片需要 2.3.7+**；**断档重同步 / 订阅基线 / 交付物实时卡片需要 2.3.8+**；「回答被截断」提示需 bridge **≥ 2.4.1**；后台任务面板需 bridge **≥ 2.4.3**；模型页目录添加 / 恢复默认模型需 bridge **≥ 2.5.0**；**设备名显示为「平台 · 机型」需 bridge ≥ 2.6.1**（低于此版本时 App 照样能用，只是设备表里仍是占位名）；**模型上下文容量显示需 bridge ≥ 2.7.0**（低于此版本时模型行不显示容量）；**「新会话复用空白会话」需 bridge ≥ 2.7.0**（低于此版本时每次新建都会多一个空会话）；**分块上传 / 定时任务 / 官方语音需 bridge ≥ 2.8.0**（低于此版本时对应入口不出现）；**WS 双通道（会话/消息/事件/审批/命令/模型/目标写操作）需 bridge ≥ 2.8.1**（低于此版本时自动回落 REST，功能不减）；**团队成员（子会话）查看需 bridge ≥ 2.9.0**（低于此版本时点子会话只显示「桥版本太旧」提示）；**`/ws/mobile` 单帧上限可配需 bridge ≥ 2.10.0**（不配时默认仍是 1 MiB，行为不变）；**DSH 0.2.2-rc.1 适配（附件引用解析 / 定时任务面翻新）需 bridge ≥ 2.11.0**；**工具调用实时事件与「回答写完了」判据需 bridge ≥ 2.12.0**（低于此版本时工具行仍是「等历史刷新才出现」的老行为））
   （旧名 [`dsh-workspace`](https://github.com/Hakunm/dsh-workspace)）
