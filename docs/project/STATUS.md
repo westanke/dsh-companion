@@ -1,5 +1,5 @@
 - 日期：2026-11-18
-- **v2.2.73（versionCode 10098，待发）：对齐 bridge v2.12.0 的新契约 —— hasReplyContent + 工具实时事件（#22）**。
+- **v2.2.73（versionCode 10098，已发）：对齐 bridge v2.12.0 的新契约 —— hasReplyContent + 工具实时事件（#22）**。
   用户说「桥有更新，对照更新APP」—— 桥**已是最新**（repo / npm / 实装目录 / 运行中的
   `/api/v1/healthz` 四处都是 2.12.0，无更新可拉），要更新的是 App：2.12.0 有两项**纯新增**契约，
   App 侧此前完全没接（`grep hasReplyContent` / `grep chat.tool` 均零命中）。
@@ -21,7 +21,13 @@
   仍未做：内核错误分类（ASK_CANCELLED 等）只落在明细里，没有单独失败文案；
   老桥上工具行仍是「等历史刷新才出现」的老行为。
   工单：[#22](https://github.com/westanke/dsh-companion/issues/22)。
-- **v2.2.72（versionCode 10097，待发）：修右缘一条 216px 宽的「点不到」带（#21）**。
+  **发版（2026-11-18）**：本版同时带出**四笔未发版**（v2.2.70 官方观感 / v2.2.71 会话列表分组 /
+  v2.2.72 右缘点不到带 / v2.2.73 本条）。产物 `artifacts/DSH伴侣-companion-v2.2.73.apk`
+  **3,361,372 字节**，SHA-256 `b993f42137198a8f176b37eebce506740082c2ef2f8e6a3873f131d871b81ae3`；
+  Gitee Release id **1323660**（APK + SHA256SUMS.txt 已挂），AtomGit Release 已建（正文含 Gitee 下载链接），
+  两站 tag `v2.2.73` 已就位（tag 对象 `48213bc`，指向 `fad1377`）；GitHub 从站由 mirror-sync 自动对齐。
+  回读校验：下载回来的包 SHA-256 与本地一致（没有传错包）。
+- **v2.2.72（versionCode 10097，已发）：修右缘一条 216px 宽的「点不到」带（#21）**。
   用户反馈「会话页的当前任务收缩不了」，进一步定位为「点标题能收起、点右端箭头收不了」。
   根因在**手机端抽屉灰幕**：`ui/App.kt` 的灰幕 Box 带 `.clickable(enabled = drawerOpen)`，
   而 **clickable 本身就是 pointerInput** —— 带 pointerInput 的容器**永远参与命中测试**，
@@ -43,7 +49,7 @@
   仍未做：右缘 1008..1080 那 72px 仍被 vivo 系统手势条覆盖（系统层，App 内需自行避让）；
   平板 wide 分支未真机验证（本机 360dp 宽）。
   工单：[#21](https://github.com/westanke/dsh-companion/issues/21)。
-- **v2.2.71（versionCode 10096，待发）：会话列表按官方口径分组排序 + 多目录可见（#20）**。
+- **v2.2.71（versionCode 10096，已发）：会话列表按官方口径分组排序 + 多目录可见（#20）**。
   用户反馈「会话列表排序对照改下，目前只显示了一个目录的」—— **两件独立的事**：
   ①「只显示一个目录」的根在**服务端授权**、不在客户端排序：桥的 `listSessions`
   （`dsh-remote-bridge/src/host/chat-adapter.ts`）按设备授权的根过滤
@@ -66,7 +72,7 @@
   **仍未做**：官方抽屉的顶部搜索框与底部账号栏（companion 是独立整页，不是抽屉），
   以及搜索时小节标题需要重算这一层。
   工单：[#20](https://github.com/westanke/dsh-companion/issues/20)（先开单后动手）。
-- **v2.2.70（versionCode 10095，待发）：外壳 / 设置页 / 会话列表改用 DSH 官方观感（#19）**。
+- **v2.2.70（versionCode 10095，已发）：外壳 / 设置页 / 会话列表改用 DSH 官方观感（#19）**。
   用户要求把界面改成 dsh-Chat 的模式，两次收敛边界后最终改造三块：
   **① 应用外壳（44dp 扁平顶栏 + 288dp 推挤式抽屉 + 官方导航面板）② 会话列表页（纯文字会话行，
   去掉气泡图标底座与分隔线）③ 设置页（每节一张 14dp 圆角填充卡片）**；
@@ -78,7 +84,7 @@
   于是聊天正文像素级不变，而外壳已是官方观感。`AppTheme` 枚举与 PAPER 色板一字未动
   （`AppThemeTest` 逐字段钉住）。单测 89 类 / 926 用例全绿，docsCheck 全绿，
   STRUCTURE 已登记 5 个新文件、INTERFACES 已登记 15 个新符号。
-  **四笔未发版合并随 v2.2.73 一起发布**（v2.2.70 / 71 / 72 / 73）。
+  **四笔未发版合并随 v2.2.73 一起发布**（v2.2.70 / 71 / 72 / 73），已随 v2.2.73 发布。
   **真机已复验（V2080A / 9540718532001JR，v2.2.70 产物 versionCode 10095）**：经 dsh-remote-bridge
   配对（`http://192.168.1.126:3090`）连上后逐屏核对 —— ①会话列表页是 44dp 顶栏 + 「会话 / 8 个会话」
   两行 + 纯文字会话行 + 品牌蓝 `add_circle_outline`，与官方一致；②抽屉是推挤式（整页右移一抽屉宽、
