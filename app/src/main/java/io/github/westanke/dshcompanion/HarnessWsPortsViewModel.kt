@@ -397,6 +397,7 @@ internal fun HarnessViewModel.connectWsTransport(api: DshClient) {
         // 永远送不到（真机时序）。两处取并集 —— 任何一侧宣告过就成立，取交集会让
         // 「一侧漏发」重新变成「入口消失」。
         onHelloCapabilities = { caps ->
+            DiagLog.i("WS", "hello 能力位兜底：${caps.size} 个，kernel-call=${"kernel-call-v1" in caps}")
             update { copy(bridgeCapabilities = bridgeCapabilities + caps) }
         },
         onStateChange = { state ->
