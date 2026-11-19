@@ -1531,3 +1531,28 @@ Box(
 **通用铁律**：**「列表接口的第一条」不等于「最新的那条」**，除非文档或实测确认了排序。
 发布类脚本宁可多打一次「按 tag 直查」，也别用「首项」当哨兵值 ——
 它会在「已发布」的状态下反复尝试创建，并把 409 当成失败。
+
+---
+
+### 能力位只认一条来源，就会在竞速里丢掉整块入口
+
+**症状**：桥明明宣告了 `kernel-call-v1`（服务端探针能拿到 39 个能力位），手机的设置页却
+整段不显示「内核调用」入口，界面上写着「仅当桥声明 kernel-call-v1 能力位时才显示本节」。
+重连一次有时好、有时不好，没有稳定复现步骤。
+
+**根因**：客户端的能力位**只**取自 `connection.ready` 事件（`parseBridgeCapabilities`），
+而「WS 事件通道一旦接管就关掉 REST `/api/v1/events` 流」是另一条并发路径。
+真机日志里能看到两种时序：间隔 30 ms 时侥幸先收到 `connection.ready`；
+间隔 1 ms 时 WS 先接管，那条事件**永远没送到** —— 客户端于是认为桥没宣告，
+入口按能力位隐藏。父进程的宣告没错，单测也测不到（假事件是手喂的）。
+
+**怎么办**：`hello` 帧自己也带同一份 `capabilities`，在 `MobileWsTransport.onHello`
+里把它交上去（`onHelloCapabilities`），ViewModel 侧与事件来源取**并集**。
+取交集会让「任一侧漏发」重新变成入口消失，所以只能并集。
+
+**铁律**：**同一条事实有两条到达路径时，消费侧要做的是并集 + 幂等，不是挑一条当权威。**
+「谁先到」在真机上是竞速，在单测里是常量 —— 这类缺陷只能靠真机日志定位
+（`adb shell run-as <pkg> cat files/diag.log`）。
+
+回归锚：`app/src/test/java/io/github/westanke/dshcompanion/data/ws/MobileWsTransportTest.kt` ›
+「hello 宣告的能力位立刻交给界面兜底」。

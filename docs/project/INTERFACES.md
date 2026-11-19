@@ -242,7 +242,7 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `object WsFrames` | `data/ws/WsFrames.kt` | `json` / `encode` / `decode` / `kindOf` / `requestIdOf` / `dataOf` / `decodeEvent` / `parseHello` / `kernelCall` / `kernelCallCancel` / `parseKernelCallResult` / `parseKernelEndpoints` |
 | `class KernelCallClient(...)` | `data/ws/KernelCallClient.kt` | 通用内核调用：callId→deferred 配对（结果帧不回 requestId）、目录 `StateFlow`、取消与断线失败；不走 `WsRequestRouter` |
 | `class WsRequestRouter(...)` | `data/ws/WsRequestRouter.kt` | 请求配对层：requestId 快路 + 按响应 kind 兜底、同 kind 串行、`error` 按 `requestType` 归属、超时只失败本次不掀连接 |
-| `class MobileWsTransport(...)` | `data/ws/MobileWsTransport.kt` | 建连鉴权、requestId 关联、超时、退避重连、429 按 `Retry-After` 等待、`StateFlow<ChannelState>` |
+| `class MobileWsTransport(...)` | `data/ws/MobileWsTransport.kt` | 建连鉴权、requestId 关联、超时、退避重连、429 按 `Retry-After` 等待、`StateFlow<ChannelState>`；`onHelloCapabilities` 把 hello 里的能力位也交上去兜底（WS 事件通道先接管会吞掉 `connection.ready`，2026-11-19 真机） |
 | `fun retryAfterMillis(headers: Headers?): Long?` | `data/ws/RetryAfter.kt` | 只认 delta-seconds；缺/空/非数字/负数/HTTP-date 一律 `null`；夹 1 s..60 s |
 | `fun reconnectWaitMillis(backoffMillis: Long, retryAfterMillis: Long?): Long` | `data/ws/RetryAfter.kt` | 重连等待 = `max(自己的退避, 服务端要求)` —— 两条约束各管一头 |
 | `const val RESYNC_REQUIRED` | `data/ws/WsFrames.kt` | 桥的背压告知帧 `connection-resync-required`（kebab，老通道叫 `connection.resyncRequired`） |

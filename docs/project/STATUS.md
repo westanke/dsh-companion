@@ -1,4 +1,14 @@
-- 日期：2026-11-18
+- 日期：2026-11-19
+- **未发布（2026-11-19）· 内核调用面真机打磨：能力位兜底 + 结果可见**：
+  ①**能力位竞态**：能力位原先只来自 `connection.ready`，而 WS 事件通道接管后会关掉
+  REST `/api/v1/events` 流；真机上出现过 WS 先接管（间隔 1 ms）导致该事件永远没送到、
+  内核调用入口整段不显示。修法：`MobileWsTransport.onHelloCapabilities` 把 `hello.capabilities`
+  也交上去兜底，ViewModel 侧取**并集**（取交集会让任一侧漏发重新变成入口消失）。
+  ②**结果看不见**：结果卡片原渲染在 23 条端点列表末尾（几千像素外），改为 args 下方 +
+  到达自动回顶。③**真机验收**（vivo V2080A / Android 11 / 桥 2.12.1 本地包）：
+  `hello` 两位能力位 → `kernel-endpoints` 23 条 → 设置页「内核调用」节 → `pluginManager/listBundles`
+  回真实 bundles；连旧桥（3090）该节按能力位隐藏。④**验收**：`:app:testDebugUnitTest`
+  95 类 / 992 用例 / 0 失败（新增 1 例）；`docsCheck` 通过。
 - **v2.2.73（versionCode 10098，已发）：对齐 bridge v2.12.0 的新契约 —— hasReplyContent + 工具实时事件（#22）**。
   用户说「桥有更新，对照更新APP」—— 桥**已是最新**（repo / npm / 实装目录 / 运行中的
   `/api/v1/healthz` 四处都是 2.12.0，无更新可拉），要更新的是 App：2.12.0 有两项**纯新增**契约，

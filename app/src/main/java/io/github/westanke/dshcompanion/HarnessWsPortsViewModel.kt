@@ -393,6 +393,12 @@ internal fun HarnessViewModel.connectWsTransport(api: DshClient) {
         endpoint = connection.endpoint.baseUrl,
         token = token,
         onPush = { frame -> if (!kernelCall.onFrame(frame)) router.onFrame(frame) },
+        // hello 里的能力位兜底：`connection.ready` 可能因为 WS 抢先接管事件通道而
+        // 永远送不到（真机时序）。两处取并集 —— 任何一侧宣告过就成立，取交集会让
+        // 「一侧漏发」重新变成「入口消失」。
+        onHelloCapabilities = { caps ->
+            update { copy(bridgeCapabilities = bridgeCapabilities + caps) }
+        },
         onStateChange = { state ->
             reconcileEventChannel()
             // 断开时把等待中的内核调用收掉：否则调用方要干等满 30s 才看到超时。

@@ -65,6 +65,15 @@ internal class MobileWsTransport(
     private val requiredCapabilities: Set<String> = REQUIRED_CAPABILITIES_FOR_WS,
     /** 无 `requestId` 的帧（hello 之外）走这里：`event` / `pong` / 未来的 `question-requested`。 */
     private val onPush: ((JsonObject) -> Unit)? = null,
+    /**
+     * `hello` 里宣告的能力位（拿到即回调，一次连接一次）。
+     *
+     * 为什么需要：界面靠 `connection.ready` 事件取能力位，而 WS 事件通道**一旦接管**
+     * 就会关掉 REST `/api/v1/events` 流 —— 两件事是并发的，真机上出现过「WS 先接管，
+     * `connection.ready` 永远没送到」的时序，结果是能力位缺失、入口整段不显示（而桥
+     * 明明宣告了）。`hello` 自己也带同一份 `capabilities`，这里把它交上去兜底。
+     */
+    private val onHelloCapabilities: ((Set<String>) -> Unit)? = null,
     /** 状态迁移观察点（诊断日志用）；状态本身仍以 [state] 为准。 */
     private val onStateChange: ((ChannelState) -> Unit)? = null,
     /** 退避时长（毫秒）。抽成参数是为了让重连用例不必真的等 1/2/4 秒。 */
@@ -494,6 +503,9 @@ internal class MobileWsTransport(
             return
         }
         helloSeen = true
+        // 先交能力位再迁移状态：即便这条连接随后被判定为「能力不足」而退回 REST，
+        // 已经宣告过的位对界面仍然成立（老桥的 hello 里就是空集，不会误置）。
+        if (hello.capabilities.isNotEmpty()) onHelloCapabilities?.invoke(hello.capabilities)
         val next = decideAfterHello(hello.protocol, hello.capabilities, requiredCapabilities)
         transition(next)
         // hello 之后才有「能用」这个结论，心跳从这里才开始有意义（issue #16）。

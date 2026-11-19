@@ -17,6 +17,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -89,6 +90,15 @@ private fun KernelCallDialog(
 ) {
     var argsText by remember { mutableStateOf("{}") }
     val dsh = LocalDshColors.current
+    val scroll = rememberScrollState()
+
+    // 结果/错误落在列表上方，但用户点「调用」时通常已经滚到某个端点附近 ——
+    // 不拉回顶部等于还是看不见（真机实测过）。结果一变就回到顶部。
+    LaunchedEffect(state.kernelCallResult, state.kernelCallError) {
+        if (state.kernelCallResult != null || state.kernelCallError != null) {
+            scroll.animateScrollTo(0)
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -98,7 +108,7 @@ private fun KernelCallDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 460.dp)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(scroll),
             ) {
                 Text(
                     stringResource(R.string.kernel_call_args_hint),
@@ -115,6 +125,29 @@ private fun KernelCallDialog(
                     singleLine = false,
                 )
                 Spacer(Modifier.height(DshSpacing.blockGap))
+
+                // 结果放在列表**上方**（真机实测：放列表末尾等于看不见 —— 白名单 23 条
+                // 端点，用户点完「调用」以为没反应，其实结果在几千像素之外）。
+                state.kernelCallInFlight?.let { endpoint ->
+                    Text(
+                        stringResource(R.string.kernel_call_calling, endpoint),
+                        style = DshTypography.small,
+                        color = dsh.labelSecondary,
+                    )
+                    Spacer(Modifier.height(DshSpacing.settingsChipGap))
+                }
+                state.kernelCallError?.let { message ->
+                    Text(
+                        message,
+                        style = DshTypography.small,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Spacer(Modifier.height(DshSpacing.settingsChipGap))
+                }
+                state.kernelCallResult?.let { result ->
+                    KernelResultBlock(result)
+                    Spacer(Modifier.height(DshSpacing.blockGap))
+                }
 
                 if (state.kernelEndpoints.isEmpty()) {
                     Text(
@@ -133,21 +166,6 @@ private fun KernelCallDialog(
                     }
                 }
 
-                state.kernelCallInFlight?.let { endpoint ->
-                    Text(
-                        stringResource(R.string.kernel_call_calling, endpoint),
-                        style = DshTypography.small,
-                        color = dsh.labelSecondary,
-                    )
-                }
-                state.kernelCallError?.let { message ->
-                    Text(
-                        message,
-                        style = DshTypography.small,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-                state.kernelCallResult?.let { result -> KernelResultBlock(result) }
             }
         },
         confirmButton = {

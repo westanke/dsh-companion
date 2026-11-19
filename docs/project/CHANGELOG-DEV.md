@@ -1,5 +1,35 @@
 # 开发日志
 
+## 未发布 · 内核调用面真机打磨：能力位兜底 + 结果可见（2026-11-19）
+
+### 基于什么
+桥侧 issue #26 的内核调用面（`dshrb-v1` / `kernel-call` / `kernel-endpoints`）在单测里全绿，
+但「真机 6 项」一次没跑过。用户说「先打个测试包，有安卓真机，自己测试」——装到 vivo V2080A
+（Android 11）后立刻抓到两个 App 侧缺陷，以及一个纯 UX 问题。
+
+### 现象与根因
+1. **设置页「内核调用」节时有时无**：桥明明宣告了 `kernel-call-v1`（服务端探针能拿到 39 个
+   能力位），App 却整段不显示入口。根因是能力位**只**取自 `connection.ready` 事件，而
+   「WS 事件通道接管即关掉 REST `/api/v1/events`」是另一条并发路径 —— 真机上 WS 先接管
+   （间隔 1 ms）时那条事件永远没送到。日志：`WS 事件通道切到 WS：已关闭 REST /api/v1/events 流`。
+2. **点「调用」像没反应**：结果卡片渲染在目录列表**末尾**（23 条端点之后、几千像素外），
+   用户点完停在顶部，看不到任何反馈。
+
+### 怎么改
+1. `MobileWsTransport` 新增 `onHelloCapabilities`：`hello` 帧自己也带同一份能力位，
+   收到即交上去兜底（在状态迁移之前，即便随后退回 REST 那些位仍然成立）。
+2. `HarnessWsPortsViewModel` 把它与 `connection.ready` 的来源取**并集**（取交集会让「任一侧
+   漏发」重新变成入口消失）。
+3. `KernelCallSection` 把 in-flight / error / result 三块从列表末尾移到 args 输入框下方，
+   并在结果到达时 `animateScrollTo(0)` 回顶。
+
+### 验证
+真机闭环：`hello` 含两位能力位 → `kernel-endpoints` 23 条 → 设置页出现「内核调用」节 →
+`pluginManager/listBundles` 返回真实 bundles、`pluginManager/registries` 正常回包；
+同一 APK 连旧桥（3090）该节按能力位隐藏（门控反证有效）。
+`scripts/build.sh :app:testDebugUnitTest` **BUILD SUCCESSFUL**（95 类 / 992 用例 / 0 失败），
+新增 `MobileWsTransportTest` ›「hello 宣告的能力位立刻交给界面兜底」；`docsCheck` 通过。
+
 ## v2.2.73 · 对齐 bridge v2.12.0 的新契约：hasReplyContent + 工具实时事件（#22）（2026-11-18）
 
 ### 基于什么

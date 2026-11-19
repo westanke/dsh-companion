@@ -207,7 +207,7 @@ web/           ← WebView 容器（chat.html 兜底路径）
 
 | 层 | 命令 | 说明 |
 |---|---|---|
-| 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 93 类 / 991 用例（随代码变化，勿当常量） |
+| 单元 | `scripts/build.sh :app:testDebugUnitTest` | 当前 93 类 / 992 用例（随代码变化，勿当常量） |
 | 文档 | `scripts/build.sh docsCheck` | 10 文档 / ROADMAP 任务 / STATUS 引用 / 根 README 双站 / 目录与接口锚点双向 |
 | 真机 | 人工 | **单测绿 ≠ 行为对**。涉及手势、键盘、WebView、耗电、断流的一律要真机确认 |
 
@@ -295,6 +295,7 @@ web/           ← WebView 容器（chat.html 兜底路径）
 - `WS 半死：socket 断了但状态还写着「已连接」，帧写进去等满超时且不回落 REST`
 - `透明灰幕照样吃点击：视觉上看不见不等于不参与命中`
 - `发布脚本把「列表首项」当「最新」：接口不倒序，探测永远探不到刚发的 tag`
+- `能力位只认一条来源，就会在竞速里丢掉整块入口`
 
 > 新坑位：名字加进上面清单 + 原文写进 `PITFALLS.md` 并补 `### 同名` 锚点。
 

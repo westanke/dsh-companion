@@ -64,6 +64,29 @@ class MobileWsTransportTest {
     }
 
     @Test
+    fun `hello 宣告的能力位立刻交给界面兜底`() {
+        // 真机上出现过「WS 事件通道先接管、connection.ready 永远没送到」的时序，
+        // 结果是能力位缺失、内核调用入口整段不显示（而桥明明宣告了）。
+        // hello 自己也带同一份 capabilities，这里钉住「拿到即回调」这条兜底。
+        val caps = ALL_REQUIRED + "kernel-call-v1"
+        server.enqueue(upgrade(onOpen = sendHello(capabilities = caps)))
+        var handed: Set<String>? = null
+        val transport = MobileWsTransport(
+            endpoint = server.url("/").toString(),
+            token = "tok",
+            onHelloCapabilities = { handed = it },
+            defaultTimeoutMillis = FAST_TIMEOUT_MS,
+            fileTimeoutMillis = FAST_TIMEOUT_MS,
+            backoffMillis = { FAST_BACKOFF_MS },
+        )
+        transport.start()
+
+        awaitState(transport) { it == ChannelState.WsReady }
+        assertEquals("hello 的能力位必须原样交上去", caps.toSet(), handed)
+        assertTrue("兜底位必须包含内核调用位", handed!!.contains("kernel-call-v1"))
+    }
+
+    @Test
     fun `hello 缺能力位时进 WsDegraded 而不是 WsDown`() {
         // 关键：连上是连上了，只是能力不足。判成 WsDown 会触发无意义的重连风暴。
         server.enqueue(upgrade(sendHello(capabilities = listOf("session-list-v1"))))
