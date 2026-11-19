@@ -1,5 +1,6 @@
 package io.github.westanke.dshcompanion.data
 
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -83,9 +84,19 @@ data class SettingsNamespace(
 @Serializable
 data class SettingsSecret(val path: List<String> = emptyList(), val set: Boolean = false)
 
-/** `PATCH settings/namespaces/{ns}` 里的一条操作。当前只发 `set`。 */
+/**
+ * `PATCH settings/namespaces/{ns}` 里的一条操作。当前只发 `set`。
+ *
+ * `op` 必须**显式**编码：客户端 Json 没开 `encodeDefaults`，带默认值的属性会被直接省掉，
+ * 于是请求体变成 `{"path":[...],"value":...}` —— 桥侧校验 `ops[0].op must be "set" or
+ * "unset"` 会当场拒掉（真机 2026-11-19 就是这么发现「保存点了没反应」的）。
+ */
 @Serializable
-data class SettingsOp(val op: String = "set", val path: List<String>, val value: JsonElement)
+data class SettingsOp(
+    @EncodeDefault val op: String = "set",
+    val path: List<String>,
+    val value: JsonElement,
+)
 
 /** `PATCH` 请求体：ops + 乐观并发用的 expectedRevision。 */
 @Serializable

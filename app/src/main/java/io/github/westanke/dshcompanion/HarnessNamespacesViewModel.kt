@@ -95,9 +95,14 @@ internal fun HarnessViewModel.updateSettingsNamespace(
     ops: List<SettingsOp>,
     expectedRevision: Int?,
 ) {
-    if (ops.isEmpty()) return
+    if (ops.isEmpty()) {
+        DiagLog.w("SETTINGS", "保存被丢弃：没有待提交的修改 ops=0 ns=$ns")
+        return
+    }
     withClient { api ->
-        if ("settings.write" !in mutableState.value.device?.scopes.orEmpty()) {
+        val scopes = mutableState.value.device?.scopes.orEmpty()
+        if ("settings.write" !in scopes) {
+            DiagLog.w("SETTINGS", "保存被丢弃：设备缺少 settings.write，当前 scopes=$scopes")
             notify(appString(R.string.settings_ns_write_required))
             return@withClient
         }

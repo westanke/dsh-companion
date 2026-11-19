@@ -1556,3 +1556,43 @@ Box(
 
 回归锚：`app/src/test/java/io/github/westanke/dshcompanion/data/ws/MobileWsTransportTest.kt` ›
 「hello 宣告的能力位立刻交给界面兜底」。
+
+### 带默认值的字段会被序列化器整条省掉
+
+2026-11-19 真机「设置保存点了没反应」的根因。现象：App 里改完字段点「保存」，
+界面毫无反馈，桥侧 `/manage/audit` 里也没有 `settings.namespace.mutate`。
+
+先加一行 DiagLog 才看清：点击确实发生了、`ops=1`、scopes 也含 `settings.write`，
+随后是 `SEND 请求失败：DshApiException: ops[0].op must be "set" or "unset"`。
+
+**根因**：`data class SettingsOp(val op: String = "set", ...)`，而客户端 Json 是
+`Json { ignoreUnknownKeys = true }` —— **`encodeDefaults` 默认 false**，
+带默认值的属性在序列化时被整条省略，请求体成了 `{"path":[…],"value":…}`。
+桥侧校验按契约要求 `op`，于是当场 400。
+
+**怎么修**：给属性加 `@EncodeDefault`（kotlinx-serialization 1.6+），
+让它不管是否等于默认值都写出去；并在 `SettingsSchemaTest` 里钉一条
+「序列化后的请求体必须含 `"op":"set"`」的断言 —— 这类坑不写测试，下次同样静默。
+
+**通用铁律**：**只要属性带默认值，就要问一句「它在线上到底会不会出现」**。
+默认值只保证「缺失时能解出来」，不保证「发出去时带着」。契约里必填的字段，
+要么别给默认值，要么显式 `@EncodeDefault`。
+
+---
+
+### 底部面板内容不避让系统手势条：药丸看得见、点不动
+
+同一天、同一台 vivo 上的第二处。模型面板里「思考强度」那一排 Off/Low/High/Max
+被排到屏幕最底下（y≈2310 / 2400），点上去毫无反应；往下滚一点再点就正常。
+
+**根因**：`ModalBottomSheet` 的内容 `Column` 只加了 `padding(bottom = 28.dp)`，
+没有避让系统导航条 —— 最底下一行正好落在手势条的命中区里，事件被系统吃掉。
+姊妹页面（设置命名空间表）早就加过 `navigationBarsPadding()` 并留了注释
+「底部保存键曾落在系统栏下，点击全被系统吃掉」，同一类坑没有横向铺开。
+
+**怎么修**：面板内容容器统一加 `Modifier.navigationBarsPadding()`。
+
+**通用铁律**：**能在屏幕最底部滚到位的一切可点元素，都必须避让系统栏**。
+判据不是「肉眼看上去在范围内」——手势条是**透明**的，看得见不等于点得到。
+遇到「点了没反应」，先量它的 y 坐标离底边还有多少 px。
+

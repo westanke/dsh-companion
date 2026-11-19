@@ -1,5 +1,35 @@
 # 开发日志
 
+## 未发布 · 全功能真机复测：设置保存修复 + 思考强度可点（2026-11-19）
+
+### 基于什么
+用户让「全测」：把内核调用面之外的每个功能面都过一遍真机。测完列出 5 项没通过/没覆盖，
+用户回「2、3、4、5 继续，需要修就修」——本条目就是第 2、3 项的修复记录（第 4 项中文输入受
+adb 剪贴板限制、第 5 项的几个面板属验证性补测，见 STATUS）。
+
+### 现象与根因
+1. **「工作区设置」点保存毫无反应**：桥侧 `/manage/audit` 里没有任何 `settings.namespace.mutate`，
+   revision 也不变。加一行 DiagLog 才看见真相：点击**发生了**、`ops=1`、设备 scopes 含
+   `settings.write`，紧接着 `SEND 请求失败：DshApiException: ops[0].op must be "set" or "unset"`。
+   根因是 `SettingsOp(val op: String = "set", …)` 带默认值，而客户端 Json 没开
+   `encodeDefaults`，**带默认值的属性被整条省略** → 请求体缺 `op` → 桥按契约 400。
+2. **模型面板里「思考强度」四个药丸点不动**：它们被排到屏幕最底部（y≈2310/2400），
+   正好落在系统手势条的命中区，事件被系统吃掉；下滑一点再点就正常。
+   面板容器只加了 `padding(bottom = 28.dp)`，没避让系统栏。
+
+### 怎么改
+1. `SettingsOp.op` 加 `@EncodeDefault`；`SettingsSchemaTest` 增加
+   「序列化后的请求体必须含 `"op":"set"`」回归断言。
+2. `ChatSheets` 的会话配置面板容器加 `Modifier.navigationBarsPadding()`。
+3. 两处都留了 DiagLog 面包屑（保存点击/被丢弃），下次同类问题一眼能看。
+
+### 验证
+真机：改 `ui-settings-account` 的 `developerTools` → 保存 → 审计出现
+`settings.namespace.mutate`，revision 0→1，REST 回读 `developerTools: true`（随后改回）。
+思考强度点 `Low`/`High` 均即时生效、面板行高亮跟着走。
+`scripts/build.sh :app:testDebugUnitTest` **BUILD SUCCESSFUL**（93 类 / 993 用例 / 0 失败，+1 例）；
+`docsCheck` 通过（10 文档 / 47 tasks / pitfalls 917 项 / STRUCTURE 181 / INTERFACES 187 锚点）。
+
 ## 未发布 · 内核调用面真机打磨：能力位兜底 + 结果可见（2026-11-19）
 
 ### 基于什么

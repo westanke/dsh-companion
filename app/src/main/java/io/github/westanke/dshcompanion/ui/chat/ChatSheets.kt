@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
@@ -269,7 +270,15 @@ internal fun ModelSheet(state: HarnessState, viewModel: HarnessViewModel, onClos
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp).padding(bottom = 28.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                // 手势条/三键导航会盖住面板最后一行：思考强度药丸曾整排落在系统栏下，
+                // 点了全被系统吃掉（真机 2026-11-19 复现）。跟设置命名空间那张表同一个坑。
+                .navigationBarsPadding()
+                .padding(horizontal = 22.dp)
+                .padding(bottom = 28.dp),
+        ) {
             Text(stringResource(R.string.session_configuration), style = MaterialTheme.typography.headlineSmall)
             Text(
                 stringResource(R.string.session_configuration_subtitle),

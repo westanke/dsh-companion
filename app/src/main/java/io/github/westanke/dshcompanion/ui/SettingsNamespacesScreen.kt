@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import io.github.westanke.dshcompanion.HarnessState
 import io.github.westanke.dshcompanion.HarnessViewModel
 import io.github.westanke.dshcompanion.R
+import io.github.westanke.dshcompanion.debug.DiagLog
 import io.github.westanke.dshcompanion.data.SettingsControl
 import io.github.westanke.dshcompanion.data.SettingsFieldSpec
 import io.github.westanke.dshcompanion.data.SettingsNamespace
@@ -359,7 +360,14 @@ private fun NamespaceDetail(
     }
 
     Button(
-        onClick = { viewModel.updateSettingsNamespace(namespace.ns, ops, namespace.revision) },
+        onClick = {
+            DiagLog.i(
+                "SETTINGS",
+                "保存点击 ns=${namespace.ns} ops=${ops.size} editable=$editable busy=${state.busy} " +
+                    "scopes=${state.device?.scopes} revision=${namespace.revision}",
+            )
+            viewModel.updateSettingsNamespace(namespace.ns, ops, namespace.revision)
+        },
         enabled = editable && ops.isNotEmpty() && !state.busy,
         modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
     ) {

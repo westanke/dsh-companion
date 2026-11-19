@@ -18,6 +18,25 @@ import org.junit.Test
  */
 class SettingsSchemaTest {
 
+    /**
+     * 真机 2026-11-19 的教训：`SettingsOp.op` 带默认值 `"set"`，而客户端 Json 没开
+     * `encodeDefaults`，属性会被整条省掉 —— 桥侧回 `ops[0].op must be "set" or "unset"`，
+     * 用户看到的是「点保存没反应」。这条钉住序列化后的请求体里必须真的有 `op`。
+     */
+    @Test
+    fun `serialises the op field even though it carries a default`() {
+        val body = Json.encodeToString(
+            SettingsNamespaceUpdate.serializer(),
+            SettingsNamespaceUpdate(
+                ops = listOf(SettingsOp(path = listOf("step"), value = JsonPrimitive("done"))),
+                expectedRevision = 0,
+            ),
+        )
+        assertTrue("请求体必须有 op 字段：$body", body.contains("\"op\":\"set\""))
+        assertTrue(body.contains("\"expectedRevision\":0"))
+    }
+
+
     private fun namespace(
         schema: String? = null,
         value: String? = null,
