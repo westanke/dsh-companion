@@ -1353,8 +1353,26 @@ android {
         //        老桥上工具行仍是「等历史刷新才出现」的老行为（桥侧升级后才有实时行）。
         //   依赖：bridge ≥ 2.12.0 才有实时工具行与 hasReplyContent；老桥行为不变（字段缺失即旧行为）。
         //
-        versionCode = 10098
-        versionName = "2.2.73"
+        // v2.2.74（versionCode 10099）：**配合 bridge v2.13.0：内核调用面真机打磨 + 两处真机缺陷修复**（2026-11-20，bridge#26）。
+        //   基于什么：v2.2.73；服务端插件 dsh-remote-bridge 已发到 v2.13.0（通用 kernel-call 调用面 + dshrb-v1）。
+        //   干了什么：
+        //     ① 内核调用面（上版已接入）：结果/错误/in-flight 三块从端点列表末尾移到 args 输入框下方，
+        //        并在结果到达时自动回顶 —— 真机上「点了调用以为没反应」的根因就是结果在几千像素外。
+        //     ② hello 能力位兜底：WS 事件通道一旦接管就关掉 REST /api/v1/events 流，而能力位原先只认
+        //        connection.ready；两条竞速时 WS 先接管会把 ready 吞掉，整块「内核调用」入口消失。
+        //        现在 onHello 里的能力位立刻并集进界面状态（取并集，不取交集）。
+        //     ③ 设置保存丢 op：SettingsOp 的 op 带默认值 "set"，而 Json 默认 encodeDefaults=false，
+        //        带默认值的属性被整条省略 ⇒ 桥收到 {"path","value"}，回 ops[0].op must be "set" or "unset"。
+        //        给 op 加 @EncodeDefault，并补序列化回归用例。
+        //     ④ 思考强度药丸点不动：「会话配置」底部面板没有避让系统手势条，药丸整排落在手势命中区。
+        //        面板内容加 navigationBarsPadding()。
+        //   测了什么：93 类 / 993 用例 / 0 失败（+1：SettingsSchemaTest 钉死 op 一定序列化）；
+        //        docsCheck 全绿；真机复验（vivo V2080A / 桥 2.13.0）：保存落审计 revision 0→1、
+        //        Off/Low/High/Max 四档可点、设置页能力位六档可见。
+        //   依赖：bridge ≥ 2.13.0（kernel-call-v1 / dshrb-v1）；老桥行为不变（能力位缺席即隐藏入口）。
+        //
+        versionCode = 10099
+        versionName = "2.2.74"
         // 构建水印：git 短哈希 + 构建时刻，显示在设置页「关于」的版本行下面。
         // 为什么需要：真机反馈「改了没生效」时，唯一能一锤定音的办法是让用户看到**他装的
         // 到底是哪一次构建** —— 版本号在多次重打之间不变，哈希每次构建都不同。

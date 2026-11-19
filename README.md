@@ -294,7 +294,7 @@ GitHub 是自动同步的镜像从站（每 3 小时从 Gitee 同步，Release �
 - AtomGit（代码备站，无 Release 资产）：<https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.73.apk
+DSH伴侣-companion-v2.2.74.apk
 ```
 
 安装要求：
@@ -545,13 +545,13 @@ keyPassword=...
 
 ## 项目信息
 
-- 当前版本：`v2.2.73`（`versionCode` 10098）
+- 当前版本：`v2.2.74`（`versionCode` 10099）
 - 包名：`io.github.westanke.dshcompanion`（v2.2.41 起；v2.2.40 及更早为 `io.github.hakunm.deepseekharness`）
 - 应用名：**DSH伴侣**（英文环境 `DSH Companion`；v2.2.41 起，原为 `DeepSeek Harness`）
 - 单元测试：93 个测试类 / 993 用例（最近一次运行 0 失败）。数量会随代码变化，要最新值就跑一次
   `scripts/build.sh :app:testDebugUnitTest`，或数一数 `app/src/test/` 里的类与 `@Test`
-- 当前 APK：`DSH伴侣-companion-v2.2.73.apk`，**3,361,372 字节**，
-  SHA-256 `b993f42137198a8f176b37eebce506740082c2ef2f8e6a3873f131d871b81ae3`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
+- 当前 APK：`DSH伴侣-companion-v2.2.74.apk`，**3,387,216 字节**，
+  SHA-256 `d7914da6325d6c4342d437e78c12774c0dadcd86973c3c26f80788c740d77c51`（`artifacts/SHA256SUMS.txt` 同步，阶段 A 自动回填真实值）。
   **本版（v2.2.73，对齐 bridge v2.12.0：工具实时事件 + 「回答写完了」判据）**：这版合了四件事 ——
   界面改成 DSH 官方观感、会话列表按官方口径分组、修掉右缘一条点不到的带、以及对齐桥的新契约。
   ① **工具实时事件**（#22）：桥 v2.12.0 起把内核的 `tool/call` / `tool/result` **原样透传**成

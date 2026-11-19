@@ -1,3 +1,24 @@
+## v2.2.74 · 配合 bridge v2.13.0：内核调用面真机打磨 + 两处真机缺陷（2026-11-20，bridge#26）
+
+**为什么有这一版**：桥 2.13.0 把内核语义入口换成描述符驱动并新增通用 `kernel-call` 调用面，
+配套真机复测（vivo V2080A / Android 11）时在 **App 侧**抓到四处问题，全部在本版修掉。
+
+- **内核调用结果看不见**：结果/错误/in-flight 三块原先排在端点列表末尾，真机上「点了调用以为没反应」。
+  现在移到 args 输入框下方，并在结果到达时自动回顶。
+- **能力位竞速导致入口消失**：能力位原先只认 `connection.ready`，而 WS 事件通道接管后会关掉 REST
+  `/api/v1/events` 流；WS 先接管时 ready 永远送不到，「内核调用」整节不显示。现在 hello 里的能力位
+  立刻并集进状态（取并集，不取交集）。
+- **设置保存不生效**：`SettingsOp.op` 带默认值 `"set"`，而客户端 Json 默认 `encodeDefaults=false`，
+  带默认值的属性被整条省略 ⇒ 桥收到 `{path,value}` 并回 `ops[0].op must be "set" or "unset"`，
+  App 把错误吞在后台。给 `op` 加 `@EncodeDefault` 并补序列化回归用例。
+- **思考强度药丸点不动**：「会话配置」底部面板没避让系统手势条，药丸整排落在命中区。
+  内容加 `navigationBarsPadding()`。
+
+**验收**：`scripts/build.sh :app:testDebugUnitTest` 93 类 / 993 用例 / 0 失败；docsCheck 全绿；
+真机复验 = 保存落审计 `settings.namespace.mutate`（revision 0→1）、Off/Low/High/Max 四档可点、
+设置页六档 scope chip 可见、内核调用面 `pluginManager/listBundles` 返回真实数据。
+
+**依赖**：bridge ≥ 2.13.0 才有 `kernel-call-v1` / `dshrb-v1`；老桥行为不变（能力位缺席即隐藏入口）。
 # 开发日志
 
 ## 未发布 · 全功能真机复测：设置保存修复 + 思考强度可点（2026-11-19）

@@ -303,7 +303,7 @@ so its Release assets may lag slightly):
 - AtomGit (code mirror only, no Release assets): <https://atomgit.com/westanke163/dsh-companion>
 
 ```text
-DSH伴侣-companion-v2.2.73.apk
+DSH伴侣-companion-v2.2.74.apk
 ```
 
 Requirements:
@@ -598,14 +598,14 @@ Pass it with `-PdshSigningProperties=/path/to/signing.properties`. Never commit 
 
 ## Project
 
-- Version: `v2.2.73` (`versionCode` 10098)
+- Version: `v2.2.74` (`versionCode` 10099)
 - Package: `io.github.westanke.dshcompanion` (since v2.2.41; `v2.2.40` and earlier used `io.github.hakunm.deepseekharness`)
 - App name: **DSH Companion** (Chinese locale shows `DSH伴侣`; since v2.2.41, previously `DeepSeek Harness`)
 - Unit tests: 93 test classes / 993 cases at the last run (0 failures). The counts move with the code, so
   for the current numbers run `scripts/build.sh :app:testDebugUnitTest`, or count the classes under
   `app/src/test/` and the `@Test` annotations
-- Current APK: `DSH伴侣-companion-v2.2.73.apk`, **3,361,372 bytes**, SHA-256
-  `b993f42137198a8f176b37eebce506740082c2ef2f8e6a3873f131d871b81ae3` (kept in sync in
+- Current APK: `DSH伴侣-companion-v2.2.74.apk`, **3,387,216 bytes**, SHA-256
+  `d7914da6325d6c4342d437e78c12774c0dadcd86973c3c26f80788c740d77c51` (kept in sync in
   `artifacts/SHA256SUMS.txt`; real values are backfilled by release stage A).
   **This release (v2.2.73: aligned with bridge v2.12.0 — live tool events + a real "the answer is
   finished" signal)**: four things ship together here — the interface moves to the official DSH look,
