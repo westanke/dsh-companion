@@ -18,6 +18,8 @@ import io.github.westanke.dshcompanion.data.DeviceView
 import io.github.westanke.dshcompanion.data.DirectoryPage
 import io.github.westanke.dshcompanion.data.ScheduleItem
 import io.github.westanke.dshcompanion.data.SpeechCatalog
+import io.github.westanke.dshcompanion.data.ws.KernelCallResultFrame
+import io.github.westanke.dshcompanion.data.ws.KernelEndpoint
 import io.github.westanke.dshcompanion.data.DshApiException
 import io.github.westanke.dshcompanion.data.DshClient
 import io.github.westanke.dshcompanion.data.DshConnectionException
@@ -526,6 +528,19 @@ data class HarnessState(
      * 否则每个旧服务端都会弹出假警告。
      */
     val bridgeCapabilities: Set<String> = emptySet(),
+    /**
+     * 最近一次 `kernel-endpoints` 目录快照（桥鉴权通过后自动推一次）。
+     *
+     * 空列表 = 还没收到；**入口可见性只看能力位**（`supportsKernelCall`），不看这个列表 ——
+     * 有 `kernel-call-v1` 但推送还没到是合法的中间态。
+     */
+    val kernelEndpoints: List<KernelEndpoint> = emptyList(),
+    /** 正在跑的内核调用端点（null = 空闲）；同一时刻只放行一条，避免按钮连点变成并发。 */
+    val kernelCallInFlight: String? = null,
+    /** 最近一次内核调用结果；`ok:false` 也是结果，错误码在 `error` 里。 */
+    val kernelCallResult: KernelCallResultFrame? = null,
+    /** 内核调用在拿到结果帧之前就失败了（通道断开 / args 不是 JSON 对象）。 */
+    val kernelCallError: String? = null,
     /**
      * 已归档会话（按需拉取；空列表 = 没拉过或确实没有）。
      *

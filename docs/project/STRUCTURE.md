@@ -257,6 +257,7 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessGoalPortViewModel.kt` | file | 目标写操作域：四帧装配、ref 取用、按主机记住「内核不支持」与就地失败态 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessInteractionsViewModel.kt` | file | 交互域：工具审批与内核提问的拉取、提交与决定 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessJobsViewModel.kt` | file | 后台任务面板的动作集 |
+| `app/src/main/java/io/github/westanke/dshcompanion/HarnessKernelCallViewModel.kt` | file | 通用内核调用：目录 → args 文本 → 一次 `kernel-call` 与结果/错误落状态 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessModels.kt` | file | UI 状态（HarnessState）与跨层数据载体 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessOperations.kt` | file | 拿活跃连接跑请求；无连接时给明确提示而不是静默返回 |
 | `app/src/main/java/io/github/westanke/dshcompanion/HarnessPluginsViewModel.kt` | file | 设置域：插件清单/启停与模型提供商增改查 |
@@ -324,7 +325,8 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/data/UpdateChecker.kt` | file | 应用内更新检查：渠道分流、下载、SHA256 校验、调起安装器 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/ChannelState.kt` | file | 通道状态机（WsReady/WsDegraded/WsDown/RestOnly）与三条降级判据纯函数 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/GoalPort.kt` | file | 目标写端口（goal-edit/pause/resume/clear）：compare-and-set 的 ref 传递、不可用与 revision 过期判定 |
-| `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsFrames.kt` | file | `/ws/mobile` 帧编解码：子协议、帧类型常量、hello 解析、requestId 取值 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/ws/KernelCallClient.kt` | file | 通用内核调用客户端：callId→CompletableDeferred 配对、结果/错误保留、目录 StateFlow 与取消 |
+| `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsFrames.kt` | file | `/ws/mobile` 帧编解码：子协议、帧类型常量、hello 解析、requestId 取值、kernel-call 四帧 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/MobileWsTransport.kt` | file | WS 传输层：建连鉴权、requestId 关联、超时、退避重连、429 按 Retry-After 等待、StateFlow<ChannelState> |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/RetryAfter.kt` | file | `Retry-After` 解析与重连等待合成：只认 delta-seconds、夹 1s..60s、与退避取较大者 |
 | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsDomainPorts.kt` | file | P3 三域的端口接口（Hitl/Command/Model）与 WS / REST 两套实现 |
@@ -343,6 +345,7 @@ dsh-companion/
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/FileTypeIcon.kt` | file | 文件类型图标（取系统已有关联） |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/FilesScreen.kt` | file | 文件页：授权根切换、浏览、编辑与上传下载 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/GenUiCard.kt` | file | 渲染一份 dsh-ui spec |
+| `app/src/main/java/io/github/westanke/dshcompanion/ui/KernelCallSection.kt` | file | 设置页「内核调用」入口：能力位门控、目录弹层、一次调用与结果展示 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/ModelsEditorSheet.kt` | file | 编辑既有供应商的底部弹层 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/ModelsScreen.kt` | file | 模型与提供商设置页 |
 | `app/src/main/java/io/github/westanke/dshcompanion/ui/PluginsScreen.kt` | file | 插件清单与启停页 |

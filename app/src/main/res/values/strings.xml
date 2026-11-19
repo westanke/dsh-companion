@@ -883,4 +883,25 @@
     <string name="attachment_upload_chunk_progress">正在上传 %1$d/%2$d 块</string>
     <string name="attachment_upload_resumed">继续上传 %1$d/%2$d 块</string>
     <string name="attachment_upload_failed">上传失败</string>
+
+    <!-- 通用内核调用面（桥侧 issue #26 阶段 5） -->
+    <string name="kernel_call_heading">内核调用</string>
+    <string name="kernel_call_title">内核调用目录</string>
+    <string name="kernel_call_desc">查看桥推送的端点目录，并按 wires 发起一次调用</string>
+    <string name="kernel_call_footnote">仅当桥声明 kernel-call-v1 能力位时才显示本节；缺位时整个入口不会出现。</string>
+    <string name="kernel_call_dialog_title">内核调用</string>
+    <string name="kernel_call_args_label">args（JSON 对象）</string>
+    <string name="kernel_call_args_hint">参数键名以每个端点下方的 wires 为准，不要凭记忆硬编码。</string>
+    <string name="kernel_call_empty">还没收到目录快照。连接鉴权通过后桥会自动推一次。</string>
+    <string name="kernel_call_wires">参数：%1$s</string>
+    <string name="kernel_call_invoke">调用</string>
+    <string name="kernel_call_calling">调用中：%1$s</string>
+    <string name="kernel_call_close">关闭</string>
+    <string name="kernel_call_result_ok">成功（callId=%1$s）</string>
+    <string name="kernel_call_result_failed">失败：%1$s</string>
+    <string name="kernel_call_result_failed_unknown">失败：桥没有给出错误详情</string>
+    <string name="kernel_call_error_not_available">当前连接不支持内核调用（缺少 kernel-call-v1 能力位）。</string>
+    <string name="kernel_call_error_args">参数必须是 JSON 对象。</string>
+    <string name="kernel_call_error_no_channel">内核调用通道不可用（WS 未连接）。</string>
+    <string name="kernel_call_error_unknown">内核调用失败。</string>
 </resources>

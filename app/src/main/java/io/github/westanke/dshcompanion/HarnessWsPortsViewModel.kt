@@ -22,6 +22,7 @@ import io.github.westanke.dshcompanion.data.DshClient
 import io.github.westanke.dshcompanion.data.PromptPart
 import io.github.westanke.dshcompanion.data.ws.ChannelState
 import io.github.westanke.dshcompanion.data.ws.EventPort
+import io.github.westanke.dshcompanion.data.ws.KernelCallClient
 import io.github.westanke.dshcompanion.data.ws.MessagePort
 import io.github.westanke.dshcompanion.data.ws.MobileWsTransport
 import io.github.westanke.dshcompanion.data.ws.RestMessagePort
@@ -377,6 +378,13 @@ internal fun HarnessViewModel.connectWsTransport(api: DshClient) {
     // 局部可空引用过渡：router 建好时它还是 null，transport 建好后立刻赋上，而
     // `sender` 只在用户**发请求**时才被调用（远晚于装配完成），不会读到 null。
     var transportRef: MobileWsTransport? = null
+    // 内核调用面（P5）的 pending 表。装配顺序同上：它必须能在 transport 建好之前就拿到
+    // sender 闭包（`transportRef` 过渡），且 onPush 里**先**问它再接 router ——
+    // `kernel-call-result` 没有 requestId，交给 router 只会变成一条「无从归属」的帧。
+    val kernelCall = KernelCallClient(
+        sender = { frame -> transportRef?.sendNoReply(frame) ?: false },
+        onEndpoints = { list -> update { copy(kernelEndpoints = list) } },
+    )
     val router = WsRequestRouter(
         sender = { frame -> transportRef?.sendNoReply(frame) ?: false },
         onEvent = { frame -> onWsUnmatchedFrame(frame) },
@@ -384,13 +392,28 @@ internal fun HarnessViewModel.connectWsTransport(api: DshClient) {
     val transport = MobileWsTransport(
         endpoint = connection.endpoint.baseUrl,
         token = token,
-        onPush = { frame -> router.onFrame(frame) },
-        onStateChange = { reconcileEventChannel() },
+        onPush = { frame -> if (!kernelCall.onFrame(frame)) router.onFrame(frame) },
+        onStateChange = { state ->
+            reconcileEventChannel()
+            // 断开时把等待中的内核调用收掉：否则调用方要干等满 30s 才看到超时。
+            if (!state.usesWs) kernelCall.failAll("WS_DISCONNECTED", "WS 连接已断开")
+        },
         // 断线时把路由器那张在途表也清掉（issue #12）。不接这根线的话，桥 `close(1009)`
         // 之后业务请求要等满 15 秒才报超时，而真因（帧超 1 MiB）永远不会出现在错误里。
         onPendingDropped = { code, message -> router.failAll("$message（$code）") },
     )
     transportRef = transport
+    kernelCallClient = kernelCall
+    // 换连接后旧的目录快照不再可信（目录是「这次连接的白名单 ∩ 内核目录」）；不清的话，
+    // 从 A 桥切到 B 桥会拿 A 的端点去 B 上调用，得到一串 METHOD_NOT_ALLOWED。
+    update {
+        copy(
+            kernelEndpoints = emptyList(),
+            kernelCallInFlight = null,
+            kernelCallResult = null,
+            kernelCallError = null,
+        )
+    }
     wsRouter = router
     wsTransport = transport
     wsEventPort = WsEventPort(transport)
@@ -533,6 +556,16 @@ internal fun HarnessViewModel.closeWsTransport() {
     wsRouter = null
     ports = null
     domainPorts = null
+    kernelCallClient?.failAll("WS_CLOSED", "WS 通道已关闭")
+    kernelCallClient = null
+    update {
+        copy(
+            kernelEndpoints = emptyList(),
+            kernelCallInFlight = null,
+            kernelCallResult = null,
+            kernelCallError = null,
+        )
+    }
     wsTransport?.close()
     wsTransport = null
 }

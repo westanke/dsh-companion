@@ -3,6 +3,8 @@ package io.github.westanke.dshcompanion.data.ws
 import io.github.westanke.dshcompanion.data.WorkspaceEvent
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -47,17 +49,31 @@ internal object WsSubprotocol {
     const val AUTH_PREFIX: String = "dsh-auth."
 
     /**
+     * 通用内核调用面的可选子协议（桥侧 issue #26 阶段 5）。
+     *
+     * 桥按**请求头里声明的清单**判定能力面（`ws-handler.ts` 的 `offersKernelSubprotocol`），
+     * 声明了它才启用 `kernel-call` / `kernel-call-cancel` 与两条下行帧；
+     * 握手回执仍是 [PROTOCOL]（= `dsh-mobile-v1`），不是这个值。
+     *
+     * 老桥不认识它，会直接忽略这一项 —— 所以它只追加在**末项**，永不动首项。
+     */
+    const val KERNEL_CALL_PROTOCOL: String = "dshrb-v1"
+
+    /**
      * 已配对设备的重连子协议清单。
      *
      * 顺序**有讲究**：`dsh-mobile-v1` 必须在前 —— `ws` 库取 `protocols[0]` 作为协商结果，
      * 而桥用它判「是不是我的客户端」。反过来写会让每一次连接都被 `close(4001)`。
+     *
+     * [KERNEL_CALL_PROTOCOL] 追加在末项：它只影响**能力面**（桥按请求头清单判定），
+     * 不影响协商结果；老桥忽略未知项，行为与之前完全一致。
      */
     fun forToken(token: String): List<String> =
-        listOf(PROTOCOL, AUTH_PREFIX + token)
+        listOf(PROTOCOL, AUTH_PREFIX + token, KERNEL_CALL_PROTOCOL)
 
     /** 首次配对用的子协议清单（配对成功后服务端推 `paired` 帧带回长期令牌）。 */
     fun forPairing(code: String): List<String> =
-        listOf(PROTOCOL, PAIR_PREFIX + code)
+        listOf(PROTOCOL, PAIR_PREFIX + code, KERNEL_CALL_PROTOCOL)
 }
 
 // ───────────────────────── 客户端帧 type ─────────────────────────
@@ -146,6 +162,24 @@ internal object WsClientFrame {
      * 少列一个，将来谁接了就会莫名抢走 `message` 的应答。
      */
     const val SESSION_AGENT_PRESET: String = "session-agent-preset"
+
+    // —— 通用内核调用面（桥侧 issue #26 阶段 5；仅在声明 [WsSubprotocol.KERNEL_CALL_PROTOCOL] 时可用）——
+
+    /**
+     * 调一个内核端点。`callId` 由客户端自铸，结果帧原样回显它（**不回显 requestId**）。
+     *
+     * 同一 `(principal, callId)` 在 24h 内重试按幂等回放 —— 所以重试要复用同一个 callId，
+     * 而不是重新铸一个。
+     */
+    const val KERNEL_CALL: String = "kernel-call"
+
+    /**
+     * 取消一次还在跑的内核调用（best-effort）。
+     *
+     * 已经结算的调用照样会收到结果帧（客户端按 callId 去重）；没有匹配的 callId 时
+     * 桥回 `error` 帧、code 为 `call/not-found`。
+     */
+    const val KERNEL_CALL_CANCEL: String = "kernel-call-cancel"
 }
 
 /**
@@ -249,6 +283,20 @@ internal object WsServerFrame {
 
     // —— ModelPort 的应答（P3）——
     const val MODELS: String = "models"
+
+    // —— 通用内核调用面（桥侧 issue #26 阶段 5）——
+
+    /**
+     * 一次内核调用的结果。**没有 requestId**（在桥的 `REQUEST_ID_ECHO_EXCLUDED_KINDS` 里），
+     * 只按 `data.callId` 与请求关联 —— 不要拿它当普通应答塞进 pending-by-requestId。
+     */
+    const val KERNEL_CALL_RESULT: String = "kernel-call-result"
+
+    /**
+     * 目录快照，鉴权通过后桥自动推一次（白名单 ∩ 内核目录，**不是**内核全量端点）。
+     * 同样是主动推送、无 requestId；客户端要容忍未知字段与未知端点。
+     */
+    const val KERNEL_ENDPOINTS: String = "kernel-endpoints"
 }
 
 /**
@@ -301,6 +349,52 @@ internal data class HelloFrame(
     val port: Int? = null,
     /** 当前已鉴权连接数（诊断用）。 */
     val clients: Int? = null,
+)
+
+// ───────────────────────── 通用内核调用面（桥侧 issue #26 阶段 5）─────────────────────────
+
+/**
+ * `kernel-endpoints` 目录里的一条端点。
+ *
+ * 元素形状桥侧**尚未冻结**（asyncapi 里 items 是空 schema），所以只取已知字段、
+ * 忽略未知字段；`endpoint` 缺失的元素由解析层直接丢弃。
+ */
+data class KernelEndpoint(
+    /** 内核描述符 `namespace/method`，原样喂回 [WsFrames.kernelCall] 的 `endpoint`。 */
+    val endpoint: String,
+    /** 所属域（诊断展示用；不要据此推断能力）。 */
+    val scope: String = "",
+    /** 是否流式端点；流式结果在 `value.frames`（桥默认收 64 帧，可能带 `truncated`）。 */
+    val stream: Boolean = false,
+    /**
+     * 该端点 `args` 允许的键集合。
+     *
+     * **客户端不要硬编码键名**：桥把它从内核描述符里算出来，正是为了让界面按它渲染/校验。
+     */
+    val wires: List<String> = emptyList(),
+    /** 人读摘要（桥侧内核描述符给的，可能为空串）。 */
+    val summary: String = "",
+)
+
+/**
+ * `kernel-call-result` 的错误形状。
+ *
+ * `METHOD_NOT_ALLOWED`（不在白名单）与「端点不存在」在桥侧**同形**，不要据此推断端点存在性；
+ * 真正的发现源只有 [KernelEndpoint] 目录。
+ */
+data class KernelCallError(val code: String, val message: String)
+
+/**
+ * 一次内核调用的结果。
+ *
+ * 成功与业务失败都在这条帧里（`ok:false` + [error]），所以调用方拿到它不等于成功；
+ * `value` 的形状由端点自己决定（流式端点是 `{frames, truncated?}`），客户端不做假设。
+ */
+data class KernelCallResultFrame(
+    val callId: String,
+    val ok: Boolean,
+    val value: JsonElement?,
+    val error: KernelCallError?,
 )
 
 // ───────────────────────── 编解码 ─────────────────────────
@@ -395,6 +489,28 @@ internal object WsFrames {
         }
 
     /**
+     * 构造一条 `kernel-call` 帧。
+     *
+     * `callId` 由调用方自铸并**原样回显**在结果帧里；重试必须复用同一个 callId（24h 幂等回放）。
+     * `args` 为空或 null 时**省略**字段 —— asyncapi 明确写「无参数时省略」，桥按描述符的
+     * 键集校验，多发一个空对象在无参端点上也可能被当成「多了一个键」。
+     */
+    fun kernelCall(callId: String, endpoint: String, args: JsonObject? = null): JsonObject =
+        buildJsonObject {
+            put(TYPE, WsClientFrame.KERNEL_CALL)
+            put("callId", callId)
+            put("endpoint", endpoint)
+            if (args != null && args.isNotEmpty()) put("args", args)
+        }
+
+    /** 构造一条 `kernel-call-cancel` 帧（best-effort；已结算的调用照样会回结果帧）。 */
+    fun kernelCallCancel(callId: String): JsonObject =
+        buildJsonObject {
+            put(TYPE, WsClientFrame.KERNEL_CALL_CANCEL)
+            put("callId", callId)
+        }
+
+    /**
      * 解析 `hello`。**字段缺失一律给默认值，不返回 null** ——
      *
      * `hello` 到达这件事本身已经证明「这条通道存在且已鉴权」，因为桥是**先鉴权再发 hello**
@@ -419,7 +535,59 @@ internal object WsFrames {
         )
     }
 
+    /**
+     * 解析 `kernel-call-result`。
+     *
+     * 严格要求 `kind` 匹配、`data` 是对象、`callId` 非空、`ok` 是布尔；
+     * `error` 若出现必须是带非空 `code` 的对象（形状不对整帧返回 null，由调用方按超时处理）。
+     * 未知字段一律忽略 —— 桥侧元素形状未冻结。
+     */
+    fun parseKernelCallResult(frame: JsonObject): KernelCallResultFrame? {
+        if (kindOf(frame) != WsServerFrame.KERNEL_CALL_RESULT) return null
+        val data = frame[DATA] as? JsonObject ?: return null
+        val callId = data.stringOrNull("callId") ?: return null
+        val ok = (data["ok"] as? JsonPrimitive)?.booleanOrNull ?: return null
+        val error = when (val element = data["error"]) {
+            null, is JsonNull -> null
+            is JsonObject -> kernelCallErrorOf(element) ?: return null
+            else -> return null
+        }
+        return KernelCallResultFrame(callId = callId, ok = ok, value = data["value"], error = error)
+    }
+
+    /**
+     * 解析 `kernel-endpoints` 目录快照。
+     *
+     * `data.endpoints` 必须是数组；元素逐个容错（非对象或 `endpoint` 为空的跳过），
+     * `scope`/`summary` 缺省空串、`stream` 缺省 false、`wires` 过滤空串。
+     * 未知字段与未知端点一律忽略，不报错。
+     */
+    fun parseKernelEndpoints(frame: JsonObject): List<KernelEndpoint>? {
+        if (kindOf(frame) != WsServerFrame.KERNEL_ENDPOINTS) return null
+        val data = frame[DATA] as? JsonObject ?: return null
+        val entries = data["endpoints"] as? JsonArray ?: return null
+        return entries.mapNotNull { element ->
+            val entry = element as? JsonObject ?: return@mapNotNull null
+            val endpoint = entry.stringOrNull("endpoint") ?: return@mapNotNull null
+            KernelEndpoint(
+                endpoint = endpoint,
+                scope = entry.stringOrNull("scope") ?: "",
+                stream = (entry["stream"] as? JsonPrimitive)?.booleanOrNull ?: false,
+                wires = entry.stringList("wires"),
+                summary = entry.stringOrNull("summary") ?: "",
+            )
+        }
+    }
+
+    private fun kernelCallErrorOf(error: JsonObject): KernelCallError? {
+        val code = error.stringOrNull("code") ?: return null
+        return KernelCallError(code = code, message = error.stringOrNull("message") ?: "")
+    }
+
     private fun JsonObject.intOr(key: String): Int? = (this[key] as? JsonPrimitive)?.intOrNull
+
+    private fun JsonObject.stringOrNull(key: String): String? =
+        (this[key] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotEmpty() }
 
     private fun JsonObject.stringList(key: String): List<String> =
         (this[key] as? JsonArray)

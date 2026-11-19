@@ -612,7 +612,7 @@ class MobileWsTransportTest {
         assertFalse("URL 不许带令牌：$path", path.contains("secret-token"))
         assertFalse("URL 不许带 token 参数：$path", path.contains("token="))
         val protocols = request.getHeader("Sec-WebSocket-Protocol")!!
-        assertEquals("dsh-mobile-v1, dsh-auth.secret-token", protocols)
+        assertEquals("dsh-mobile-v1, dsh-auth.secret-token, dshrb-v1", protocols)
     }
 
     // ───────────────────────── 工具 ─────────────────────────

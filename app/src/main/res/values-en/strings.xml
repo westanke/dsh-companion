@@ -874,4 +874,25 @@
     <string name="attachment_upload_chunk_progress">Uploading chunk %1$d/%2$d</string>
     <string name="attachment_upload_resumed">Resuming at chunk %1$d/%2$d</string>
     <string name="attachment_upload_failed">Upload failed</string>
+
+    <!-- Generic kernel call surface (bridge issue #26 phase 5) -->
+    <string name="kernel_call_heading">Kernel calls</string>
+    <string name="kernel_call_title">Kernel endpoint catalog</string>
+    <string name="kernel_call_desc">Browse the endpoint catalog pushed by the bridge and invoke one with its wires</string>
+    <string name="kernel_call_footnote">This section only appears when the bridge advertises kernel-call-v1; without it the entry point is hidden entirely.</string>
+    <string name="kernel_call_dialog_title">Kernel call</string>
+    <string name="kernel_call_args_label">args (JSON object)</string>
+    <string name="kernel_call_args_hint">Use the wires listed under each endpoint for argument names; do not hard-code them.</string>
+    <string name="kernel_call_empty">No catalog snapshot received yet. The bridge pushes one right after the connection is authenticated.</string>
+    <string name="kernel_call_wires">Args: %1$s</string>
+    <string name="kernel_call_invoke">Invoke</string>
+    <string name="kernel_call_calling">Calling: %1$s</string>
+    <string name="kernel_call_close">Close</string>
+    <string name="kernel_call_result_ok">Succeeded (callId=%1$s)</string>
+    <string name="kernel_call_result_failed">Failed: %1$s</string>
+    <string name="kernel_call_result_failed_unknown">Failed: the bridge returned no error details.</string>
+    <string name="kernel_call_error_not_available">This connection does not support kernel calls (missing the kernel-call-v1 capability).</string>
+    <string name="kernel_call_error_args">Arguments must be a JSON object.</string>
+    <string name="kernel_call_error_no_channel">The kernel call channel is unavailable (WS is not connected).</string>
+    <string name="kernel_call_error_unknown">Kernel call failed.</string>
 </resources>

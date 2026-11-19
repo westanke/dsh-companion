@@ -49,8 +49,10 @@ import io.github.westanke.dshcompanion.data.AppTheme
 import io.github.westanke.dshcompanion.data.BusySendMode
 import io.github.westanke.dshcompanion.data.InterfaceStyle
 import io.github.westanke.dshcompanion.data.missingRequiredCapabilities
+import io.github.westanke.dshcompanion.data.supportsKernelCall
 import io.github.westanke.dshcompanion.debug.DiagLog
 import io.github.westanke.dshcompanion.disconnect
+import io.github.westanke.dshcompanion.runKernelCall
 import io.github.westanke.dshcompanion.ui.chat.copyText
 import io.github.westanke.dshcompanion.ui.chat.toast
 import io.github.westanke.dshcompanion.ui.theme.DshSpacing
@@ -399,6 +401,17 @@ fun SettingsScreen(state: HarnessState, viewModel: HarnessViewModel) {
                 )
             }
             Spacer(Modifier.size(DshSpacing.settingsSectionGap))
+
+            // ── 通用内核调用面（桥 issue #26 阶段 5）────────────────────────
+            //
+            // **能力位门控 = 整节不组合**：`supportsKernelCall` 读 `state.bridgeCapabilities`
+            //（与 hello.capabilities 同源）。缺 `kernel-call-v1` 时连标题都不出现，
+            // 不是禁用、不是置灰 —— 老桥不认识 dshrb-v1，永远不会有这个位。
+            // 动作侧还有第二道闸（`runKernelCall` 内部会再查一次），防弹层打开期间能力位消失。
+            if (supportsKernelCall(state.bridgeCapabilities)) {
+                KernelCallSection(state = state, onCall = viewModel::runKernelCall)
+                Spacer(Modifier.size(DshSpacing.settingsSectionGap))
+            }
 
             // ── 诊断日志（窗口 / 会话操作 / 屏幕变化）──────────────────────
             //

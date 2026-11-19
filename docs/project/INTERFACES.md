@@ -168,6 +168,7 @@ internal fun supportsSessionJobs(capabilities: Set<String>): Boolean
 internal fun supportsChunkedUpload(capabilities: Set<String>): Boolean
 internal fun supportsSchedules(capabilities: Set<String>): Boolean
 internal fun supportsSpeech(capabilities: Set<String>): Boolean
+internal fun supportsKernelCall(capabilities: Set<String>): Boolean  // 桥 issue #26 阶段 5；缺位 = 入口不组合、帧不发
 internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions-v1"]
 ```
 
@@ -235,10 +236,11 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `fun decideAfterHello(...)` | `data/ws/ChannelState.kt` | hello 到手后的判决（缺能力位 → `WsDegraded`） |
 | `fun isDefinitiveUpgradeRejection(statusCode: Int): Boolean` | `data/ws/ChannelState.kt` | upgrade 404/403 → `RestOnly`，**不再重试** |
 | `fun isProtocolRejected(closeCode: Int, helloSeen: Boolean): Boolean` | `data/ws/ChannelState.kt` | 子协议被拒（早于 hello 的 1002 等） |
-| `object WsSubprotocol` | `data/ws/WsFrames.kt` | 三个子协议前缀（`dsh-mobile-v1` / `dsh-pair.<code>` / `dsh-auth.<token>`） |
-| `object WsClientFrame` / `WsServerFrame` | `data/ws/WsFrames.kt` | 帧 type/kind 常量（只收本阶段用到的，其余见注释） |
-| `val REQUIRED_CAPABILITIES_FOR_WS: Set<String>` | `data/ws/WsFrames.kt` | 建 WS 所需能力位；缺则降级 |
-| `object WsFrames` | `data/ws/WsFrames.kt` | `json` / `encode` / `decode` / `kindOf` / `requestIdOf` / `dataOf` / `decodeEvent` / `parseHello` |
+| `object WsSubprotocol` | `data/ws/WsFrames.kt` | 四个子协议前缀（`dsh-mobile-v1` / `dsh-pair.<code>` / `dsh-auth.<token>` / `dshrb-v1`）；首项仍必须是 `dsh-mobile-v1` |
+| `object WsClientFrame` / `WsServerFrame` | `data/ws/WsFrames.kt` | 帧 type/kind 常量（含 `kernel-call` / `kernel-call-cancel` / `kernel-call-result` / `kernel-endpoints`） |
+| `val REQUIRED_CAPABILITIES_FOR_WS: Set<String>` | `data/ws/WsFrames.kt` | 建 WS 所需能力位；缺则降级; |
+| `object WsFrames` | `data/ws/WsFrames.kt` | `json` / `encode` / `decode` / `kindOf` / `requestIdOf` / `dataOf` / `decodeEvent` / `parseHello` / `kernelCall` / `kernelCallCancel` / `parseKernelCallResult` / `parseKernelEndpoints` |
+| `class KernelCallClient(...)` | `data/ws/KernelCallClient.kt` | 通用内核调用：callId→deferred 配对（结果帧不回 requestId）、目录 `StateFlow`、取消与断线失败；不走 `WsRequestRouter` |
 | `class WsRequestRouter(...)` | `data/ws/WsRequestRouter.kt` | 请求配对层：requestId 快路 + 按响应 kind 兜底、同 kind 串行、`error` 按 `requestType` 归属、超时只失败本次不掀连接 |
 | `class MobileWsTransport(...)` | `data/ws/MobileWsTransport.kt` | 建连鉴权、requestId 关联、超时、退避重连、429 按 `Retry-After` 等待、`StateFlow<ChannelState>` |
 | `fun retryAfterMillis(headers: Headers?): Long?` | `data/ws/RetryAfter.kt` | 只认 delta-seconds；缺/空/非数字/负数/HTTP-date 一律 `null`；夹 1 s..60 s |
@@ -550,4 +552,16 @@ internal val REQUIRED_CAPABILITIES: List<String>  // ["approvals-v1", "questions
 | `fun List<SettingsNamespace>.forNativeApp` | `app/src/main/java/io/github/westanke/dshcompanion/data/SettingsNamespaces.kt` | function |
 | `fun SettingsNamespace.hasEditableField` | `app/src/main/java/io/github/westanke/dshcompanion/data/SettingsNamespaces.kt` | function |
 | `fun List<String>.canWriteSettingsNamespaces` | `app/src/main/java/io/github/westanke/dshcompanion/data/SettingsNamespaces.kt` | function |
+| `internal fun supportsKernelCall` | `app/src/main/java/io/github/westanke/dshcompanion/data/BridgeCapabilities.kt` | function |
+| `const val KERNEL_CALL_PROTOCOL` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsFrames.kt` | val |
+| `internal data class KernelEndpoint` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsFrames.kt` | class |
+| `internal data class KernelCallError` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsFrames.kt` | class |
+| `internal data class KernelCallResultFrame` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsFrames.kt` | class |
+| `fun kernelCall` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsFrames.kt` | function |
+| `fun kernelCallCancel` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsFrames.kt` | function |
+| `fun parseKernelCallResult` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsFrames.kt` | function |
+| `fun parseKernelEndpoints` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/WsFrames.kt` | function |
+| `internal class KernelCallClient` | `app/src/main/java/io/github/westanke/dshcompanion/data/ws/KernelCallClient.kt` | class |
+| `internal fun runKernelCall` | `app/src/main/java/io/github/westanke/dshcompanion/HarnessKernelCallViewModel.kt` | function |
+| `internal fun KernelCallSection` | `app/src/main/java/io/github/westanke/dshcompanion/ui/KernelCallSection.kt` | function |
 <!-- interfaces-check:end -->

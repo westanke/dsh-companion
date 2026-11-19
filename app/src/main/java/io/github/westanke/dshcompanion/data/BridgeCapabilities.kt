@@ -113,6 +113,7 @@ internal fun supportsSessionJobs(capabilities: Set<String>): Boolean =
 private const val CHUNKED_UPLOAD_CAPABILITY = "attachment-chunked-upload-v1"
 private const val SCHEDULE_CAPABILITY = "chat-schedules-v1"
 private const val SPEECH_CAPABILITY = "speech-transcription-v1"
+private const val KERNEL_CALL_CAPABILITY = "kernel-call-v1"
 
 /** 服务端是否支持**分块上传**。缺省 false：老桥只有 base64 单请求上传，走那条路径即可。 */
 internal fun supportsChunkedUpload(capabilities: Set<String>): Boolean =
@@ -135,6 +136,21 @@ internal fun supportsSchedules(capabilities: Set<String>): Boolean =
  */
 internal fun supportsSpeech(capabilities: Set<String>): Boolean =
     SPEECH_CAPABILITY in capabilities
+
+/**
+ * 服务端是否支持**通用内核调用面**（能力位 `kernel-call-v1`，桥侧 issue #26 阶段 5）。
+ *
+ * 位在 `hello.capabilities` 里，且与 `connection.ready` 的能力清单**同源**
+ * （桥侧都走 `availableCapabilities(flags)`），所以界面门控直接用 `state.bridgeCapabilities`。
+ *
+ * 缺省 false → **整段入口不组合、一帧也不发**。老桥不认识 `dshrb-v1` 子协议，
+ * 永远不会有这个位；此时发 `kernel-call` 只会得到一条无从归属的 error 帧。
+ *
+ * 注意：有这位只说明「内核网关 + 连接服务都在，且白名单至少有一条端点在内核目录中」，
+ * 不代表目录已经收到 —— 目录是鉴权后桥自动推的一次快照（[io.github.westanke.dshcompanion.data.ws.KernelEndpoint]）。
+ */
+internal fun supportsKernelCall(capabilities: Set<String>): Boolean =
+    KERNEL_CALL_CAPABILITY in capabilities
 
 /**
  * 本 App 依赖、但服务端**没有声明**的能力位；空列表 = 没缺。

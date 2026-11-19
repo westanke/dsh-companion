@@ -1,5 +1,6 @@
 package io.github.westanke.dshcompanion.data.ws
 
+import io.github.westanke.dshcompanion.data.supportsKernelCall
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -35,13 +36,16 @@ class WsFramesTest {
         // 桥拿 webSocket.protocol 与 'dsh-mobile-v1' 逐字比较（ws-handler.ts:233）。
         // 首项写错 = 每次连接都被 close(4001)，而且看起来像「令牌无效」，极难查。
         val protocols = WsSubprotocol.forToken("tok-123")
-        assertEquals(listOf("dsh-mobile-v1", "dsh-auth.tok-123"), protocols)
+        assertEquals(listOf("dsh-mobile-v1", "dsh-auth.tok-123", "dshrb-v1"), protocols)
         assertEquals("dsh-mobile-v1", protocols.first())
     }
 
     @Test
     fun `配对子协议清单用 dsh-pair 前缀`() {
-        assertEquals(listOf("dsh-mobile-v1", "dsh-pair.abc123"), WsSubprotocol.forPairing("abc123"))
+        assertEquals(
+            listOf("dsh-mobile-v1", "dsh-pair.abc123", "dshrb-v1"),
+            WsSubprotocol.forPairing("abc123"),
+        )
     }
 
     @Test
@@ -305,5 +309,162 @@ class WsFramesTest {
         )
         val round = WsFrames.decode(WsFrames.encode(original))!!
         assertEquals(original.jsonObject, round)
+    }
+
+    // ───────────────────── 通用内核调用面（桥 issue #26 阶段 5）─────────────────────
+
+    @Test
+    fun `内核调用四帧常量与桥侧一致`() {
+        assertEquals("dshrb-v1", WsSubprotocol.KERNEL_CALL_PROTOCOL)
+        assertEquals("kernel-call", WsClientFrame.KERNEL_CALL)
+        assertEquals("kernel-call-cancel", WsClientFrame.KERNEL_CALL_CANCEL)
+        assertEquals("kernel-call-result", WsServerFrame.KERNEL_CALL_RESULT)
+        assertEquals("kernel-endpoints", WsServerFrame.KERNEL_ENDPOINTS)
+    }
+
+    @Test
+    fun `内核子协议追加在清单末尾且不夺首项`() {
+        // 桥按请求头清单判定是否启用四帧，握手回执仍是 dsh-mobile-v1；
+        // 首项一旦被动过，连接会被 close(4001) 且看起来像令牌无效。
+        assertEquals("dshrb-v1", WsSubprotocol.forToken("tok-123").last())
+        assertEquals("dshrb-v1", WsSubprotocol.forPairing("abc123").last())
+        assertEquals("dsh-mobile-v1", WsSubprotocol.forToken("tok-123").first())
+    }
+
+    @Test
+    fun `kernel-call 无参数时省略 args 字段`() {
+        // asyncapi：无参数时省略 args。空对象也按无参数处理，别给内核递多余键。
+        val frame = WsFrames.kernelCall("call-1", "terminal/exec")
+        assertEquals("kernel-call", WsFrames.typeOf(frame))
+        assertEquals("call-1", frame["callId"]?.jsonPrimitive?.content)
+        assertEquals("terminal/exec", frame["endpoint"]?.jsonPrimitive?.content)
+        assertNull(frame["args"])
+        assertNull(frame["requestId"])
+    }
+
+    @Test
+    fun `kernel-call 携带参数时把 args 放在顶层`() {
+        val args = buildJsonObject { put("command", JsonPrimitive("echo hi")) }
+        val frame = WsFrames.kernelCall("call-2", "terminal/exec", args)
+        assertEquals(args, frame["args"]?.jsonObject)
+    }
+
+    @Test
+    fun `kernel-call-cancel 只带类型与 callId`() {
+        val frame = WsFrames.kernelCallCancel("call-3")
+        assertEquals("kernel-call-cancel", WsFrames.typeOf(frame))
+        assertEquals("call-3", frame["callId"]?.jsonPrimitive?.content)
+        assertNull(frame["endpoint"])
+        assertNull(frame["requestId"])
+    }
+
+    @Test
+    fun `parseKernelCallResult 解析成功结果并保留 value`() {
+        val raw = """
+            {"kind":"kernel-call-result","data":{"callId":"c-1","ok":true,
+             "value":{"stdout":"hi","exitCode":0}}}
+        """.trimIndent()
+        val result = WsFrames.parseKernelCallResult(WsFrames.decode(raw)!!)!!
+        assertEquals("c-1", result.callId)
+        assertTrue(result.ok)
+        assertNull(result.error)
+        assertEquals("hi", result.value?.jsonObject?.get("stdout")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `parseKernelCallResult 解析 ok=false 的错误形状`() {
+        val raw = """
+            {"kind":"kernel-call-result","data":{"callId":"c-2","ok":false,
+             "error":{"code":"METHOD_NOT_ALLOWED","message":"endpoint not allowed"}}}
+        """.trimIndent()
+        val result = WsFrames.parseKernelCallResult(WsFrames.decode(raw)!!)!!
+        assertFalse(result.ok)
+        assertEquals("METHOD_NOT_ALLOWED", result.error?.code)
+        assertEquals("endpoint not allowed", result.error?.message)
+        assertNull(result.value)
+    }
+
+    @Test
+    fun `parseKernelCallResult 形状不完整时返回 null`() {
+        // 这些帧继续用只会让调用方永远等一个不会来的结果，宁可当坏帧丢掉。
+        val bad = listOf(
+            """{"kind":"kernel-call-result"}""",
+            """{"kind":"kernel-call-result","data":"oops"}""",
+            """{"kind":"kernel-call-result","data":{"ok":true}}""",
+            """{"kind":"kernel-call-result","data":{"callId":"","ok":true}}""",
+            """{"kind":"kernel-call-result","data":{"callId":"c-1"}}""",
+            """{"kind":"kernel-call-result","data":{"callId":"c-1","ok":"yes"}}""",
+            """{"kind":"kernel-call-result","data":{"callId":"c-1","ok":false,"error":"oops"}}""",
+            """{"kind":"kernel-call-result","data":{"callId":"c-1","ok":false,"error":{"message":"m"}}}""",
+        )
+        bad.forEach { raw -> assertNull(raw, WsFrames.parseKernelCallResult(WsFrames.decode(raw)!!)) }
+    }
+
+    @Test
+    fun `内核调用错误码字面量与桥侧一致`() {
+        // 授权/参数失败也在结果帧里（ok:false），这些码会直接展示给用户，不能漂。
+        val codes = listOf(
+            "METHOD_NOT_ALLOWED",
+            "kernel/endpoint-unknown",
+            "gateway/arguments-invalid",
+            "call/in-flight",
+            "call/cancelled",
+            "call/not-found",
+        )
+        codes.forEach { code ->
+            val raw = """{"kind":"kernel-call-result","data":{"callId":"c","ok":false,"error":{"code":"$code","message":"m"}}}"""
+            assertEquals(code, WsFrames.parseKernelCallResult(WsFrames.decode(raw)!!)?.error?.code)
+        }
+    }
+
+    @Test
+    fun `parseKernelEndpoints 解析目录并容忍未知字段`() {
+        val raw = """
+            {"kind":"kernel-endpoints","data":{"endpoints":[
+              {"endpoint":"terminal/exec","scope":"terminal","stream":false,
+               "wires":["command","cwd"],"summary":"执行命令","futureField":1},
+              {"endpoint":"agentTeams/list"}
+            ],"futureTop":true}}
+        """.trimIndent()
+        val endpoints = WsFrames.parseKernelEndpoints(WsFrames.decode(raw)!!)!!
+        assertEquals(2, endpoints.size)
+        assertEquals("terminal/exec", endpoints[0].endpoint)
+        assertEquals("terminal", endpoints[0].scope)
+        assertFalse(endpoints[0].stream)
+        assertEquals(listOf("command", "cwd"), endpoints[0].wires)
+        assertEquals("执行命令", endpoints[0].summary)
+        // 缺省字段按宽松默认处理：目录元素形状尚未冻结，不能因少字段就整批丢掉。
+        assertEquals("agentTeams/list", endpoints[1].endpoint)
+        assertEquals("", endpoints[1].scope)
+        assertFalse(endpoints[1].stream)
+        assertTrue(endpoints[1].wires.isEmpty())
+        assertEquals("", endpoints[1].summary)
+    }
+
+    @Test
+    fun `parseKernelEndpoints 缺目录或非数组时返回 null`() {
+        val bad = listOf(
+            """{"kind":"kernel-endpoints"}""",
+            """{"kind":"kernel-endpoints","data":"oops"}""",
+            """{"kind":"kernel-endpoints","data":{"endpoints":"oops"}}""",
+            """{"kind":"kernel-call-result","data":{"endpoints":[]}}""",
+        )
+        bad.forEach { raw -> assertNull(raw, WsFrames.parseKernelEndpoints(WsFrames.decode(raw)!!)) }
+    }
+
+    @Test
+    fun `parseKernelEndpoints 跳过缺少 endpoint 的元素`() {
+        val raw = """{"kind":"kernel-endpoints","data":{"endpoints":[{},{"endpoint":""},{"endpoint":"terminal/exec"}]}}"""
+        val endpoints = WsFrames.parseKernelEndpoints(WsFrames.decode(raw)!!)!!
+        assertEquals(1, endpoints.size)
+        assertEquals("terminal/exec", endpoints[0].endpoint)
+    }
+
+    @Test
+    fun `supportsKernelCall 判据只看能力位`() {
+        // 缺位 = 入口整段不组合、一帧不发；老桥不认识 dshrb-v1，永远不会发这个位。
+        assertFalse(supportsKernelCall(emptySet()))
+        assertFalse(supportsKernelCall(setOf("history-v1", "session-list-v1")))
+        assertTrue(supportsKernelCall(setOf("kernel-call-v1")))
     }
 }

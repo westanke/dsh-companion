@@ -288,6 +288,9 @@ class HarnessViewModel(application: Application) : AndroidViewModel(application)
     /** P3 三域（HITL / 命令 / 模型）的自适应端口。实现全在 HarnessDomainPortsViewModel.kt。 */
     internal var domainPorts: DomainPorts? = null
 
+    /** 通用内核调用面（P5）的 pending 表；实现全在 HarnessKernelCallViewModel.kt。 */
+    internal var kernelCallClient: io.github.westanke.dshcompanion.data.ws.KernelCallClient? = null
+
     init {
         // 诊断日志开关：冷启动后到用户进设置页之前，会话页可能已被点开好几轮 ——
         // 那几次正是要观察的对象。放在 init 里，开关是「开」的包从第一条日志起就记。
